@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { COLORS, getThemeColors, getFontSizes, ACCESSIBILITY } from '../../theme/designSystem';
-import { Palette, Type, MousePointer, ShieldCheck, X, Sparkles, AlertTriangle, Pill, Compass } from 'lucide-react-native';
+import { Palette, MousePointer, ShieldCheck, X, Sparkles, AlertTriangle, Compass } from 'lucide-react-native';
 
 export const DesignSystemModal: React.FC = () => {
   const { isDesignSystemOpen, setDesignSystemOpen, themeMode, fontScale } = useNavidoorStore();

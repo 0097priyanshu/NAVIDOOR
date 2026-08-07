@@ -1,16 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { getThemeColors } from '../../theme/designSystem';
 import { 
   Settings, 
   Clock, 
   Globe, 
   Eye, 
   Users, 
-  Bookmark, 
-  ShieldCheck,
-  Check
+  Bookmark
 } from 'lucide-react-native';
 
 export const SectionViewPanel: React.FC = () => {
@@ -29,8 +26,6 @@ export const SectionViewPanel: React.FC = () => {
     setFamilyCompanionOpen,
     speak 
   } = useNavidoorStore();
-
-  const colors = getThemeColors(themeMode);
 
   // Vision modes render simple floating overlays, utility modes render full dedicated section views
   const isUtilityMode = ['settings', 'history', 'languages', 'accessibility', 'family'].includes(activeMode);

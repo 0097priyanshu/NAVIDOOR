@@ -4,13 +4,7 @@
     "slug": "navidoor-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#090D16"
-    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -20,10 +14,6 @@
       }
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#090D16"
-      },
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
@@ -31,7 +21,6 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
     "plugins": [

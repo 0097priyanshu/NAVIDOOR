@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { getThemeColors, ACCESSIBILITY } from '../../theme/designSystem';
-import { Users, Video, Mic, Volume2, X, ShieldCheck, MessageSquare } from 'lucide-react-native';
+import { Users, Mic, Volume2, X, ShieldCheck, MessageSquare } from 'lucide-react-native';
 
 export const FamilyCompanionModal: React.FC = () => {
   const { isFamilyCompanionOpen, setFamilyCompanionOpen, themeMode, speak } = useNavidoorStore();

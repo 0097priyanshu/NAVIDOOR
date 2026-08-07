@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
@@ -13,13 +13,11 @@ export const CameraViewCanvas: React.FC = () => {
     torchOn, 
     isSimulatedCamera, 
     setSimulatedCamera, 
-    speak, 
-    generateSceneDescription 
+    speak 
   } = useNavidoorStore();
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cameraRef = useRef<any>(null);
-  const [streamActive, setStreamActive] = useState(false);
 
   // Hook for Native Camera permissions from expo-camera
   const [permission, requestPermission] = useCameraPermissions();
@@ -36,12 +34,9 @@ export const CameraViewCanvas: React.FC = () => {
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             videoRef.current.play();
-            setStreamActive(true);
           }
         })
-        .catch(() => {
-          setStreamActive(false);
-        });
+        .catch(() => {});
 
       return () => {
         if (videoRef.current && videoRef.current.srcObject) {
@@ -51,20 +46,6 @@ export const CameraViewCanvas: React.FC = () => {
       };
     }
   }, [isVisionMode, cameraFacing]);
-
-  const handleCaptureSnapshot = async () => {
-    if (Platform.OS !== 'web' && cameraRef.current) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync({ quality: 0.7, base64: false });
-        speak('Photo captured. Processing AI spatial analysis...');
-        generateSceneDescription();
-      } catch (err) {
-        generateSceneDescription();
-      }
-    } else {
-      generateSceneDescription();
-    }
-  };
 
   const renderNativeCamera = () => {
     if (isSimulatedCamera) {
@@ -175,7 +156,7 @@ export const CameraViewCanvas: React.FC = () => {
       )}
 
       {/* Floating Quick Action Controls Overlay */}
-      <CameraControlsOverlay onCaptureSnapshot={handleCaptureSnapshot} />
+      <CameraControlsOverlay />
 
       {/* Vision Overlay (Scoped to active vision modes) */}
       <AIVisionOverlay />

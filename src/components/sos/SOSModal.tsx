@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { getThemeColors, ACCESSIBILITY } from '../../theme/designSystem';
-import { AlertCircle, Phone, X, Check, MapPin, Radio } from 'lucide-react-native';
+import { ACCESSIBILITY } from '../../theme/designSystem';
+import { AlertCircle, Phone, X, Check, Radio } from 'lucide-react-native';
 
 export const SOSModal: React.FC = () => {
-  const { isSosModalOpen, setSosModalOpen, emergencyContacts, themeMode, speak } = useNavidoorStore();
-  const colors = getThemeColors(themeMode);
+  const { isSosModalOpen, setSosModalOpen, emergencyContacts, speak } = useNavidoorStore();
 
   const [countdown, setCountdown] = useState(5);
   const [isBroadcastSent, setIsBroadcastSent] = useState(false);

@@ -4,11 +4,7 @@ import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { Zap, ZapOff, RefreshCw, Volume2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
-interface CameraControlsOverlayProps {
-  onCaptureSnapshot?: () => void;
-}
-
-export const CameraControlsOverlay: React.FC<CameraControlsOverlayProps> = ({ onCaptureSnapshot }) => {
+export const CameraControlsOverlay: React.FC = () => {
   const { 
     cameraFacing, 
     toggleCameraFacing, 

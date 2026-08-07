@@ -9,7 +9,7 @@ import {
   Dimensions 
 } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { getThemeColors, COLORS } from '../../theme/designSystem';
+import { COLORS } from '../../theme/designSystem';
 import { NavMode } from '../../types';
 import * as Haptics from 'expo-haptics';
 import { 
@@ -22,7 +22,6 @@ import {
   Clock, 
   Settings, 
   Globe, 
-  User, 
   Eye,
   Mic,
   Loader2,
@@ -59,11 +58,8 @@ export const RotatingAIModeWheel: React.FC = () => {
     speak, 
     stopVoice, 
     generateSceneDescription, 
-    themeMode,
     isProfileModalOpen 
   } = useNavidoorStore();
-
-  const colors = getThemeColors(themeMode);
 
   const [activeIndex, setActiveIndex] = useState(
     Math.max(0, WHEEL_ITEMS.findIndex((item) => item.id === activeMode))
