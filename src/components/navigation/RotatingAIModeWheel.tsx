@@ -6,7 +6,9 @@ import {
   TouchableOpacity, 
   PanResponder, 
   Animated, 
-  Dimensions 
+  Dimensions,
+  Platform,
+  Easing 
 } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { COLORS } from '../../theme/designSystem';
@@ -28,6 +30,10 @@ import {
   Camera
 } from 'lucide-react-native';
 
+import { voiceRecordingService } from '../../services/voiceRecordingService';
+import { requestWhisperSTT } from '../../services/voiceAssistantBackend';
+import { UnifiedMicButton } from '../common/UnifiedMicButton';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface WheelItem {
@@ -37,28 +43,32 @@ interface WheelItem {
 }
 
 const WHEEL_ITEMS: WheelItem[] = [
-  { id: 'assist', label: 'Assist', icon: <Home size={22} /> },
-  { id: 'navigate', label: 'Guide', icon: <Compass size={22} /> },
-  { id: 'read', label: 'Read', icon: <BookOpen size={22} /> },
-  { id: 'medicine', label: 'Medicine', icon: <Pill size={22} /> },
-  { id: 'transport', label: 'Transit', icon: <Bus size={22} /> },
-  { id: 'family', label: 'Family', icon: <Users size={22} /> },
-  { id: 'history', label: 'History', icon: <Clock size={22} /> },
-  { id: 'settings', label: 'Settings', icon: <Settings size={22} /> },
-  { id: 'languages', label: 'Lang', icon: <Globe size={22} /> },
-  { id: 'accessibility', label: 'Access', icon: <Eye size={22} /> },
+  { id: 'assist', label: 'ASSIST', icon: <Home size={22} color="#FFFFFF" /> },
+  { id: 'navigate', label: 'NAVIGATE', icon: <Compass size={22} color="#FFFFFF" /> },
+  { id: 'read', label: 'READ', icon: <BookOpen size={22} color="#FFFFFF" /> },
+  { id: 'medicine', label: 'MEDICINE', icon: <Pill size={22} color="#FFFFFF" /> },
+  { id: 'transport', label: 'TRANSIT', icon: <Bus size={22} color="#FFFFFF" /> },
+  { id: 'family', label: 'FAMILY', icon: <Users size={22} color="#FFFFFF" /> },
+  { id: 'history', label: 'HISTORY', icon: <Clock size={22} color="#FFFFFF" /> },
+  { id: 'languages', label: 'LANG', icon: <Globe size={22} color="#FFFFFF" /> },
+  { id: 'settings', label: 'SETTINGS', icon: <Settings size={22} color="#FFFFFF" /> },
 ];
 
 export const RotatingAIModeWheel: React.FC = () => {
   const { 
     activeMode, 
     rotateWheelToMode, 
+    cycleNextMode,
+    cyclePrevMode,
     voiceState, 
     setVoiceState, 
     speak, 
     stopVoice, 
-    generateSceneDescription, 
-    isProfileModalOpen 
+    capturePhotoAndAnalyze,
+    isProfileModalOpen,
+    isFirstTimeUser,
+    activeLanguageCode,
+    processVoiceInput
   } = useNavidoorStore();
 
   const [activeIndex, setActiveIndex] = useState(
@@ -78,79 +88,105 @@ export const RotatingAIModeWheel: React.FC = () => {
 
   const lastStepDx = useRef(0);
 
-  const handleStep = (step: number) => {
-    try {
-      Haptics.selectionAsync();
-    } catch (e) {}
+  const spinAnim = useRef(new Animated.Value(0)).current;
 
-    const curr = activeIndexRef.current;
-    let nextIdx = (curr + step) % WHEEL_ITEMS.length;
-    if (nextIdx < 0) nextIdx += WHEEL_ITEMS.length;
-    
-    activeIndexRef.current = nextIdx;
-    setActiveIndex(nextIdx);
-    rotateWheelToMode(WHEEL_ITEMS[nextIdx].id);
-  };
+  React.useEffect(() => {
+    if (voiceState === 'thinking') {
+      spinAnim.setValue(0);
+      const animation = Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      animation.start();
+
+      return () => animation.stop();
+    }
+  }, [voiceState]);
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 10,
-      onPanResponderGrant: () => {
-        lastStepDx.current = 0;
-        try {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        } catch (e) {}
-      },
       onPanResponderMove: (_, gestureState) => {
-        const delta = gestureState.dx - lastStepDx.current;
-        if (delta > 25) {
-          handleStep(-1);
-          lastStepDx.current = gestureState.dx;
-        } else if (delta < -25) {
-          handleStep(1);
-          lastStepDx.current = gestureState.dx;
+        const dx = gestureState.dx;
+        const diff = dx - lastStepDx.current;
+        if (Math.abs(diff) > 28) {
+          if (diff < 0) {
+            cycleNextMode();
+          } else {
+            cyclePrevMode();
+          }
+          lastStepDx.current = dx;
         }
       },
-      onPanResponderRelease: () => {
+      onPanResponderRelease: (_, gestureState) => {
+        if (Math.abs(lastStepDx.current) < 10) {
+          if (gestureState.dx < -20) {
+            cycleNextMode();
+          } else if (gestureState.dx > 20) {
+            cyclePrevMode();
+          }
+        }
         lastStepDx.current = 0;
       },
     })
   ).current;
 
   const handleItemPress = (index: number) => {
+    try {
+      Haptics.selectionAsync();
+    } catch (e) {}
     setActiveIndex(index);
     rotateWheelToMode(WHEEL_ITEMS[index].id);
   };
 
-  const handleMicPress = () => {
+  const handleMicPress = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (e) {}
 
     if (voiceState === 'listening') {
       setVoiceState('thinking');
-      setTimeout(() => {
-        setVoiceState('speaking');
-        generateSceneDescription();
-      }, 750);
-    } else if (voiceState === 'speaking') {
-      stopVoice();
+      useNavidoorStore.setState({ lastAnnouncement: '⚙️ Processing your speech...' });
+      const { blob, uri, liveTranscript } = await voiceRecordingService.stopRecording();
+
+      let textToProcess = liveTranscript ? liveTranscript.trim() : '';
+      if (!textToProcess && (blob || uri)) {
+        const text = await requestWhisperSTT(blob, activeLanguageCode, uri || 'mic_recording');
+        if (text) textToProcess = text.trim();
+      }
+
+      if (textToProcess) {
+        await processVoiceInput(textToProcess);
+      } else {
+        setVoiceState('idle');
+        speak('I did not catch that. Tap the mic button to try speaking again.');
+      }
     } else {
+      stopVoice();
       setVoiceState('listening');
-      speak('Listening. Speak your question or command.', true);
+      useNavidoorStore.setState({ lastAnnouncement: '🎤 Listening... Speak now.' });
+      
+      await voiceRecordingService.startRecording(activeLanguageCode, async (autoText) => {
+        if (autoText && autoText.trim()) {
+          setVoiceState('thinking');
+          await processVoiceInput(autoText.trim());
+        }
+      });
     }
   };
 
-  const handlePhotoSnapPress = () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    } catch (e) {}
-
-    speak('Photo taken. Reading text and scanning surroundings out loud...', true);
-    setTimeout(() => {
-      generateSceneDescription();
-    }, 600);
+  const handlePhotoSnapPress = async () => {
+    await capturePhotoAndAnalyze();
   };
 
   const visibleIndices: number[] = [];
@@ -161,57 +197,55 @@ export const RotatingAIModeWheel: React.FC = () => {
     visibleIndices.push(idx);
   }
 
-  const isMicActive = voiceState !== 'idle';
+  const isMicActive = voiceState === 'listening' || voiceState === 'thinking';
+
+  if (isFirstTimeUser) return null;
+
+  const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(activeMode);
 
   return (
     <View style={styles.wheelRootContainer} pointerEvents="box-none">
-      {/* 1. DUAL PRIMARY ACTION DOCK - ENHANCED 66px ACCESSIBLE BUTTONS */}
+      {/* 1. DUAL / SINGLE PRIMARY ACTION DOCK - CLEAN ELECTRIC CYAN BUTTONS */}
       {!isProfileModalOpen && (
-        <View style={styles.dualActionDockContainer} pointerEvents="box-none">
-          {/* Left Action: Voice Assistant Mic FAB */}
+        <View 
+          style={[
+            styles.dualActionDockContainer,
+            !isVisionMode && { justifyContent: 'center' }
+          ]} 
+          pointerEvents="box-none"
+        >
+          {/* Voice Assistant Mic FAB */}
           <View style={styles.actionItemCol}>
-            {isMicActive && <View style={styles.pulseGreen} />}
-            <TouchableOpacity
-              style={[
-                styles.actionFab,
-                { 
-                  backgroundColor: isMicActive ? COLORS.uberSafetyGreen : '#FFFFFF', 
-                  borderColor: isMicActive ? COLORS.uberSafetyGreen : 'rgba(255, 255, 255, 0.4)' 
-                }
-              ]}
+            <UnifiedMicButton
+              voiceState={voiceState}
               onPress={handleMicPress}
-              accessibilityLabel={`Voice Assistant (${voiceState})`}
-              accessibilityHint="Tap to speak or issue voice commands"
-              accessibilityRole="button"
-            >
-              {voiceState === 'thinking' ? (
-                <Loader2 size={26} color="#000000" />
-              ) : (
-                <Mic size={26} color={isMicActive ? '#FFFFFF' : '#000000'} />
-              )}
-            </TouchableOpacity>
-            <Text style={styles.actionLabelText}>
-              {voiceState === 'idle' ? 'TALK / ASK' : voiceState.toUpperCase()}
-            </Text>
+              showLabel={true}
+              size={68}
+            />
           </View>
 
-          {/* Right Action: Click Picture Shutter FAB (Matching 66px size, Crisp White) */}
-          <View style={styles.actionItemCol}>
-            <TouchableOpacity
-              style={[styles.actionFab, styles.shutterFabUberTheme]}
-              onPress={handlePhotoSnapPress}
-              accessibilityLabel="Click Picture to Read or Scan"
-              accessibilityHint="Takes a photo snapshot and reads text or describes surroundings out loud"
-              accessibilityRole="button"
-            >
-              <Camera size={26} color="#000000" />
-            </TouchableOpacity>
-            <Text style={styles.actionLabelText}>CLICK PHOTO</Text>
-          </View>
+          {/* Click Picture Shutter FAB - ONLY VISIBLE IN VISION/CAMERA MODES */}
+          {isVisionMode && (
+            <View style={styles.actionItemCol}>
+              <TouchableOpacity
+                style={styles.shutterFabUberTheme}
+                onPress={handlePhotoSnapPress}
+                activeOpacity={0.85}
+                accessibilityLabel="Click Picture to Read or Scan"
+                accessibilityHint="Takes a photo snapshot and reads text or describes surroundings out loud"
+                accessibilityRole="button"
+              >
+                <Camera size={28} color="#FFFFFF" />
+              </TouchableOpacity>
+              
+              {/* CLEAN PURE WHITE TEXT LABEL BELOW BUTTON */}
+              <Text style={styles.shutterLabelSubtext}>SNAP PHOTO</Text>
+            </View>
+          )}
         </View>
       )}
 
-      {/* 2. ENHANCED HIGH-CLARITY AI MODE WHEEL NAVBAR DOCK */}
+      {/* 2. HIGH-CLARITY GRAY AI MODE WHEEL NAVBAR DOCK */}
       <View style={styles.bottomCurvedDock} {...panResponder.panHandlers}>
         {visibleIndices.map((idx, posIndex) => {
           const item = WHEEL_ITEMS[idx];
@@ -223,7 +257,7 @@ export const RotatingAIModeWheel: React.FC = () => {
           const posY = (1 - Math.cos(angle)) * 16;
 
           const scale = isActive ? 1.25 : offset === -1 || offset === 1 ? 0.95 : 0.78;
-          const opacity = isActive ? 1.0 : offset === -1 || offset === 1 ? 0.88 : 0.5;
+          const opacity = isActive ? 1.0 : offset === -1 || offset === 1 ? 0.88 : 0.55;
 
           return (
             <Animated.View
@@ -245,8 +279,7 @@ export const RotatingAIModeWheel: React.FC = () => {
                 style={[
                   styles.dockItem,
                   { 
-                    backgroundColor: isActive ? '#FFFFFF' : 'rgba(255, 255, 255, 0.15)',
-                    borderColor: isActive ? '#FFFFFF' : 'rgba(255, 255, 255, 0.25)',
+                    backgroundColor: isActive ? '#0284C7' : '#94A3B8',
                   },
                 ]}
                 onPress={() => handleItemPress(idx)}
@@ -254,14 +287,14 @@ export const RotatingAIModeWheel: React.FC = () => {
                 accessibilityLabel={`${item.label} mode selected`}
               >
                 {React.cloneElement(item.icon as React.ReactElement, {
-                  color: isActive ? '#000000' : '#FFFFFF',
+                  color: isActive ? '#FFFFFF' : '#0F172A',
                 })}
               </TouchableOpacity>
 
               <Text style={[
                 styles.itemLabel, 
                 { 
-                  color: isActive ? '#FFFFFF' : '#D1D5DB', 
+                  color: isActive ? '#0284C7' : '#0F172A', 
                   fontWeight: isActive ? '900' : '700' 
                 }
               ]}>
@@ -288,91 +321,70 @@ const styles = StyleSheet.create({
   },
   dualActionDockContainer: {
     position: 'absolute',
-    bottom: 104,
+    bottom: 112,
     left: 36,
     right: 36,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    zIndex: 50,
+    zIndex: 99,
   },
   actionItemCol: {
     alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  pulseGreen: {
-    position: 'absolute',
-    top: -4,
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    backgroundColor: 'rgba(5, 163, 87, 0.35)',
-  },
-  actionFab: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 14,
-    elevation: 14,
   },
   shutterFabUberTheme: {
-    backgroundColor: '#FFFFFF',
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#0284C7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  actionLabelText: {
+  shutterLabelSubtext: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
-    marginTop: 4,
-    letterSpacing: 0.6,
-    backgroundColor: 'rgba(18, 18, 18, 0.96)',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 10,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    marginTop: 8,
+    letterSpacing: 1.0,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   bottomCurvedDock: {
     width: SCREEN_WIDTH - 14,
     height: 92,
     borderTopLeftRadius: 38,
     borderTopRightRadius: 38,
-    backgroundColor: 'rgba(18, 18, 18, 0.96)',
+    backgroundColor: '#CBD5E1',
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderColor: '#64748B',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.7,
-    shadowRadius: 18,
-    elevation: 16,
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 12,
     paddingBottom: 6,
   },
   dockItemWrapper: {
     position: 'absolute',
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
   dockItem: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    overflow: 'hidden',
   },
   itemLabel: {
     fontSize: 11.5,

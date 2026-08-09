@@ -39,7 +39,7 @@ export const SOSModal: React.FC = () => {
   return (
     <Modal visible={isSosModalOpen} transparent animationType="slide">
       <View style={styles.modalBackdrop}>
-        <View style={[styles.modalCard, { backgroundColor: '#000000', borderColor: '#E11D48' }]}>
+        <View style={styles.modalCard}>
           {/* Header */}
           <View style={styles.headerRow}>
             <View style={styles.headerTitleGroup}>
@@ -47,7 +47,7 @@ export const SOSModal: React.FC = () => {
               <Text style={styles.headerTitle}>EMERGENCY SOS ALERT</Text>
             </View>
             <TouchableOpacity onPress={handleCancel} style={styles.closeBtn} accessibilityLabel="Cancel SOS">
-              <X size={24} color="#FFFFFF" />
+              <X size={24} color="#0F172A" />
             </TouchableOpacity>
           </View>
 
@@ -64,7 +64,7 @@ export const SOSModal: React.FC = () => {
               <Text style={styles.contactListHeader}>NOTIFYING PRIMARY CONTACTS:</Text>
               {emergencyContacts.map((c) => (
                 <View key={c.id} style={styles.contactChip}>
-                  <Phone size={16} color="#E11D48" />
+                  <Phone size={18} color="#E11D48" />
                   <Text style={styles.contactText}>{c.name} ({c.relation})</Text>
                 </View>
               ))}
@@ -88,7 +88,7 @@ export const SOSModal: React.FC = () => {
               </Text>
 
               <View style={styles.gpsBox}>
-                <Radio size={18} color="#10B981" />
+                <Radio size={18} color="#0284C7" />
                 <Text style={styles.gpsText}>GPS Broadcast: 37.7749° N, 122.4194° W</Text>
               </View>
 
@@ -106,7 +106,7 @@ export const SOSModal: React.FC = () => {
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
+    backgroundColor: '#64748B',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
@@ -114,15 +114,25 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 420,
+    backgroundColor: '#CBD5E1',
     borderRadius: 24,
     borderWidth: 2,
+    borderColor: '#E11D48',
     padding: 20,
+    shadowColor: '#E11D48',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#94A3B8',
   },
   headerTitleGroup: {
     flexDirection: 'row',
@@ -131,7 +141,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: '#E11D48',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '900',
     letterSpacing: 1,
   },
@@ -142,17 +152,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   warningText: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontSize: 15,
     textAlign: 'center',
-    fontWeight: '700',
+    fontWeight: '800',
     marginBottom: 16,
   },
   timerCircle: {
     width: 110,
     height: 110,
     borderRadius: 55,
-    backgroundColor: 'rgba(225, 29, 72, 0.2)',
+    backgroundColor: '#E2E8F0',
     borderWidth: 4,
     borderColor: '#E11D48',
     justifyContent: 'center',
@@ -165,32 +175,35 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   timerUnit: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontSize: 10,
-    fontWeight: '800',
+    fontWeight: '900',
     letterSpacing: 1,
   },
   contactListHeader: {
-    color: '#94A3B8',
+    color: '#E11D48',
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '900',
+    letterSpacing: 1,
     marginBottom: 8,
     alignSelf: 'flex-start',
   },
   contactChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    paddingVertical: 10,
+    backgroundColor: '#94A3B8',
+    paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 14,
     width: '100%',
     marginBottom: 8,
     gap: 10,
+    borderWidth: 1,
+    borderColor: '#64748B',
   },
   contactText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: '#0F172A',
+    fontWeight: '800',
     fontSize: 14,
   },
   cancelBigBtn: {
@@ -206,6 +219,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '900',
     fontSize: 15,
+    letterSpacing: 0.5,
   },
   sentContainer: {
     alignItems: 'center',
@@ -214,38 +228,41 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: '#10B981',
+    backgroundColor: '#0284C7',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
   sentTitle: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: '900',
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 8,
   },
   sentSub: {
-    color: '#94A3B8',
+    color: '#334155',
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 16,
+    fontWeight: '600',
   },
   gpsBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: '#94A3B8',
     padding: 12,
     borderRadius: 14,
     gap: 8,
     width: '100%',
     justifyContent: 'center',
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#64748B',
   },
   gpsText: {
-    color: '#10B981',
+    color: '#0F172A',
     fontWeight: '800',
     fontSize: 13,
   },

@@ -7,9 +7,14 @@ import {
   DetectedObject, 
   MedicineInfo, 
   EmergencyContact,
-  ContextInsight
+  ContextInsight,
+  SupportedLanguageCode
 } from '../types';
 import { speakAnnouncement, stopSpeech, playObstacleBeep } from '../utils/speechUtils';
+import { getTranslation } from '../utils/translations';
+import { voiceCommandProcessor } from '../services/voiceCommandProcessor';
+import { voiceSearchService } from '../services/voiceSearchService';
+import { voiceConversationService } from '../services/voiceConversationService';
 import * as Haptics from 'expo-haptics';
 
 interface NavidoorState {
@@ -21,6 +26,7 @@ interface NavidoorState {
   stopVoice: () => void;
   speechRate: number;
   setSpeechRate: (rate: number) => void;
+  processVoiceInput: (input: string) => Promise<void>;
 
   // User Profile & Voice Onboarding
   userName: string;
@@ -29,6 +35,8 @@ interface NavidoorState {
   setUserPhone: (phone: string) => void;
   userLanguage: string;
   setUserLanguage: (lang: string) => void;
+  activeLanguageCode: SupportedLanguageCode;
+  setActiveLanguageCode: (code: SupportedLanguageCode) => void;
   isFirstTimeUser: boolean;
   setIsFirstTimeUser: (firstTime: boolean) => void;
 
@@ -150,7 +158,7 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   setSpeechRate: (rate) => set({ speechRate: rate }),
   speak: (text, interrupt = true) => {
     set({ lastAnnouncement: text, voiceState: 'speaking' });
-    speakAnnouncement(text, { rate: get().speechRate, interrupt });
+    speakAnnouncement(text, { rate: get().speechRate, interrupt, languageCode: get().activeLanguageCode });
     setTimeout(() => {
       if (get().voiceState === 'speaking') {
         set({ voiceState: 'idle' });
@@ -162,13 +170,173 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     set({ voiceState: 'idle' });
   },
 
+  processVoiceInput: async (input: string) => {
+    if (!input || !input.trim()) return;
+
+    set({ voiceState: 'thinking' });
+    const parsed = voiceCommandProcessor.parseCommand(input);
+
+    if (parsed.isCommand) {
+      if (parsed.action === 'openProfileModal') {
+        get().setIsProfileModalOpen(true);
+        get().speak(parsed.feedbackPrompt || 'Opening Language and Profile settings.');
+      } else if (parsed.action === 'logoutUser') {
+        get().setIsProfileModalOpen(false);
+        get().setIsFirstTimeUser(true);
+        get().speak(parsed.feedbackPrompt || 'Logged out. Starting voice profile setup again.');
+      } else if (parsed.action === 'closeModal') {
+        get().setIsProfileModalOpen(false);
+        get().setSosModalOpen(false);
+        get().setFamilyCompanionOpen(false);
+        get().speak('Closing screen.');
+      } else if (parsed.action === 'updateUserName' && parsed.valueString) {
+        get().setUserName(parsed.valueString);
+        get().speak(`Name updated to ${parsed.valueString}.`);
+      } else if (parsed.action === 'updateUserPhone' && parsed.valueString) {
+        get().setUserPhone(parsed.valueString);
+        get().speak(`Phone number updated to ${parsed.valueString}.`);
+      } else if (parsed.action === 'switchLanguage' && parsed.targetLanguage) {
+        get().setActiveLanguageCode(parsed.targetLanguage);
+        if (parsed.targetLanguageName) {
+          get().setUserLanguage(parsed.targetLanguageName);
+        }
+        const confirmMsg = parsed.feedbackPrompt || `Language changed to ${parsed.targetLanguageName || parsed.targetLanguage}.`;
+        get().speak(confirmMsg);
+      } else if (parsed.action === 'switchMode' && parsed.targetMode) {
+        get().setActiveMode(parsed.targetMode);
+      } else if (parsed.action === 'cycleNextMode') {
+        const modes: NavMode[] = ['assist', 'read', 'medicine', 'transport', 'navigate', 'family', 'history'];
+        const currIdx = modes.indexOf(get().activeMode);
+        const nextMode = modes[(currIdx + 1) % modes.length];
+        get().setActiveMode(nextMode);
+      } else if (parsed.action === 'addMedicine' && parsed.valueString) {
+        const newMed = {
+          id: `med-${Date.now()}`,
+          name: parsed.valueString,
+          dosage: '1 Pill',
+          instructions: 'Take daily as prescribed',
+          remainingPills: 20,
+          nextScheduledTime: '8:00 AM Today',
+          prescribedFor: 'General Health'
+        };
+        const currentMeds = get().medicines || [];
+        set({ medicines: [newMed, ...currentMeds] });
+        get().setActiveMode('medicine');
+        get().speak(`Added new medicine: ${parsed.valueString}. Switched to Medicine mode.`);
+      } else if (parsed.action === 'confirmMedicine') {
+        const meds = get().medicines;
+        if (meds && meds.length > 0) {
+          get().confirmMedicineTaken(meds[0].id);
+        } else {
+          get().speak('No scheduled medicines to confirm.');
+        }
+      } else if (parsed.action === 'updateTheme' && parsed.targetTheme) {
+        get().setThemeMode(parsed.targetTheme);
+        get().speak(`Theme updated to ${parsed.targetTheme} mode.`);
+      } else if (parsed.action === 'updateSpeechRate' && parsed.rateValue) {
+        get().setSpeechRate(parsed.rateValue);
+        get().speak(`Speech rate updated.`);
+      } else if (parsed.action === 'updateFontScale' && parsed.targetFontScale) {
+        get().setFontScale(parsed.targetFontScale);
+        get().speak(`Text size set to ${parsed.targetFontScale}.`);
+      } else if (parsed.action === 'toggleTorch') {
+        get().toggleTorch();
+      } else if (parsed.action === 'toggleCameraFacing') {
+        get().toggleCameraFacing();
+      } else if (parsed.action === 'triggerSosAlert') {
+        get().triggerSosAlert();
+      } else if (parsed.action === 'toggleSpatialAudio') {
+        get().toggleSpatialAudio();
+      } else if (parsed.action === 'voiceSearch') {
+        const results = voiceSearchService.search(parsed.searchQuery || input, get().medicines);
+        if (results.length > 0) {
+          get().speak(`Voice search result: ${results[0].title}. ${results[0].detail}`);
+        } else {
+          get().speak(`No search results found for ${parsed.searchQuery || input}.`);
+        }
+      }
+      return;
+    }
+
+    // Interactive Real-Time Voice Conversation Q&A & NLP Intent Engine
+    const liveContext = {
+      detectedObjects: get().detectedObjects,
+      activeMode: get().activeMode,
+      torchOn: get().torchOn
+    };
+    const { answer, intent } = await voiceConversationService.processUserSpeech(input, get().activeLanguageCode, liveContext);
+
+    if (intent) {
+      if (intent.action === 'logoutUser') {
+        get().setIsProfileModalOpen(false);
+        get().setIsFirstTimeUser(true);
+      } else if (intent.action === 'switchLanguage' && intent.targetLanguage) {
+        get().setActiveLanguageCode(intent.targetLanguage);
+        if (intent.targetLanguageName) get().setUserLanguage(intent.targetLanguageName);
+      } else if (intent.action === 'switchMode' && intent.targetMode) {
+        get().setActiveMode(intent.targetMode);
+      } else if (intent.action === 'cycleNextMode') {
+        const modes: NavMode[] = ['assist', 'read', 'medicine', 'transport', 'navigate', 'family', 'history'];
+        const currIdx = modes.indexOf(get().activeMode);
+        get().setActiveMode(modes[(currIdx + 1) % modes.length]);
+      } else if (intent.action === 'updateProfile') {
+        if (intent.updateField === 'userName' && intent.updateValue) get().setUserName(intent.updateValue);
+        if (intent.updateField === 'userPhone' && intent.updateValue) get().setUserPhone(intent.updateValue);
+      } else if (intent.action === 'manageMedication') {
+        if (intent.subAction === 'add' && intent.medicationName) {
+          const newMed = {
+            id: `med-${Date.now()}`,
+            name: intent.medicationName,
+            dosage: '1 Pill',
+            instructions: 'Take daily as prescribed',
+            remainingPills: 20,
+            nextScheduledTime: '8:00 AM Today',
+            prescribedFor: 'General Health'
+          };
+          set({ medicines: [newMed, ...(get().medicines || [])] });
+          get().setActiveMode('medicine');
+        } else if (intent.subAction === 'confirm') {
+          const meds = get().medicines;
+          if (meds && meds.length > 0) get().confirmMedicineTaken(meds[0].id);
+        }
+      } else if (intent.action === 'updateSettings') {
+        if (intent.theme) get().setThemeMode(intent.theme);
+        if (intent.speechRate) get().setSpeechRate(intent.speechRate);
+        if (intent.fontScale) get().setFontScale(intent.fontScale);
+      }
+    }
+
+    if (answer) {
+      get().speak(answer);
+    }
+  },
+
   // User Profile
   userName: 'Aadya',
   setUserName: (name) => set({ userName: name }),
   userPhone: '+1 (555) 019-2831',
   setUserPhone: (phone) => set({ userPhone: phone }),
   userLanguage: 'English (US)',
+  activeLanguageCode: 'en',
   setUserLanguage: (lang) => set({ userLanguage: lang }),
+  setActiveLanguageCode: (code) => {
+    const langNames: Record<string, string> = {
+      en: 'English (US)',
+      hi: 'Hindi (हिंदी)',
+      mr: 'Marathi (मराठी)',
+      gu: 'Gujarati (ગુજરાતી)',
+      pa: 'Punjabi (ਪੰਜਾਬੀ)',
+      bn: 'Bengali (বাংলা)',
+      ta: 'Tamil (தமிழ்)',
+      te: 'Telugu (తెలుగు)',
+      kn: 'Kannada (ಕನ್ನಡ)',
+      ml: 'Malayalam (മലയാളം)'
+    };
+    const displayName = langNames[code] || 'English (US)';
+    set({ activeLanguageCode: code, userLanguage: displayName });
+    const t = getTranslation(code);
+    get().speak(t.languageChanged);
+  },
   isFirstTimeUser: true,
   setIsFirstTimeUser: (firstTime) => set({ isFirstTimeUser: firstTime }),
 
@@ -178,42 +346,38 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     set({ activeMode: mode });
     try {
       Haptics.selectionAsync();
-    } catch (e) {
-      // Haptics fallback silent
-    }
+    } catch (e) {}
 
-    const modeInsights: Record<NavMode, ContextInsight> = {
-      assist: { id: 'c-1', text: '✓ Path ahead is clear.', type: 'success' },
-      navigate: { id: 'c-2', text: 'Walk straight 45m towards Oak Lane.', type: 'info' },
-      read: { id: 'c-3', text: 'Prescription text detected in view.', type: 'info' },
-      medicine: { id: 'c-4', text: 'Lisinopril bottle scanned. 14 pills left.', type: 'info' },
-      transport: { id: 'c-5', text: 'Bus 42 Northbound arriving in 3 mins.', type: 'info' },
-      emergency: { id: 'c-6', text: 'Emergency SOS ready. Broadcast standby.', type: 'hazard' },
-      family: { id: 'c-7', text: 'Sarah Jenkins ready for remote stream.', type: 'info' },
-      history: { id: 'c-8', text: '3 recent text snippets saved in log.', type: 'info' },
-      settings: { id: 'c-9', text: 'System settings & contrast options.', type: 'info' },
-      languages: { id: 'c-11', text: 'Active language: English (US).', type: 'info' },
-      accessibility: { id: 'c-13', text: 'High contrast dark mode active.', type: 'info' },
-    };
-
-    const insight = modeInsights[mode] || { id: 'c-0', text: `${mode.toUpperCase()} mode selected`, type: 'info' };
+    const t = getTranslation(get().activeLanguageCode);
+    const modeInfo = t.modes[mode] || { name: mode.toUpperCase(), description: `${mode.toUpperCase()} mode selected` };
+    const insight: ContextInsight = { id: `c-${mode}`, text: modeInfo.description, type: 'info' };
     set({ currentInsight: insight });
     
-    const speakFn = get().speak;
-    if (typeof speakFn === 'function') {
-      speakFn(`${mode.toUpperCase()} mode. ${insight.text}`);
-    }
+    get().speak(`${modeInfo.name}. ${modeInfo.description}`);
   },
 
   rotateWheelToMode: (mode) => {
     get().setActiveMode(mode);
+  },
+  cycleNextMode: () => {
+    const modes: NavMode[] = ['assist', 'navigate', 'read', 'medicine', 'transport', 'family', 'history', 'languages', 'settings'];
+    const currIdx = modes.indexOf(get().activeMode);
+    const nextIdx = (currIdx + 1) % modes.length;
+    get().rotateWheelToMode(modes[nextIdx]);
+  },
+  cyclePrevMode: () => {
+    const modes: NavMode[] = ['assist', 'navigate', 'read', 'medicine', 'transport', 'family', 'history', 'languages', 'settings'];
+    const currIdx = modes.indexOf(get().activeMode);
+    const prevIdx = (currIdx - 1 + modes.length) % modes.length;
+    get().rotateWheelToMode(modes[prevIdx]);
   },
 
   spatialAudioEnabled: true,
   toggleSpatialAudio: () => {
     const next = !get().spatialAudioEnabled;
     set({ spatialAudioEnabled: next });
-    speakAnnouncement(next ? 'Spatial audio enabled.' : 'Spatial audio off.');
+    const t = getTranslation(get().activeLanguageCode);
+    get().speak(next ? t.actions.spatialAudioOn : t.actions.spatialAudioOff);
     if (next) playObstacleBeep(880, 150);
   },
 
@@ -227,44 +391,73 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   toggleCameraFacing: () => {
     const next = get().cameraFacing === 'back' ? 'front' : 'back';
     set({ cameraFacing: next });
-    speakAnnouncement(`Switched to ${next} camera.`);
+    const t = getTranslation(get().activeLanguageCode);
+    get().speak(next ? t.actions.frontCamera : t.actions.rearCamera);
   },
   torchOn: false,
   setTorchOn: (on) => set({ torchOn: on }),
   toggleTorch: () => {
     const next = !get().torchOn;
     set({ torchOn: next });
-    speakAnnouncement(next ? 'Flashlight enabled.' : 'Flashlight off.');
+    const t = getTranslation(get().activeLanguageCode);
+    get().speak(next ? t.actions.flashlightOn : t.actions.flashlightOff);
   },
   isDetectionActive: true,
   toggleDetection: () => {
     const next = !get().isDetectionActive;
     set({ isDetectionActive: next });
-    speakAnnouncement(next ? 'AI vision enabled.' : 'AI vision paused.');
+    const t = getTranslation(get().activeLanguageCode);
+    get().speak(next ? t.actions.visionActive : t.actions.visionPaused);
   },
   detectedObjects: INITIAL_OBJECTS,
   generateSceneDescription: () => {
     const mode = get().activeMode;
-    let desc = 'Clear path straight ahead. Chair detected 1.2 meters in front. Door 2.8 meters to your right.';
+    const t = getTranslation(get().activeLanguageCode);
+    let desc = t.sceneDescriptions.assist;
 
     if (mode === 'read') {
-      desc = 'Reading document text out loud: Prescription Lisinopril 10mg. Take 1 tablet daily with water after meal.';
+      desc = t.sceneDescriptions.read;
     } else if (mode === 'medicine') {
-      desc = 'Pill bottle scanned in view: Lisinopril 10mg. 14 pills remaining in bottle.';
+      desc = t.sceneDescriptions.medicine;
     } else if (mode === 'transport') {
-      desc = 'Bus stop sign detected 3 meters ahead. Bus 42 Northbound arriving in 3 minutes.';
+      desc = t.sceneDescriptions.transport;
     } else if (mode === 'navigate') {
-      desc = 'Navigation guidance: Walk straight 45 meters towards Oak Lane. Doorways on your right.';
+      desc = t.sceneDescriptions.navigate;
     }
 
     set({ 
       lastAnnouncement: desc, 
       currentInsight: { id: `c-${Date.now()}`, text: desc, type: 'info' }
     });
-    const speakFn = get().speak;
-    if (typeof speakFn === 'function') {
-      speakFn(desc);
+    get().speak(desc);
+  },
+
+  capturedPhotoUri: null as string | null,
+  isCapturedPhotoModalOpen: false,
+  setIsCapturedPhotoModalOpen: (open: boolean) => set({ isCapturedPhotoModalOpen: open }),
+
+  cameraRef: null as any,
+  setCameraRef: (ref: any) => set({ cameraRef: ref }),
+  capturePhotoAndAnalyze: async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    } catch (e) {}
+
+    const camera = get().cameraRef;
+    let photoUri = 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&auto=format&fit=crop&q=80';
+
+    if (camera && typeof camera.takePictureAsync === 'function') {
+      try {
+        const photo = await camera.takePictureAsync({ base64: true, quality: 0.8 });
+        if (photo?.uri) photoUri = photo.uri;
+      } catch (err) {
+        console.warn('Native camera photo capture fallback:', err);
+      }
     }
+
+    set({ capturedPhotoUri: photoUri, isCapturedPhotoModalOpen: true });
+    get().speak('Photo captured! Displaying scanned image and text analysis.', true);
+    get().generateSceneDescription();
   },
 
   themeMode: 'standard',

@@ -10,8 +10,7 @@ export type NavMode =
   | 'family'
   | 'history'
   | 'settings'
-  | 'languages'
-  | 'accessibility';
+  | 'languages';
 
 export type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
@@ -48,6 +47,35 @@ export interface EmergencyContact {
   relation: string;
   phone: string;
   isPrimary?: boolean;
+}
+
+export type SupportedLanguageCode = 
+  | 'en' 
+  | 'hi' 
+  | 'mr' 
+  | 'gu' 
+  | 'pa' 
+  | 'bn' 
+  | 'ta' 
+  | 'te' 
+  | 'kn' 
+  | 'ml';
+
+export interface LanguageMeta {
+  code: SupportedLanguageCode;
+  name: string;
+  nativeName: string;
+  flag: string;
+  piperVoice: string;
+  whisperLang: string;
+}
+
+export interface VoiceBackendStatus {
+  online: boolean;
+  whisperEngine: 'whisper.cpp' | 'simulated';
+  piperEngine: 'piper-tts' | 'simulated';
+  activeLanguage: SupportedLanguageCode;
+  supportedLanguages: SupportedLanguageCode[];
 }
 
 export interface ContextInsight {

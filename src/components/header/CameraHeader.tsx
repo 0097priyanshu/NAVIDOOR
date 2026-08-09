@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { AlertCircle, User } from 'lucide-react-native';
 import { UserProfileModal } from '../profile/UserProfileModal';
 
 export const CameraHeader: React.FC = () => {
-  const { triggerSosAlert, userName } = useNavidoorStore();
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const { triggerSosAlert, userName, isProfileModalOpen, setIsProfileModalOpen, isFirstTimeUser } = useNavidoorStore();
+
+  if (isFirstTimeUser) return null;
 
   return (
     <View style={styles.headerContainer} accessibilityRole="header">
@@ -21,18 +22,18 @@ export const CameraHeader: React.FC = () => {
           <AlertCircle size={22} color="#FFFFFF" />
         </TouchableOpacity>
 
-        {/* Top-Right: Sleek Circular User Profile FAB */}
+        {/* Top-Right: Sleek Circular User Profile & Settings FAB */}
         <TouchableOpacity 
           style={styles.profileCircleFab}
           onPress={() => setIsProfileModalOpen(true)}
-          accessibilityLabel={`User Profile for ${userName}`}
-          accessibilityHint="Tap to view medical ID and user profile details"
+          accessibilityLabel={`User Profile and Settings for ${userName}`}
+          accessibilityHint="Tap to view medical ID, language, and user profile details"
         >
           <User size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
-      {/* User Profile Modal */}
+      {/* User Profile & Language Modal */}
       <UserProfileModal 
         visible={isProfileModalOpen} 
         onClose={() => setIsProfileModalOpen(false)} 
@@ -71,12 +72,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(18, 18, 18, 0.95)',
+    backgroundColor: '#0284C7',
+    borderWidth: 1.5,
+    borderColor: '#38BDF8',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#0284C7',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.4,
     shadowRadius: 8,
     elevation: 6,
   },

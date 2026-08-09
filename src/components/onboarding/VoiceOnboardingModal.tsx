@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Platform } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { Mic, Globe, User, Phone, ShieldAlert, Pill, Sparkles, ArrowRight, Check } from 'lucide-react-native';
+import { SUPPORTED_LANGUAGES_META } from '../../services/voiceAssistantBackend';
+import { Mic, User, Phone, ShieldAlert, Pill, Sparkles, ArrowRight, ArrowLeft, Check } from 'lucide-react-native';
+
+import { voiceRecordingService } from '../../services/voiceRecordingService';
+import { requestWhisperSTT } from '../../services/voiceAssistantBackend';
+import { stopSpeech } from '../../utils/speechUtils';
+import { UnifiedMicButton } from '../common/UnifiedMicButton';
 
 export const VoiceOnboardingModal: React.FC = () => {
   const { 
@@ -12,7 +18,9 @@ export const VoiceOnboardingModal: React.FC = () => {
     userPhone, 
     setUserPhone, 
     userLanguage, 
-    setUserLanguage, 
+    setUserLanguage,
+    activeLanguageCode,
+    setActiveLanguageCode, 
     emergencyContacts, 
     medicines, 
     speak 
@@ -21,22 +29,161 @@ export const VoiceOnboardingModal: React.FC = () => {
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
   const [inputName, setInputName] = useState(userName);
   const [inputPhone, setInputPhone] = useState(userPhone);
-
-  const languages = ['English (US)', 'Spanish', 'French', 'Hindi'];
+  const [isListening, setIsListening] = useState(false);
 
   useEffect(() => {
     if (isFirstTimeUser) {
       setTimeout(() => {
-        speakPromptForStep(1, 'English (US)');
+        speakPromptForStep(step, userLanguage);
       }, 500);
     }
-  }, [isFirstTimeUser]);
+  }, [isFirstTimeUser, step]);
+
+  const handlePrevStep = () => {
+    if (step > 1) {
+      const prevStep = (step - 1) as 1 | 2 | 3 | 4 | 5;
+      setStep(prevStep);
+      speakPromptForStep(prevStep);
+    }
+  };
+
+  const handleNextStep = () => {
+    if (step === 1) {
+      setStep(2);
+      speakPromptForStep(2);
+    } else if (step === 2) {
+      setUserName(inputName);
+      setStep(3);
+      speakPromptForStep(3);
+    } else if (step === 3) {
+      setUserPhone(inputPhone);
+      setStep(4);
+      speakPromptForStep(4);
+    } else if (step === 4) {
+      setStep(5);
+      speakPromptForStep(5);
+    } else if (step === 5) {
+      setStep(6);
+      speakPromptForStep(6);
+    } else {
+      setIsFirstTimeUser(false);
+      speak('Starting live AI vision assist.');
+    }
+  };
+
+  const handleVoiceSetupAnswer = async () => {
+    stopSpeech();
+
+    if (isListening) {
+      setIsListening(false);
+      const { blob, uri, liveTranscript } = await voiceRecordingService.stopRecording();
+      let answer = liveTranscript ? liveTranscript.trim().toLowerCase() : '';
+      if (!answer && (blob || uri)) {
+        const text = await requestWhisperSTT(blob, activeLanguageCode, uri || 'setup_mic');
+        if (text) answer = text.trim().toLowerCase();
+      }
+
+      if (answer) {
+        // Voice Back / Previous Step Command
+        if (answer.includes('back') || answer.includes('previous') || answer.includes('go back') || answer.includes('पीछे') || answer.includes('मागे')) {
+          handlePrevStep();
+          return;
+        }
+
+        if (step === 1) {
+          const matchedLang = SUPPORTED_LANGUAGES_META.find(
+            l => answer.includes(l.name.toLowerCase()) || answer.includes(l.nativeName.toLowerCase())
+          );
+          if (matchedLang) {
+            setActiveLanguageCode(matchedLang.code);
+            setUserLanguage(matchedLang.name);
+            speak(`Language selected: ${matchedLang.name}. Moving to Step 2.`);
+          } else {
+            speak(`Language set to English. Moving to Step 2.`);
+          }
+          setStep(2);
+        } else if (step === 2) {
+          const cleanName = answer.replace(/my name is|i am|name is/gi, '').trim();
+          const finalName = cleanName ? cleanName.charAt(0).toUpperCase() + cleanName.slice(1) : inputName;
+          setInputName(finalName);
+          setUserName(finalName);
+          speak(`Name set to ${finalName}. Moving to Step 3.`);
+          setStep(3);
+        } else if (step === 3) {
+          setInputPhone(answer);
+          setUserPhone(answer);
+          speak(`Phone number saved. Moving to Step 4.`);
+          setStep(4);
+        } else if (step === 4) {
+          speak(`Emergency contact confirmed. Moving to Step 5.`);
+          setStep(5);
+        } else if (step === 5) {
+          speak(`Medicine schedule confirmed. Setup complete.`);
+          setStep(6);
+        } else {
+          setIsFirstTimeUser(false);
+          speak('Starting live AI vision assist.');
+        }
+      } else {
+        speak('No speech detected. Please tap the microphone and speak your setup answer.');
+      }
+    } else {
+      setIsListening(true);
+      await voiceRecordingService.startRecording(activeLanguageCode, async (autoText) => {
+        if (autoText && autoText.trim()) {
+          setIsListening(false);
+          const answer = autoText.trim().toLowerCase();
+
+          // Voice Back / Previous Step Command
+          if (answer.includes('back') || answer.includes('previous') || answer.includes('go back') || answer.includes('पीछे') || answer.includes('मागे')) {
+            handlePrevStep();
+            return;
+          }
+
+          if (step === 1) {
+            const matchedLang = SUPPORTED_LANGUAGES_META.find(
+              l => answer.includes(l.name.toLowerCase()) || answer.includes(l.nativeName.toLowerCase())
+            );
+            if (matchedLang) {
+              setActiveLanguageCode(matchedLang.code);
+              setUserLanguage(matchedLang.name);
+              speak(`Language selected: ${matchedLang.name}. Moving to Step 2.`);
+            } else {
+              speak(`Language set to English. Moving to Step 2.`);
+            }
+            setStep(2);
+          } else if (step === 2) {
+            const cleanName = answer.replace(/my name is|i am|name is/gi, '').trim();
+            const finalName = cleanName ? cleanName.charAt(0).toUpperCase() + cleanName.slice(1) : inputName;
+            setInputName(finalName);
+            setUserName(finalName);
+            speak(`Name set to ${finalName}. Moving to Step 3.`);
+            setStep(3);
+          } else if (step === 3) {
+            setInputPhone(answer);
+            setUserPhone(answer);
+            speak(`Phone number saved. Moving to Step 4.`);
+            setStep(4);
+          } else if (step === 4) {
+            speak(`Emergency contact confirmed. Moving to Step 5.`);
+            setStep(5);
+          } else if (step === 5) {
+            speak(`Medicine schedule confirmed. Setup complete.`);
+            setStep(6);
+          } else {
+            setIsFirstTimeUser(false);
+            speak('Starting live AI vision assist.');
+          }
+        }
+      });
+    }
+  };
 
   const speakPromptForStep = (currentStep: number, langChoice = userLanguage) => {
     switch (currentStep) {
       case 1:
         speak(
-          `Welcome to NAVIDOOR AI Vision Assist. Let's set up your profile. Step 1: Select your preferred voice language. Available options are: 1, English US. 2, Spanish. 3, French. 4, Hindi. Tap your choice or tap anywhere to confirm.`
+          `Welcome to NAVIDOOR AI Vision Assist. Let's set up your profile. Step 1: Select your preferred offline voice language from 10 supported options. Tap your choice.`
         );
         break;
       case 2:
@@ -69,30 +216,6 @@ export const VoiceOnboardingModal: React.FC = () => {
 
   if (!isFirstTimeUser) return null;
 
-  const handleNextStep = () => {
-    if (step === 1) {
-      setStep(2);
-      speakPromptForStep(2);
-    } else if (step === 2) {
-      setUserName(inputName);
-      setStep(3);
-      speakPromptForStep(3);
-    } else if (step === 3) {
-      setUserPhone(inputPhone);
-      setStep(4);
-      speakPromptForStep(4);
-    } else if (step === 4) {
-      setStep(5);
-      speakPromptForStep(5);
-    } else if (step === 5) {
-      setStep(6);
-      speakPromptForStep(6);
-    } else {
-      setIsFirstTimeUser(false);
-      speak('Starting live AI vision assist.');
-    }
-  };
-
   return (
     <Modal visible={isFirstTimeUser} transparent animationType="fade">
       <TouchableOpacity 
@@ -104,46 +227,53 @@ export const VoiceOnboardingModal: React.FC = () => {
         <View style={styles.container}>
           {/* Header Branding */}
           <View style={styles.brandRow}>
-            <Sparkles size={24} color="#FFFFFF" />
+            <Sparkles size={24} color="#0284C7" />
             <Text style={styles.brandTitle}>NAVIDOOR AI SETUP</Text>
           </View>
 
           {/* Center Voice Mic Indicator */}
           <TouchableOpacity 
-            style={styles.micCircle} 
+            style={styles.micAnchorContainer}
             onPress={(e) => {
               e.stopPropagation();
-              speakPromptForStep(step);
+              handleVoiceSetupAnswer();
             }}
-            accessibilityLabel="Tap to re-hear voice options"
+            accessibilityLabel="Tap to speak setup answer"
           >
-            <Mic size={38} color="#000000" />
+            <UnifiedMicButton
+              voiceState={isListening ? 'listening' : 'idle'}
+              onPress={handleVoiceSetupAnswer}
+              showLabel={false}
+              size={68}
+            />
           </TouchableOpacity>
 
           {/* STEP 1: LANGUAGE SELECTION */}
           {step === 1 && (
             <View style={styles.stepCard}>
-              <Text style={styles.stepTag}>STEP 1 OF 6 • VOICE LANGUAGE</Text>
+              <Text style={styles.stepTag}>STEP 1 OF 6 • VOICE LANGUAGE (OFFLINE ENGINE)</Text>
               <Text style={styles.stepTitle}>Select Preferred Language</Text>
               
               <View style={styles.langGrid}>
-                {languages.map((lang) => (
-                  <TouchableOpacity
-                    key={lang}
-                    style={[styles.langChip, userLanguage === lang && styles.langChipActive]}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      setUserLanguage(lang);
-                      speak(`Language selected: ${lang}`);
-                    }}
-                    accessibilityLabel={`Select language ${lang}`}
-                  >
-                    <Globe size={18} color={userLanguage === lang ? '#000000' : '#FFFFFF'} />
-                    <Text style={[styles.langText, userLanguage === lang && styles.langTextActive]}>
-                      {lang}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {SUPPORTED_LANGUAGES_META.map((lang) => {
+                  const isActive = activeLanguageCode === lang.code;
+                  return (
+                    <TouchableOpacity
+                      key={lang.code}
+                      style={[styles.langChip, isActive && styles.langChipActive]}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        setActiveLanguageCode(lang.code);
+                        setUserLanguage(lang.name);
+                        speak(`Language selected: ${lang.name}`);
+                      }}
+                      accessibilityLabel={`Select language ${lang.name}`}
+                    >
+                      <Text style={{ fontSize: 16 }}>{lang.flag}</Text>
+                      <Text style={[styles.langText, isActive && styles.langTextActive]}>{lang.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
           )}
@@ -153,46 +283,48 @@ export const VoiceOnboardingModal: React.FC = () => {
             <View style={styles.stepCard}>
               <Text style={styles.stepTag}>STEP 2 OF 6 • USER PROFILE</Text>
               <Text style={styles.stepTitle}>What is your name?</Text>
+              <Text style={styles.stepDesc}>Speak your full name into the microphone or type below.</Text>
               
-              <TouchableOpacity style={styles.inputWrapper} activeOpacity={1} onPress={(e) => e.stopPropagation()}>
-                <User size={20} color="#FFFFFF" />
+              <View style={styles.inputBox}>
+                <User size={20} color="#0284C7" />
                 <TextInput
-                  style={styles.input}
+                  style={styles.textInput}
                   value={inputName}
                   onChangeText={setInputName}
-                  placeholder="Enter your name"
-                  placeholderTextColor="#A0A0A0"
+                  placeholder="Enter your name..."
+                  placeholderTextColor="#64748B"
                 />
-              </TouchableOpacity>
+              </View>
             </View>
           )}
 
-          {/* STEP 3: PERSONAL PHONE */}
+          {/* STEP 3: USER PHONE */}
           {step === 3 && (
             <View style={styles.stepCard}>
-              <Text style={styles.stepTag}>STEP 3 OF 6 • SMS NOTIFICATIONS</Text>
+              <Text style={styles.stepTag}>STEP 3 OF 6 • CONTACT INFO</Text>
               <Text style={styles.stepTitle}>Your Phone Number</Text>
-              
-              <TouchableOpacity style={styles.inputWrapper} activeOpacity={1} onPress={(e) => e.stopPropagation()}>
-                <Phone size={20} color="#FFFFFF" />
+              <Text style={styles.stepDesc}>Used for emergency SMS alerts and family caregiver connection.</Text>
+
+              <View style={styles.inputBox}>
+                <Phone size={20} color="#0284C7" />
                 <TextInput
-                  style={styles.input}
+                  style={styles.textInput}
                   value={inputPhone}
                   onChangeText={setInputPhone}
                   keyboardType="phone-pad"
-                  placeholder="Enter phone number"
-                  placeholderTextColor="#A0A0A0"
+                  placeholder="Enter phone number..."
+                  placeholderTextColor="#64748B"
                 />
-              </TouchableOpacity>
+              </View>
             </View>
           )}
 
-          {/* STEP 4: EMERGENCY SOS CONTACT */}
+          {/* STEP 4: EMERGENCY CONTACT */}
           {step === 4 && (
             <View style={styles.stepCard}>
-              <Text style={styles.stepTag}>STEP 4 OF 6 • EMERGENCY SOS</Text>
-              <Text style={styles.stepTitle}>Primary Emergency Contact</Text>
-              
+              <Text style={styles.stepTag}>STEP 4 OF 6 • EMERGENCY CONTACT</Text>
+              <Text style={styles.stepTitle}>Primary Contact Confirmed</Text>
+
               {emergencyContacts.map((c) => (
                 <View key={c.id} style={styles.contactItem}>
                   <ShieldAlert size={20} color="#E11D48" />
@@ -200,7 +332,7 @@ export const VoiceOnboardingModal: React.FC = () => {
                     <Text style={styles.contactName}>{c.name} ({c.relation})</Text>
                     <Text style={styles.contactPhone}>{c.phone}</Text>
                   </View>
-                  <Check size={20} color="#05A357" />
+                  <Check size={20} color="#0284C7" />
                 </View>
               ))}
             </View>
@@ -209,38 +341,64 @@ export const VoiceOnboardingModal: React.FC = () => {
           {/* STEP 5: MEDICINE SCANNER SETUP */}
           {step === 5 && (
             <View style={styles.stepCard}>
-              <Text style={styles.stepTag}>STEP 5 OF 6 • MEDICINE TRACKER</Text>
-              <Text style={styles.stepTitle}>Upload Daily Medicines</Text>
-              
-              <View style={styles.medItem}>
-                <Pill size={20} color="#FFFFFF" />
-                <Text style={styles.medText}>{medicines[0]?.name || 'Lisinopril 10mg'} (Loaded)</Text>
-              </View>
+              <Text style={styles.stepTag}>STEP 5 OF 6 • MEDICINE TRACKER & DOSAGE</Text>
+              <Text style={styles.stepTitle}>Prescription Schedule</Text>
+
+              {medicines.map((m) => (
+                <View key={m.id} style={styles.medItem}>
+                  <Pill size={20} color="#0284C7" />
+                  <View style={styles.contactTextGroup}>
+                    <Text style={styles.contactName}>{m.name}</Text>
+                    <Text style={styles.contactPhone}>{m.dosage} • {m.instructions}</Text>
+                  </View>
+                  <Check size={20} color="#0284C7" />
+                </View>
+              ))}
             </View>
           )}
 
           {/* STEP 6: SETUP COMPLETE */}
           {step === 6 && (
             <View style={styles.stepCard}>
-              <Text style={styles.stepTag}>STEP 6 OF 6 • READY</Text>
-              <Text style={styles.stepTitle}>Setup Complete!</Text>
+              <Text style={styles.stepTag}>STEP 6 OF 6 • SETUP COMPLETE</Text>
+              <Text style={styles.stepTitle}>Ready for AI Vision Assist</Text>
               <Text style={styles.stepSub}>
-                Profile saved for {inputName}. NAVIDOOR is observing your surroundings via camera and voice.
+                All profile settings, emergency contacts, and language options are configured.
               </Text>
             </View>
           )}
 
-          {/* Next Step Action Button */}
-          <TouchableOpacity 
-            style={styles.actionBtn}
-            onPress={handleNextStep}
-            accessibilityLabel="Confirm and continue setup"
-          >
-            <Text style={styles.actionBtnText}>
-              {step === 6 ? 'START LIVE AI VISION ASSIST' : 'CONFIRM & CONTINUE'}
-            </Text>
-            <ArrowRight size={22} color="#000000" />
-          </TouchableOpacity>
+          {/* DUAL ACTION BUTTON ROW: PREVIOUS & CONTINUE */}
+          <View style={styles.actionRow}>
+            {step > 1 && (
+              <TouchableOpacity
+                style={styles.prevBtn}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handlePrevStep();
+                }}
+                accessibilityLabel="Go back to previous setup step"
+                accessibilityHint="Tap to return to the previous setup step"
+              >
+                <ArrowLeft size={18} color="#0284C7" />
+                <Text style={styles.prevBtnText}>BACK</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity 
+              style={[styles.actionBtn, step > 1 && { flex: 1 }]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleNextStep();
+              }}
+              accessibilityLabel="Advance setup step"
+            >
+              <Text style={styles.actionBtnText}>
+                {step === 6 ? 'START AI ASSIST' : 'CONTINUE'}
+              </Text>
+              <ArrowRight size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     </Modal>
@@ -250,10 +408,11 @@ export const VoiceOnboardingModal: React.FC = () => {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: '#000000',
-    justifyContent: 'center',
+    backgroundColor: '#64748B',
+    justifyContent: 'flex-start',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 44,
   },
   container: {
     width: '100%',
@@ -263,137 +422,170 @@ const styles = StyleSheet.create({
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    marginTop: 10,
     marginBottom: 20,
   },
   brandTitle: {
-    color: '#FFFFFF',
-    fontSize: 22,
+    color: '#0F172A',
+    fontSize: 16,
     fontWeight: '900',
     letterSpacing: 2,
   },
-  micCircle: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 14,
-    elevation: 10,
+  micAnchorContainer: {
+    marginBottom: 32,
   },
   stepCard: {
     width: '100%',
-    backgroundColor: 'rgba(18, 18, 18, 0.95)',
+    backgroundColor: '#CBD5E1',
     borderRadius: 24,
     padding: 20,
     marginBottom: 24,
+    borderWidth: 1.5,
+    borderColor: '#475569',
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
   },
   stepTag: {
-    color: '#FFFFFF',
+    color: '#0284C7',
     fontSize: 11,
     fontWeight: '900',
     letterSpacing: 1.5,
     marginBottom: 6,
   },
   stepTitle: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontSize: 22,
     fontWeight: '900',
     marginBottom: 6,
   },
-  stepSub: {
-    color: '#A0A0A0',
+  stepDesc: {
+    color: '#334155',
     fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '600',
+    marginBottom: 16,
+  },
+  stepSub: {
+    color: '#334155',
+    fontSize: 14,
+    marginTop: 4,
   },
   langGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 14,
+    marginTop: 12,
   },
   langChip: {
-    width: '48%',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingVertical: 12,
+    gap: 6,
+    backgroundColor: '#E2E8F0',
     paddingHorizontal: 12,
+    paddingVertical: 10,
     borderRadius: 14,
-    gap: 8,
+    borderWidth: 1.5,
+    borderColor: '#94A3B8',
   },
   langChipActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0284C7',
+    borderColor: '#0284C7',
   },
   langText: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: '700',
     fontSize: 13,
   },
   langTextActive: {
-    color: '#000000',
-    fontWeight: '900',
+    color: '#FFFFFF',
   },
-  inputWrapper: {
+  inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#E2E8F0',
     borderRadius: 16,
     paddingHorizontal: 14,
-    marginTop: 14,
+    height: 54,
     gap: 10,
+    marginTop: 6,
+    borderWidth: 1.5,
+    borderColor: '#94A3B8',
   },
-  input: {
+  textInput: {
     flex: 1,
-    height: 52,
-    color: '#FFFFFF',
-    fontWeight: '700',
+    color: '#0F172A',
     fontSize: 16,
+    fontWeight: '700',
   },
   contactItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    padding: 12,
+    backgroundColor: '#E2E8F0',
+    padding: 14,
     borderRadius: 16,
     gap: 12,
-    marginTop: 14,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#94A3B8',
   },
   contactTextGroup: {
     flex: 1,
   },
   contactName: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: '800',
     fontSize: 15,
   },
   contactPhone: {
-    color: '#A0A0A0',
+    color: '#334155',
     fontSize: 13,
     marginTop: 2,
   },
   medItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#E2E8F0',
     padding: 14,
     borderRadius: 16,
     gap: 10,
     marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#94A3B8',
   },
   medText: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: '800',
     fontSize: 15,
   },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    gap: 12,
+  },
+  prevBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#E2E8F0',
+    borderWidth: 1.5,
+    borderColor: '#0284C7',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 20,
+    minHeight: 64,
+  },
+  prevBtnText: {
+    color: '#0284C7',
+    fontWeight: '900',
+    fontSize: 14,
+    letterSpacing: 0.8,
+  },
   actionBtn: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0284C7',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -404,7 +596,7 @@ const styles = StyleSheet.create({
     minHeight: 64,
   },
   actionBtnText: {
-    color: '#000000',
+    color: '#FFFFFF',
     fontWeight: '900',
     fontSize: 15,
     letterSpacing: 0.5,

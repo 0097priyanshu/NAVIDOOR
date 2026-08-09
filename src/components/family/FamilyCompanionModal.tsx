@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { getThemeColors, ACCESSIBILITY } from '../../theme/designSystem';
+import { ACCESSIBILITY } from '../../theme/designSystem';
 import { Users, Mic, Volume2, X, ShieldCheck, MessageSquare } from 'lucide-react-native';
 
 export const FamilyCompanionModal: React.FC = () => {
-  const { isFamilyCompanionOpen, setFamilyCompanionOpen, themeMode, speak } = useNavidoorStore();
-  const colors = getThemeColors(themeMode);
+  const { isFamilyCompanionOpen, setFamilyCompanionOpen, speak } = useNavidoorStore();
   const [isAudioConnected, setIsAudioConnected] = useState(true);
 
   if (!isFamilyCompanionOpen) return null;
@@ -14,15 +13,15 @@ export const FamilyCompanionModal: React.FC = () => {
   return (
     <Modal visible={isFamilyCompanionOpen} transparent animationType="slide">
       <View style={styles.modalBackdrop}>
-        <View style={[styles.modalCard, { backgroundColor: colors.bgCard, borderColor: '#10B981' }]}>
+        <View style={styles.modalCard}>
           {/* Header */}
           <View style={styles.headerRow}>
             <View style={styles.headerTitleGroup}>
-              <Users size={24} color="#10B981" />
-              <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>REMOTE FAMILY COMPANION</Text>
+              <Users size={24} color="#0284C7" />
+              <Text style={styles.headerTitle}>REMOTE FAMILY COMPANION</Text>
             </View>
             <TouchableOpacity onPress={() => setFamilyCompanionOpen(false)} style={styles.closeBtn}>
-              <X size={24} color="#FFFFFF" />
+              <X size={24} color="#0F172A" />
             </TouchableOpacity>
           </View>
 
@@ -35,7 +34,7 @@ export const FamilyCompanionModal: React.FC = () => {
           {/* Remote Caretaker Voice Note */}
           <View style={styles.voiceNoteCard}>
             <View style={styles.noteTop}>
-              <MessageSquare size={16} color="#10B981" />
+              <MessageSquare size={16} color="#0284C7" />
               <Text style={styles.noteSender}>Sarah Jenkins (Daughter):</Text>
             </View>
             <Text style={styles.noteText}>
@@ -53,7 +52,7 @@ export const FamilyCompanionModal: React.FC = () => {
           {/* Direct Controls */}
           <View style={styles.controlsRow}>
             <TouchableOpacity
-              style={[styles.ctrlBtn, { backgroundColor: isAudioConnected ? '#10B981' : 'rgba(255,255,255,0.1)' }]}
+              style={[styles.ctrlBtn, { backgroundColor: isAudioConnected ? '#0284C7' : '#64748B' }]}
               onPress={() => setIsAudioConnected(!isAudioConnected)}
             >
               <Mic size={20} color="#FFFFFF" />
@@ -79,7 +78,7 @@ export const FamilyCompanionModal: React.FC = () => {
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: '#64748B',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
@@ -87,15 +86,25 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 420,
+    backgroundColor: '#CBD5E1',
     borderRadius: 24,
     borderWidth: 2,
+    borderColor: '#0284C7',
     padding: 20,
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 14,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#94A3B8',
   },
   headerTitleGroup: {
     flexDirection: 'row',
@@ -103,6 +112,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   headerTitle: {
+    color: '#0F172A',
     fontSize: 16,
     fontWeight: '900',
     letterSpacing: 1,
@@ -113,29 +123,31 @@ const styles = StyleSheet.create({
   statusBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#E2E8F0',
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 14,
     gap: 8,
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#0284C7',
   },
   livePulseDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#10B981',
+    backgroundColor: '#0284C7',
   },
   statusText: {
-    color: '#10B981',
+    color: '#0284C7',
     fontWeight: '800',
     fontSize: 13,
   },
   voiceNoteCard: {
-    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    backgroundColor: '#94A3B8',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: '#64748B',
     padding: 14,
     marginBottom: 16,
   },
@@ -146,24 +158,24 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   noteSender: {
-    color: '#10B981',
-    fontWeight: '800',
+    color: '#0284C7',
+    fontWeight: '900',
     fontSize: 13,
   },
   noteText: {
-    color: '#F8FAFC',
+    color: '#0F172A',
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: '600',
+    fontWeight: '700',
     marginBottom: 10,
   },
   listenBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#10B981',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    backgroundColor: '#0284C7',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
     alignSelf: 'flex-start',
     gap: 6,
   },
@@ -193,8 +205,6 @@ const styles = StyleSheet.create({
   },
   closeCompanionBtn: {
     backgroundColor: '#E11D48',
-    borderWidth: 1.5,
-    borderColor: '#F43F5E',
   },
   closeCompanionBtnText: {
     color: '#FFFFFF',

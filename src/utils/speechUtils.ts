@@ -1,13 +1,50 @@
 import * as Speech from 'expo-speech';
 import { Platform } from 'react-native';
+import { SupportedLanguageCode } from '../types';
+import { requestPiperTTS } from '../services/voiceAssistantBackend';
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
+let currentAudioElement: HTMLAudioElement | null = null;
 
-export const speakAnnouncement = (
+const LANG_CODE_MAP: Record<SupportedLanguageCode, string> = {
+  en: 'en-US',
+  hi: 'hi-IN',
+  mr: 'mr-IN',
+  gu: 'gu-IN',
+  pa: 'pa-IN',
+  bn: 'bn-IN',
+  ta: 'ta-IN',
+  te: 'te-IN',
+  kn: 'kn-IN',
+  ml: 'ml-IN',
+};
+
+export const speakAnnouncement = async (
   text: string, 
-  options: { rate?: number; pitch?: number; interrupt?: boolean } = {}
+  options: { rate?: number; pitch?: number; interrupt?: boolean; languageCode?: SupportedLanguageCode } = {}
 ) => {
-  const { rate = 1.0, pitch = 1.0, interrupt = true } = options;
+  const { rate = 1.0, pitch = 1.0, interrupt = true, languageCode = 'en' } = options;
+
+  // 1. Try Piper TTS Backend Audio Stream first
+  try {
+    const audioBuffer = await requestPiperTTS(text, languageCode);
+    if (audioBuffer && Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (interrupt && currentAudioElement) {
+        currentAudioElement.pause();
+      }
+      const blob = new Blob([audioBuffer], { type: 'audio/wav' });
+      const url = URL.createObjectURL(blob);
+      currentAudioElement = new Audio(url);
+      currentAudioElement.playbackRate = rate;
+      currentAudioElement.play();
+      return;
+    }
+  } catch (err) {
+    // Fall back to native/web Speech synthesis
+  }
+
+  // 2. Standard Web & Native Speech Synthesis Fallback
+  const targetLang = LANG_CODE_MAP[languageCode] || 'en-US';
 
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -18,7 +55,7 @@ export const speakAnnouncement = (
       currentUtterance = new SpeechSynthesisUtterance(text);
       currentUtterance.rate = rate;
       currentUtterance.pitch = pitch;
-      currentUtterance.lang = 'en-US';
+      currentUtterance.lang = targetLang;
 
       window.speechSynthesis.speak(currentUtterance);
     }
@@ -30,7 +67,7 @@ export const speakAnnouncement = (
     Speech.speak(text, {
       rate: rate,
       pitch: pitch,
-      language: 'en-US',
+      language: targetLang,
     });
   }
 };

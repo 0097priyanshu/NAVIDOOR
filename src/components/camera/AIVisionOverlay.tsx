@@ -1,25 +1,19 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { Volume2, Sparkles } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
+import { Sparkles, Volume2 } from 'lucide-react-native';
 
 export const AIVisionOverlay: React.FC = () => {
   const { 
     lastAnnouncement, 
-    isDetectionActive, 
-    activeMode, 
-    speak 
+    speak, 
+    activeMode 
   } = useNavidoorStore();
 
   const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(activeMode);
-
-  if (!isDetectionActive || !isVisionMode) return null;
+  if (!isVisionMode) return null;
 
   const handleSpeechReplay = () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch (e) {}
     if (lastAnnouncement) {
       speak(lastAnnouncement, true);
     }
@@ -27,7 +21,7 @@ export const AIVisionOverlay: React.FC = () => {
 
   return (
     <View style={styles.voiceHudContainer} pointerEvents="box-none">
-      {/* Accessible Voice Guidance HUD (Replaces visual floating tags) */}
+      {/* Accessible Voice Guidance HUD */}
       <TouchableOpacity 
         style={styles.voiceHudCard}
         onPress={handleSpeechReplay}
@@ -36,7 +30,7 @@ export const AIVisionOverlay: React.FC = () => {
         accessibilityRole="button"
       >
         <View style={styles.voiceIconBadge}>
-          <Sparkles size={18} color="#05A357" />
+          <Sparkles size={18} color="#0284C7" />
         </View>
         <Text style={styles.voiceHudText} numberOfLines={2}>
           {lastAnnouncement || 'AI Vision active. Scanning surroundings...'}
@@ -62,16 +56,16 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(18, 18, 18, 0.95)',
+    backgroundColor: '#CBD5E1',
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderColor: '#64748B',
     borderRadius: 20,
     paddingVertical: 10,
     paddingHorizontal: 14,
     gap: 10,
-    shadowColor: '#000',
+    shadowColor: '#0284C7',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 8,
   },
@@ -79,13 +73,13 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(5, 163, 87, 0.18)',
+    backgroundColor: 'rgba(2, 132, 199, 0.18)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   voiceHudText: {
     flex: 1,
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 18,
@@ -94,7 +88,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: '#0284C7',
     justifyContent: 'center',
     alignItems: 'center',
   },

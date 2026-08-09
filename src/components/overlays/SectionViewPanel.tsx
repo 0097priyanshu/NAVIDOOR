@@ -1,198 +1,228 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  ScrollView, 
+  Switch,
+  PanResponder
+} from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { 
-  Settings, 
-  Clock, 
-  Globe, 
-  Eye, 
-  Users, 
-  Bookmark
+  Check, 
+  Bookmark,
+  Eye,
+  Sliders
 } from 'lucide-react-native';
+import { SUPPORTED_LANGUAGES_META } from '../../services/voiceAssistantBackend';
 
 export const SectionViewPanel: React.FC = () => {
   const { 
     activeMode, 
-    themeMode, 
-    setThemeMode, 
+    speechRate, 
+    setSpeechRate, 
     spatialAudioEnabled, 
     toggleSpatialAudio,
-    speechRate,
-    setSpeechRate,
-    userLanguage,
-    setUserLanguage,
+    themeMode,
+    setThemeMode,
     fontScale,
     setFontScale,
+    activeLanguageCode,
+    setActiveLanguageCode,
+    setUserLanguage,
     setFamilyCompanionOpen,
-    speak 
+    speak
   } = useNavidoorStore();
 
-  // Vision modes render simple floating overlays, utility modes render full dedicated section views
-  const isUtilityMode = ['settings', 'history', 'languages', 'accessibility', 'family'].includes(activeMode);
+  const isPanelMode = ['settings', 'languages', 'history', 'family'].includes(activeMode);
 
-  if (!isUtilityMode) return null;
+  const panResponder = React.useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 15 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx < -20) {
+          useNavidoorStore.getState().cycleNextMode();
+        } else if (gestureState.dx > 20) {
+          useNavidoorStore.getState().cyclePrevMode();
+        }
+      },
+    })
+  ).current;
+
+  if (!isPanelMode) return null;
 
   return (
-    <View style={styles.sectionContainer} pointerEvents="auto">
+    <View style={styles.panelContainer} {...panResponder.panHandlers}>
+      {/* Centered Top Header Bar */}
+      <View style={styles.topHeaderBar}>
+        <Text style={styles.topHeaderTag}>{activeMode.toUpperCase()} PANEL</Text>
+      </View>
+
       <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
-        {/* SETTINGS SECTION */}
+        {/* SETTINGS SECTION (MINIMALIST & CLEAN) */}
         {activeMode === 'settings' && (
           <View style={styles.card}>
-            <View style={styles.headerRow}>
-              <Settings size={24} color="#FFFFFF" />
-              <Text style={styles.sectionTitle}>SYSTEM SETTINGS</Text>
-            </View>
+            {/* 1. SYSTEM & VOICE AUDIO SETTINGS */}
+            <View style={styles.subSectionBox}>
+              <View style={styles.subSectionHeader}>
+                <Sliders size={18} color="#0284C7" />
+                <Text style={styles.subSectionTitle}>SYSTEM & VOICE AUDIO</Text>
+              </View>
 
-            <View style={styles.settingItem}>
-              <View style={styles.settingTextGroup}>
+              {/* Voice Speech Speed Control */}
+              <View style={styles.settingItemColumn}>
+                <Text style={styles.settingLabel}>Voice Speech Speed</Text>
+                
+                <View style={styles.rateBtnRow}>
+                  {[
+                    { label: '0.85x', val: 0.85 },
+                    { label: '1.0x', val: 1.0 },
+                    { label: '1.25x', val: 1.25 },
+                  ].map((item) => {
+                    const isActive = Math.abs(speechRate - item.val) < 0.05;
+                    return (
+                      <TouchableOpacity
+                        key={item.label}
+                        style={[styles.rateBtn, isActive && styles.rateBtnActive]}
+                        onPress={() => {
+                          setSpeechRate(item.val);
+                          speak(`Speech rate ${item.label}`);
+                        }}
+                        accessibilityLabel={`Set speech speed to ${item.label}`}
+                      >
+                        <Text style={[styles.rateBtnText, isActive && styles.rateBtnTextActive]}>
+                          {item.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Spatial Audio Toggle */}
+              <View style={styles.settingItem}>
                 <Text style={styles.settingLabel}>Spatial Audio Beeps</Text>
-                <Text style={styles.settingSub}>Plays directional audio when obstacles are near</Text>
-              </View>
-              <Switch 
-                value={spatialAudioEnabled} 
-                onValueChange={toggleSpatialAudio} 
-                trackColor={{ false: '#333333', true: '#05A357' }}
-              />
-            </View>
-
-            <View style={styles.settingItem}>
-              <View style={styles.settingTextGroup}>
-                <Text style={styles.settingLabel}>High Contrast Gold Theme</Text>
-                <Text style={styles.settingSub}>Switch between Obsidian Black & Amber Gold</Text>
-              </View>
-              <Switch 
-                value={themeMode === 'highContrastAmber'} 
-                onValueChange={() => setThemeMode(themeMode === 'standard' ? 'highContrastAmber' : 'standard')} 
-                trackColor={{ false: '#333333', true: '#FFD700' }}
-              />
-            </View>
-
-            <View style={styles.settingItemColumn}>
-              <Text style={styles.settingLabel}>Voice Speech Speed ({speechRate}x)</Text>
-              <View style={styles.rateBtnRow}>
-                {[1.0, 1.25, 1.5, 2.0].map((rate) => (
-                  <TouchableOpacity
-                    key={rate}
-                    style={[styles.rateBtn, speechRate === rate && styles.rateBtnActive]}
-                    onPress={() => setSpeechRate(rate)}
-                  >
-                    <Text style={[styles.rateBtnText, speechRate === rate && styles.rateBtnTextActive]}>
-                      {rate}x
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                <Switch 
+                  value={spatialAudioEnabled} 
+                  onValueChange={toggleSpatialAudio} 
+                  trackColor={{ false: '#94A3B8', true: '#0284C7' }}
+                />
               </View>
             </View>
-          </View>
-        )}
 
-        {/* HISTORY & SAVED LOGS SECTION */}
-        {activeMode === 'history' && (
-          <View style={styles.card}>
-            <View style={styles.headerRow}>
-              <Clock size={24} color="#FFFFFF" />
-              <Text style={styles.sectionTitle}>HISTORY & SAVED TEXT LOGS</Text>
+            {/* 2. ACCESSIBILITY PREFERENCES */}
+            <View style={styles.accessibilitySubBox}>
+              <View style={styles.subSectionHeader}>
+                <Eye size={18} color="#0284C7" />
+                <Text style={styles.subSectionTitle}>ACCESSIBILITY PREFERENCES</Text>
+              </View>
+
+              {/* Text Font Scaling */}
+              <View style={styles.settingItemColumn}>
+                <Text style={styles.settingLabel}>Text Font Scaling</Text>
+                <View style={styles.rateBtnRow}>
+                  {(['normal', 'large', 'extraLarge'] as const).map((scale) => {
+                    const isActive = fontScale === scale;
+                    return (
+                      <TouchableOpacity
+                        key={scale}
+                        style={[styles.rateBtn, isActive && styles.rateBtnActive]}
+                        onPress={() => {
+                          setFontScale(scale);
+                          speak(`Font size ${scale}`);
+                        }}
+                      >
+                        <Text style={[styles.rateBtnText, isActive && styles.rateBtnTextActive]}>
+                          {scale.toUpperCase()}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* High Contrast Amber Theme Toggle */}
+              <View style={styles.settingItem}>
+                <Text style={styles.settingLabel}>High Contrast Theme</Text>
+                <Switch 
+                  value={themeMode === 'highContrastAmber'} 
+                  onValueChange={(val) => setThemeMode(val ? 'highContrastAmber' : 'standard')} 
+                  trackColor={{ false: '#94A3B8', true: '#0284C7' }}
+                />
+              </View>
             </View>
-
-            <TouchableOpacity 
-              style={styles.historyItem}
-              onPress={() => speak('Lisinopril prescription scanned today at 8:00 AM. 1 pill daily after breakfast.')}
-            >
-              <Bookmark size={18} color="#FFFFFF" />
-              <View style={styles.historyTextGroup}>
-                <Text style={styles.historyTitle}>Lisinopril 10mg Prescription</Text>
-                <Text style={styles.historyTime}>Today • 8:00 AM • OCR Scan</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.historyItem}
-              onPress={() => speak('Bus 42 Northbound schedule: Arrives every 12 minutes at 5th Avenue stop.')}
-            >
-              <Bookmark size={18} color="#FFFFFF" />
-              <View style={styles.historyTextGroup}>
-                <Text style={styles.historyTitle}>Bus 42 Schedule</Text>
-                <Text style={styles.historyTime}>Yesterday • 4:15 PM • Transport</Text>
-              </View>
-            </TouchableOpacity>
           </View>
         )}
 
         {/* LANGUAGES SECTION */}
         {activeMode === 'languages' && (
           <View style={styles.card}>
-            <View style={styles.headerRow}>
-              <Globe size={24} color="#FFFFFF" />
-              <Text style={styles.sectionTitle}>VOICE SYSTEM LANGUAGE</Text>
-            </View>
-
-            <View style={styles.langList}>
-              {['English (US)', 'Spanish (Español)', 'French (Français)', 'Hindi (हिंदी)', 'German (Deutsch)'].map((lang) => (
-                <TouchableOpacity
-                  key={lang}
-                  style={[styles.langItem, userLanguage.includes(lang.split(' ')[0]) && styles.langItemActive]}
-                  onPress={() => {
-                    setUserLanguage(lang);
-                    speak(`Voice language set to ${lang}`);
-                  }}
-                >
-                  <Globe size={18} color={userLanguage.includes(lang.split(' ')[0]) ? '#000000' : '#FFFFFF'} />
-                  <Text style={[styles.langLabel, userLanguage.includes(lang.split(' ')[0]) && styles.langLabelActive]}>
-                    {lang}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <View style={styles.langGrid}>
+              {SUPPORTED_LANGUAGES_META.map((lang) => {
+                const isActive = activeLanguageCode === lang.code;
+                return (
+                  <TouchableOpacity
+                    key={lang.code}
+                    style={[styles.langChip, isActive && styles.langChipActive]}
+                    onPress={() => {
+                      setActiveLanguageCode(lang.code);
+                      setUserLanguage(lang.name);
+                      speak(`Language ${lang.name}`);
+                    }}
+                    accessibilityLabel={`Set language to ${lang.name}`}
+                  >
+                    <Text style={{ fontSize: 20 }}>{lang.flag}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.langName, isActive && styles.langNameActive]}>{lang.name}</Text>
+                    </View>
+                    {isActive && <Check size={18} color="#FFFFFF" />}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         )}
 
-        {/* ACCESSIBILITY SECTION */}
-        {activeMode === 'accessibility' && (
+        {/* HISTORY SECTION */}
+        {activeMode === 'history' && (
           <View style={styles.card}>
-            <View style={styles.headerRow}>
-              <Eye size={24} color="#FFFFFF" />
-              <Text style={styles.sectionTitle}>ACCESSIBILITY STANDARDS</Text>
-            </View>
-            <Text style={styles.cardDesc}>
-              NAVIDOOR is built to WCAG 2.1 AAA accessibility guidelines with minimum touch target sizes of 64px.
-            </Text>
-
-            <View style={styles.settingItemColumn}>
-              <Text style={styles.settingLabel}>Text Font Scaling</Text>
-              <View style={styles.rateBtnRow}>
-                {(['normal', 'large', 'extraLarge'] as const).map((scale) => (
-                  <TouchableOpacity
-                    key={scale}
-                    style={[styles.rateBtn, fontScale === scale && styles.rateBtnActive]}
-                    onPress={() => setFontScale(scale)}
-                  >
-                    <Text style={[styles.rateBtnText, fontScale === scale && styles.rateBtnTextActive]}>
-                      {scale.toUpperCase()}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+            <TouchableOpacity 
+              style={styles.historyItem}
+              onPress={() => speak('Prescription scan: Lisinopril 10mg')}
+            >
+              <Bookmark size={18} color="#0284C7" />
+              <View style={styles.historyTextGroup}>
+                <Text style={styles.historyTitle}>Lisinopril 10mg Prescription</Text>
+                <Text style={styles.historyTime}>Today • Medicine Mode</Text>
               </View>
-            </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.historyItem}
+              onPress={() => speak('Bus 42 schedule: Arrives 5th Avenue stop')}
+            >
+              <Bookmark size={18} color="#0284C7" />
+              <View style={styles.historyTextGroup}>
+                <Text style={styles.historyTitle}>Bus 42 Schedule</Text>
+                <Text style={styles.historyTime}>Yesterday • Transport Mode</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         )}
 
         {/* FAMILY COMPANION SECTION */}
         {activeMode === 'family' && (
           <View style={styles.card}>
-            <View style={styles.headerRow}>
-              <Users size={24} color="#05A357" />
-              <Text style={styles.sectionTitle}>FAMILY REMOTE ASSIST</Text>
-            </View>
-            <Text style={styles.cardDesc}>
-              Connect with your designated family members for remote video assistance and live location tracking.
-            </Text>
-
             <TouchableOpacity 
               style={styles.familyBtn}
               onPress={() => setFamilyCompanionOpen(true)}
             >
-              <Users size={20} color="#000000" />
-              <Text style={styles.familyBtnText}>CONNECT TO SARAH JENKINS (LIVE STREAM)</Text>
+              <Text style={styles.familyBtnText}>CONNECT FAMILY ASSIST</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -202,143 +232,155 @@ export const SectionViewPanel: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  sectionContainer: {
+  panelContainer: {
     position: 'absolute',
     top: 70,
-    left: 14,
-    right: 14,
-    bottom: 215,
-    zIndex: 22,
+    left: 16,
+    right: 16,
+    bottom: 210,
+    zIndex: 40,
+  },
+  topHeaderBar: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  topHeaderTag: {
+    color: '#0284C7',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    textAlign: 'center',
   },
   scrollArea: {
     flex: 1,
   },
   card: {
-    backgroundColor: 'rgba(18, 18, 18, 0.96)',
+    backgroundColor: '#CBD5E1',
     borderRadius: 24,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.6,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: '#475569',
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
     shadowRadius: 16,
-    elevation: 12,
+    elevation: 8,
   },
-  headerRow: {
+  subSectionBox: {
+    marginBottom: 12,
+  },
+  accessibilitySubBox: {
+    marginTop: 6,
+    paddingTop: 12,
+    borderTopWidth: 1.5,
+    borderTopColor: '#94A3B8',
+  },
+  subSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 8,
   },
-  sectionTitle: {
-    color: '#FFFFFF',
-    fontSize: 15,
+  subSectionTitle: {
+    color: '#0284C7',
+    fontSize: 12,
     fontWeight: '900',
-    letterSpacing: 1.5,
-  },
-  cardDesc: {
-    color: '#A0A0A0',
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 16,
-    fontWeight: '600',
+    letterSpacing: 1.2,
   },
   settingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    borderBottomColor: '#94A3B8',
   },
   settingItemColumn: {
-    paddingVertical: 12,
-  },
-  settingTextGroup: {
-    flex: 1,
-    paddingRight: 12,
+    paddingVertical: 8,
   },
   settingLabel: {
-    color: '#FFFFFF',
-    fontSize: 15,
+    color: '#0F172A',
+    fontSize: 14,
     fontWeight: '800',
-  },
-  settingSub: {
-    color: '#A0A0A0',
-    fontSize: 12,
-    marginTop: 2,
   },
   rateBtnRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 10,
+    marginTop: 8,
   },
   rateBtn: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#E2E8F0',
     paddingVertical: 10,
     borderRadius: 14,
     alignItems: 'center',
   },
   rateBtnActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0284C7',
   },
   rateBtnText: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: '800',
     fontSize: 13,
   },
   rateBtnTextActive: {
-    color: '#000000',
+    color: '#FFFFFF',
+    fontWeight: '900',
+  },
+  langGrid: {
+    gap: 10,
+  },
+  langChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E2E8F0',
+    padding: 14,
+    borderRadius: 16,
+    gap: 12,
+    borderWidth: 1.5,
+    borderColor: '#94A3B8',
+  },
+  langChipActive: {
+    backgroundColor: '#0284C7',
+    borderColor: '#0284C7',
+  },
+  langName: {
+    color: '#0F172A',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  langNameActive: {
+    color: '#FFFFFF',
     fontWeight: '900',
   },
   historyItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: '#E2E8F0',
     padding: 14,
     borderRadius: 16,
     gap: 12,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#94A3B8',
   },
   historyTextGroup: {
     flex: 1,
   },
   historyTitle: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: '800',
-    fontSize: 15,
+    fontSize: 14,
   },
   historyTime: {
-    color: '#A0A0A0',
+    color: '#334155',
     fontSize: 12,
     marginTop: 2,
   },
-  langList: {
-    gap: 8,
-  },
-  langItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    padding: 14,
-    borderRadius: 16,
-    gap: 10,
-  },
-  langItemActive: {
-    backgroundColor: '#FFFFFF',
-  },
-  langLabel: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  langLabelActive: {
-    color: '#000000',
-    fontWeight: '900',
-  },
   familyBtn: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0284C7',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -347,7 +389,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   familyBtnText: {
-    color: '#000000',
+    color: '#FFFFFF',
     fontWeight: '900',
     fontSize: 13,
     letterSpacing: 0.5,
