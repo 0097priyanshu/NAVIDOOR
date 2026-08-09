@@ -1,32 +1,45 @@
 import { FontScale, ThemeMode } from '../types';
 
-// Uber Premium Palette (Monochrome White & Emerald Accent)
+// Prominent Slate Light Gray + Electric Cyan Palette
 export const COLORS = {
-  // Primary Uber Palette
-  uberBlack: '#000000',
-  uberDarkCard: 'rgba(18, 18, 18, 0.95)',
-  uberDarkHeader: 'rgba(0, 0, 0, 0.88)',
+  // Electric Cyan Core Palette
+  cyanPrimary: '#0284C7',
+  cyanLight: '#38BDF8',
+  cyanDark: '#0369A1',
+  cyanGlow: 'rgba(2, 132, 199, 0.25)',
+
+  // Unmistakable Prominent Slate Gray Backgrounds & Cards
+  lightGrayBg: '#64748B',      // Distinct Slate Gray Background
+  lightGrayCard: '#94A3B8',    // Prominent Slate Gray Card
+  lightGrayBorder: '#475569',  // Darker Slate Border
+  pureWhite: '#FFFFFF',
   
-  // Uber Accents
-  uberWhite: '#FFFFFF',
-  uberAccent: '#FFFFFF',
-  uberGlow: 'rgba(255, 255, 255, 0.35)',
+  // High-Contrast Typography
+  darkText: '#0F172A',
+  mutedText: '#334155',
+  darkGray: '#1E293B',
 
   // Status & Safety
   uberSafetyRed: '#E11D48',
-  uberSafetyGreen: '#05A357',
+  uberSafetyGreen: '#0284C7',
   uberWarningAmber: '#F59E0B',
 
+  // Mic Button Accents (Cyan Buttons)
+  micIdleBg: '#0284C7',
+  micActiveBg: '#38BDF8',
+  micActiveBorder: '#0284C7',
+  micActiveGlow: 'rgba(56, 189, 248, 0.45)',
+
   // Legacy Aliases
-  primaryBlue: '#FFFFFF',
-  softGreen: '#05A357',
+  primaryBlue: '#0284C7',
+  softGreen: '#38BDF8',
   safetyCoral: '#E11D48',
   highContrastYellow: '#FACC15',
-
-  // High Contrast & Neutrals
-  offWhite: '#F3F4F6',
-  mutedGray: '#A0A0A0',
-  darkGray: '#1F2937',
+  mutedGray: '#475569',
+  uberBlack: '#0F172A',
+  uberWhite: '#FFFFFF',
+  uberDarkCard: '#94A3B8',
+  uberDarkHeader: '#64748B',
 };
 
 export const getThemeColors = (mode: ThemeMode) => {
@@ -37,11 +50,11 @@ export const getThemeColors = (mode: ThemeMode) => {
         bgHeader: '#000000',
         textPrimary: '#FFFFFF',
         textSecondary: '#FACC15',
-        accent: '#FFFFFF',
+        accent: '#38BDF8',
         border: 'transparent',
-        buttonPrimary: '#FFFFFF',
-        buttonText: '#000000',
-        activeTab: '#FFFFFF',
+        buttonPrimary: '#0284C7',
+        buttonText: '#FFFFFF',
+        activeTab: '#38BDF8',
         hazardBg: '#FF0000',
         hazardText: '#FFFFFF',
       };
@@ -62,15 +75,15 @@ export const getThemeColors = (mode: ThemeMode) => {
     case 'standard':
     default:
       return {
-        bgCard: 'rgba(18, 18, 18, 0.95)',
-        bgHeader: 'rgba(0, 0, 0, 0.90)',
-        textPrimary: '#FFFFFF',
-        textSecondary: '#A0A0A0',
-        accent: '#FFFFFF',
-        border: 'transparent',
-        buttonPrimary: '#FFFFFF',
-        buttonText: '#000000',
-        activeTab: '#FFFFFF',
+        bgCard: '#64748B',
+        bgHeader: '#64748B',
+        textPrimary: '#0F172A',
+        textSecondary: '#334155',
+        accent: '#0284C7',
+        border: '#475569',
+        buttonPrimary: '#0284C7',
+        buttonText: '#FFFFFF',
+        activeTab: '#0284C7',
         hazardBg: '#E11D48',
         hazardText: '#FFFFFF',
       };
@@ -93,7 +106,7 @@ export const getFontSizes = (scale: FontScale) => {
 export const ACCESSIBILITY = {
   minTouchTargetSize: 52,
   largeTouchTargetSize: 64,
-  fabMicSize: 72,
+  fabMicSize: 68,
   borderRadiusCard: 22,
   borderRadiusButton: 16,
   borderRadiusChip: 999,

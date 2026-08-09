@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Platform, TouchableOpacity, PanResponder } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { AIVisionOverlay } from './AIVisionOverlay';
 import { CameraControlsOverlay } from './CameraControlsOverlay';
+import { CapturedPhotoPreviewModal } from './CapturedPhotoPreviewModal';
 import { Camera as CameraIcon, ShieldAlert } from 'lucide-react-native';
 
 export const CameraViewCanvas: React.FC = () => {
@@ -13,6 +14,7 @@ export const CameraViewCanvas: React.FC = () => {
     torchOn, 
     isSimulatedCamera, 
     setSimulatedCamera, 
+    setCameraRef,
     speak 
   } = useNavidoorStore();
   
@@ -126,7 +128,12 @@ export const CameraViewCanvas: React.FC = () => {
     // Permission granted: Render live Expo CameraView
     return (
       <CameraView
-        ref={cameraRef}
+        ref={(ref) => {
+          if (ref && cameraRef.current !== ref) {
+            cameraRef.current = ref;
+            setCameraRef(ref);
+          }
+        }}
         style={styles.cameraView}
         facing={cameraFacing}
         enableTorch={torchOn}
@@ -134,8 +141,30 @@ export const CameraViewCanvas: React.FC = () => {
     );
   };
 
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 20 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx < -25) {
+          try {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          } catch (e) {}
+          useNavidoorStore.getState().cycleNextMode();
+        } else if (gestureState.dx > 25) {
+          try {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          } catch (e) {}
+          useNavidoorStore.getState().cyclePrevMode();
+        }
+      },
+    })
+  ).current;
+
   return (
-    <View style={styles.container}>
+    <View style={styles.container} {...panResponder.panHandlers}>
       {/* Real Device Camera Stream active during Vision & Navigation modes */}
       {isVisionMode ? (
         Platform.OS === 'web' ? (
@@ -151,7 +180,7 @@ export const CameraViewCanvas: React.FC = () => {
           renderNativeCamera()
         )
       ) : (
-        /* Utility Modes (Settings, Profile, History, etc.) use a clean solid canvas */
+        /* Utility Modes (Settings, Profile, History, etc.) use a clean solid light gray canvas */
         <View style={styles.solidUtilityCanvas} />
       )}
 
@@ -160,6 +189,9 @@ export const CameraViewCanvas: React.FC = () => {
 
       {/* Vision Overlay (Scoped to active vision modes) */}
       <AIVisionOverlay />
+
+      {/* Captured Photo Scan Preview Modal */}
+      <CapturedPhotoPreviewModal />
     </View>
   );
 };
@@ -167,7 +199,7 @@ export const CameraViewCanvas: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000000',
+    backgroundColor: '#CBD5E1',
   },
   cameraView: {
     flex: 1,
@@ -181,24 +213,24 @@ const styles = StyleSheet.create({
   },
   nativeCameraContainer: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#CBD5E1',
   },
   permissionContainer: {
     flex: 1,
-    backgroundColor: '#090D16',
+    backgroundColor: '#CBD5E1',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 28,
   },
   permissionTitle: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontSize: 22,
     fontWeight: '800',
     marginBottom: 10,
     textAlign: 'center',
   },
   permissionText: {
-    color: '#94A3B8',
+    color: '#475569',
     fontSize: 14,
     lineHeight: 20,
     textAlign: 'center',
@@ -208,13 +240,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#276EF1',
+    backgroundColor: '#0284C7',
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 30,
-    shadowColor: '#276EF1',
+    shadowColor: '#0284C7',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.4,
     shadowRadius: 10,
     elevation: 6,
     marginBottom: 16,
@@ -229,7 +261,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   simulatedFallbackText: {
-    color: '#64748B',
+    color: '#0284C7',
     fontSize: 13,
     fontWeight: '600',
     textDecorationLine: 'underline',
@@ -237,31 +269,31 @@ const styles = StyleSheet.create({
   simulationBanner: {
     position: 'absolute',
     bottom: 24,
-    backgroundColor: 'rgba(39, 110, 241, 0.2)',
-    borderWidth: 1,
-    borderColor: '#276EF1',
+    backgroundColor: '#E2E8F0',
+    borderWidth: 1.5,
+    borderColor: '#0284C7',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
   },
   simulationBannerText: {
-    color: '#60A5FA',
+    color: '#0284C7',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   cameraRoomBackground: {
     flex: 1,
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0A0A0A',
+    backgroundColor: '#CBD5E1',
   },
   gridLineHorizontal: {
     position: 'absolute',
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: 'rgba(2, 132, 199, 0.2)',
     top: '50%',
   },
   gridLineVertical: {
@@ -269,7 +301,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: 'rgba(2, 132, 199, 0.2)',
     left: '50%',
   },
   simulatedRoomCenter: {
@@ -284,27 +316,27 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    borderWidth: 1,
-    borderColor: 'rgba(5, 163, 87, 0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(2, 132, 199, 0.25)',
   },
   depthRingMedium: {
     position: 'absolute',
     width: 180,
     height: 180,
     borderRadius: 90,
-    borderWidth: 1,
-    borderColor: 'rgba(39, 110, 241, 0.2)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(2, 132, 199, 0.35)',
   },
   depthRingCenter: {
     position: 'absolute',
     width: 80,
     height: 80,
     borderRadius: 40,
-    borderWidth: 1.5,
-    borderColor: 'rgba(39, 110, 241, 0.4)',
+    borderWidth: 2,
+    borderColor: '#0284C7',
   },
   solidUtilityCanvas: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#CBD5E1',
   },
 });

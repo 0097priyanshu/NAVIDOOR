@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, TextInput } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { User, Phone, ShieldAlert, Pill, X, Edit2, Check, Mic, Loader2 } from 'lucide-react-native';
+import { User, Phone, ShieldAlert, Pill, X, Edit2, Check, Mic, Loader2, LogOut } from 'lucide-react-native';
+import { UnifiedMicButton } from '../common/UnifiedMicButton';
 
 export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void }> = ({ visible, onClose }) => {
   const { 
@@ -13,6 +14,7 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
     emergencyContacts, 
     medicines, 
     setIsProfileModalOpen,
+    setIsFirstTimeUser,
     voiceState,
     setVoiceState,
     speak,
@@ -27,8 +29,8 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
     setIsProfileModalOpen(visible);
     if (visible) {
       setTimeout(() => {
-        speak(`User Profile open for ${userName}. Tap the white microphone to edit your name or phone number by voice.`);
-      }, 400);
+        speak(`User Profile open for ${userName}. Tap the microphone to edit details.`);
+      }, 300);
     }
   }, [visible]);
 
@@ -46,6 +48,13 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
     speak('Profile updated successfully.');
   };
 
+  const handleLogout = () => {
+    setIsProfileModalOpen(false);
+    onClose();
+    setIsFirstTimeUser(true);
+    speak('Logged out. Starting voice profile setup again.');
+  };
+
   const handleMicPress = () => {
     if (voiceState === 'listening') {
       setVoiceState('thinking');
@@ -58,7 +67,6 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
       stopVoice();
     } else {
       setVoiceState('listening');
-      speak('Listening for profile edits. Speak your new name or phone number.', true);
     }
   };
 
@@ -68,28 +76,13 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
         
         {/* HIGH-VISIBILITY INTERACTIVE VOICE MICROPHONE FAB */}
         <View style={styles.topMicAnchor}>
-          {voiceState !== 'idle' && <View style={styles.pulseGreen} />}
-
-          <TouchableOpacity
-            style={[
-              styles.modalMicFab,
-              { backgroundColor: voiceState === 'idle' ? '#FFFFFF' : '#05A357' }
-            ]}
+          <UnifiedMicButton
+            voiceState={voiceState}
             onPress={handleMicPress}
-            activeOpacity={0.8}
-            accessibilityLabel="Voice Edit Profile Button"
-            accessibilityHint="Tap once to dictate profile updates"
-          >
-            {voiceState === 'thinking' ? (
-              <Loader2 size={34} color="#000000" />
-            ) : (
-              <Mic size={34} color={voiceState === 'idle' ? '#000000' : '#FFFFFF'} />
-            )}
-          </TouchableOpacity>
-
-          <Text style={styles.micHintText}>
-            {voiceState === 'idle' ? 'SPEAK PROFILE EDIT' : voiceState.toUpperCase()}
-          </Text>
+            showLabel={true}
+            size={68}
+            labelOverride={voiceState === 'idle' ? 'SPEAK PROFILE EDIT' : undefined}
+          />
         </View>
 
         {/* PROFILE SHEET CARD */}
@@ -97,11 +90,11 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
           {/* Header */}
           <View style={styles.headerRow}>
             <View style={styles.titleGroup}>
-              <User size={22} color="#FFFFFF" />
+              <User size={22} color="#0284C7" />
               <Text style={styles.headerTitle}>USER PROFILE & MEDICAL ID</Text>
             </View>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn} accessibilityLabel="Close Profile">
-              <X size={24} color="#FFFFFF" />
+              <X size={22} color="#0F172A" />
             </TouchableOpacity>
           </View>
 
@@ -122,7 +115,7 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTag}>PERSONAL DETAILS</Text>
                 <TouchableOpacity onPress={() => isEditing ? handleSave() : setIsEditing(true)}>
-                  {isEditing ? <Check size={18} color="#05A357" /> : <Edit2 size={18} color="#FFFFFF" />}
+                  {isEditing ? <Check size={18} color="#0284C7" /> : <Edit2 size={18} color="#0F172A" />}
                 </TouchableOpacity>
               </View>
 
@@ -133,7 +126,7 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
                     value={editName}
                     onChangeText={setEditName}
                     placeholder="User Name"
-                    placeholderTextColor="#A0A0A0"
+                    placeholderTextColor="#475569"
                   />
                   <TextInput
                     style={styles.editInput}
@@ -141,12 +134,12 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
                     onChangeText={setEditPhone}
                     keyboardType="phone-pad"
                     placeholder="Phone Number"
-                    placeholderTextColor="#A0A0A0"
+                    placeholderTextColor="#475569"
                   />
                 </View>
               ) : (
                 <View style={styles.infoRow}>
-                  <Phone size={16} color="#A0A0A0" />
+                  <Phone size={16} color="#0284C7" />
                   <Text style={styles.infoText}>{userPhone}</Text>
                 </View>
               )}
@@ -165,7 +158,7 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
             <View style={styles.sectionBox}>
               <Text style={styles.sectionTag}>PRIMARY EMERGENCY CONTACT</Text>
               <View style={styles.contactChip}>
-                <Phone size={18} color="#FFFFFF" />
+                <Phone size={18} color="#0284C7" />
                 <View style={styles.contactTextGroup}>
                   <Text style={styles.contactName}>{emergencyContacts[0]?.name} ({emergencyContacts[0]?.relation})</Text>
                   <Text style={styles.contactSub}>{emergencyContacts[0]?.phone}</Text>
@@ -178,7 +171,7 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
               <Text style={styles.sectionTag}>LOADED PRESCRIPTION MEDICINES</Text>
               {medicines.map((m) => (
                 <View key={m.id} style={styles.medicineChip}>
-                  <Pill size={18} color="#FFFFFF" />
+                  <Pill size={18} color="#0284C7" />
                   <View style={styles.contactTextGroup}>
                     <Text style={styles.contactName}>{m.name}</Text>
                     <Text style={styles.contactSub}>{m.dosage} • {m.instructions}</Text>
@@ -186,6 +179,17 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
                 </View>
               ))}
             </View>
+
+            {/* LOGOUT & RESET PROFILE SETUP BUTTON */}
+            <TouchableOpacity 
+              style={styles.logoutBtn}
+              onPress={handleLogout}
+              accessibilityLabel="Logout and Reset Profile Setup"
+              accessibilityHint="Tap to log out and re-run voice setup"
+            >
+              <LogOut size={20} color="#E11D48" />
+              <Text style={styles.logoutBtnText}>LOGOUT & RESET PROFILE SETUP</Text>
+            </TouchableOpacity>
           </ScrollView>
         </View>
       </View>
@@ -196,7 +200,7 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.88)',
+    backgroundColor: '#64748B',
     justifyContent: 'flex-end',
     alignItems: 'center',
   },
@@ -205,42 +209,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 100,
   },
-  pulseGreen: {
-    position: 'absolute',
-    width: 86,
-    height: 86,
-    borderRadius: 43,
-    backgroundColor: 'rgba(5, 163, 87, 0.35)',
-  },
-  modalMicFab: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.7,
-    shadowRadius: 16,
-    elevation: 16,
-  },
-  micHintText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '900',
-    marginTop: 6,
-    letterSpacing: 0.5,
-  },
   card: {
     width: '100%',
-    backgroundColor: 'rgba(18, 18, 18, 0.98)',
+    backgroundColor: '#CBD5E1',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: 20,
     maxHeight: '74%',
-    shadowColor: '#000',
+    shadowColor: '#0284C7',
     shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.6,
+    shadowOpacity: 0.25,
     shadowRadius: 16,
     elevation: 12,
   },
@@ -251,7 +229,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomColor: '#94A3B8',
   },
   titleGroup: {
     flexDirection: 'row',
@@ -259,7 +237,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerTitle: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: '900',
     letterSpacing: 1,
@@ -275,7 +253,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
     marginBottom: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#94A3B8',
     padding: 14,
     borderRadius: 20,
   },
@@ -283,7 +261,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#0284C7',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -296,12 +274,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userNameText: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontSize: 19,
     fontWeight: '900',
   },
   userLangText: {
-    color: '#A0A0A0',
+    color: '#1E293B',
     fontSize: 13,
     marginTop: 2,
     fontWeight: '600',
@@ -316,7 +294,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   sectionTag: {
-    color: '#FFFFFF',
+    color: '#0284C7',
     fontSize: 11,
     fontWeight: '900',
     letterSpacing: 1.5,
@@ -325,13 +303,15 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: '#94A3B8',
     padding: 12,
     borderRadius: 14,
     gap: 10,
+    borderWidth: 1,
+    borderColor: '#64748B',
   },
   infoText: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontSize: 15,
     fontWeight: '700',
   },
@@ -339,13 +319,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   editInput: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#94A3B8',
     borderRadius: 14,
     paddingHorizontal: 12,
     height: 48,
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: '700',
     fontSize: 15,
+    borderWidth: 1.5,
+    borderColor: '#0284C7',
   },
   medIdChip: {
     flexDirection: 'row',
@@ -354,6 +336,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 14,
     gap: 10,
+    borderWidth: 1,
+    borderColor: '#E11D48',
   },
   medIdText: {
     color: '#E11D48',
@@ -363,31 +347,54 @@ const styles = StyleSheet.create({
   contactChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#94A3B8',
     padding: 12,
     borderRadius: 14,
     gap: 10,
+    borderWidth: 1,
+    borderColor: '#64748B',
   },
   contactTextGroup: {
     flex: 1,
   },
   contactName: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontWeight: '800',
     fontSize: 14,
   },
   contactSub: {
-    color: '#A0A0A0',
+    color: '#1E293B',
     fontSize: 12,
     marginTop: 2,
   },
   medicineChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: '#94A3B8',
     padding: 12,
     borderRadius: 14,
     gap: 10,
     marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#64748B',
+  },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(225, 29, 72, 0.15)',
+    borderWidth: 1.5,
+    borderColor: '#E11D48',
+    borderRadius: 16,
+    paddingVertical: 14,
+    marginTop: 12,
+    marginBottom: 24,
+  },
+  logoutBtnText: {
+    color: '#E11D48',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
 });

@@ -45,7 +45,7 @@ export const CameraControlsOverlay: React.FC = () => {
 
   return (
     <View style={styles.accessibleOverlayContainer} pointerEvents="box-none">
-      {/* UBER DARK MONOCHROME TOP UTILITY ACTION BAR */}
+      {/* UBER CYAN MONOCHROME TOP UTILITY ACTION BAR */}
       <View style={styles.topUtilityBar} pointerEvents="box-none">
         {/* 1. Flashlight Light Mode Toggle */}
         <TouchableOpacity
@@ -112,19 +112,16 @@ const styles = StyleSheet.create({
     gap: 6,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(18, 18, 18, 0.95)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#0284C7',
     paddingHorizontal: 8,
-    shadowColor: '#000',
+    shadowColor: '#0284C7',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.35,
     shadowRadius: 6,
     elevation: 6,
   },
   utilityPillActiveTorch: {
-    backgroundColor: 'rgba(245, 158, 11, 0.25)',
-    borderColor: '#F59E0B',
+    backgroundColor: '#F59E0B',
   },
   utilityPillText: {
     color: '#FFFFFF',
@@ -133,6 +130,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   utilityPillTextTorch: {
-    color: '#F59E0B',
+    color: '#FFFFFF',
   },
 });
