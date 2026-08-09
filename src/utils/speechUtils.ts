@@ -25,25 +25,27 @@ export const speakAnnouncement = async (
 ) => {
   const { rate = 1.0, pitch = 1.0, interrupt = true, languageCode = 'en' } = options;
 
-  // 1. Try Piper TTS Backend Audio Stream first
-  try {
-    const audioBuffer = await requestPiperTTS(text, languageCode);
-    if (audioBuffer && Platform.OS === 'web' && typeof window !== 'undefined') {
-      if (interrupt && currentAudioElement) {
-        currentAudioElement.pause();
+  // On web: try Piper TTS backend first (plays via HTML Audio element)
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    try {
+      const audioBuffer = await requestPiperTTS(text, languageCode);
+      if (audioBuffer) {
+        if (interrupt && currentAudioElement) {
+          currentAudioElement.pause();
+        }
+        const blob = new Blob([audioBuffer], { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+        currentAudioElement = new Audio(url);
+        currentAudioElement.playbackRate = rate;
+        currentAudioElement.play();
+        return;
       }
-      const blob = new Blob([audioBuffer], { type: 'audio/wav' });
-      const url = URL.createObjectURL(blob);
-      currentAudioElement = new Audio(url);
-      currentAudioElement.playbackRate = rate;
-      currentAudioElement.play();
-      return;
+    } catch (_) {
+      // Backend offline — fall through to Web Speech API
     }
-  } catch (err) {
-    // Fall back to native/web Speech synthesis
   }
 
-  // 2. Standard Web & Native Speech Synthesis Fallback
+  // 3. Standard Web & Native Speech Synthesis Fallback
   const targetLang = LANG_CODE_MAP[languageCode] || 'en-US';
 
   if (Platform.OS === 'web') {

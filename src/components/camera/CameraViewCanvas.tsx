@@ -6,6 +6,7 @@ import { AIVisionOverlay } from './AIVisionOverlay';
 import { CameraControlsOverlay } from './CameraControlsOverlay';
 import { CapturedPhotoPreviewModal } from './CapturedPhotoPreviewModal';
 import { Camera as CameraIcon, ShieldAlert } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 
 export const CameraViewCanvas: React.FC = () => {
   const { 

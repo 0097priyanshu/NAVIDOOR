@@ -11,7 +11,7 @@ import {
   Clock, 
   Settings, 
   Globe, 
-  Eye
+  ShieldAlert
 } from 'lucide-react-native';
 import { NavMode } from '../../types';
 
@@ -40,6 +40,10 @@ const SECTION_DETAILS: Record<NavMode, SectionMeta> = {
   transport: {
     title: 'PUBLIC TRANSIT ASSIST',
     icon: <Bus size={44} color="#FFFFFF" />,
+  },
+  emergency: {
+    title: 'EMERGENCY SOS',
+    icon: <ShieldAlert size={44} color="#FFFFFF" />,
   },
   family: {
     title: 'FAMILY REMOTE ASSIST',

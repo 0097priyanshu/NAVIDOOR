@@ -1,7 +1,6 @@
 import React, { useRef } from 'react';
-import { StyleSheet, SafeAreaView, StatusBar, PanResponder, Dimensions } from 'react-native';
+import { StyleSheet, SafeAreaView, StatusBar, PanResponder } from 'react-native';
 import { useNavidoorStore } from './src/store/useNavidoorStore';
-import { getThemeColors } from './src/theme/designSystem';
 import { CameraViewCanvas } from './src/components/camera/CameraViewCanvas';
 import { CameraHeader } from './src/components/header/CameraHeader';
 import { RotatingAIModeWheel } from './src/components/navigation/RotatingAIModeWheel';
@@ -10,15 +9,11 @@ import { VoiceOnboardingModal } from './src/components/onboarding/VoiceOnboardin
 import { SOSModal } from './src/components/sos/SOSModal';
 import { FamilyCompanionModal } from './src/components/family/FamilyCompanionModal';
 import { DesignSystemModal } from './src/components/designSystem/DesignSystemModal';
-import { CapturedPhotoPreviewModal } from './src/components/camera/CapturedPhotoPreviewModal';
 import { SectionToastNotification } from './src/components/overlays/SectionToastNotification';
 import * as Haptics from 'expo-haptics';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-
 export default function App() {
-  const { themeMode, cycleNextMode, cyclePrevMode } = useNavidoorStore();
-  const colors = getThemeColors(themeMode);
+  const { cycleNextMode, cyclePrevMode } = useNavidoorStore();
 
   // WhatsApp / Instagram-style Full-Screen Horizontal Swipe Gesture Handler
   const panResponder = useRef(
@@ -49,7 +44,7 @@ export default function App() {
 
   return (
     <SafeAreaView 
-      style={[styles.rootContainer, { backgroundColor: '#64748B' }]}
+      style={styles.rootContainer}
       {...panResponder.panHandlers}
     >
       <StatusBar barStyle="light-content" backgroundColor="#64748B" />
@@ -60,7 +55,7 @@ export default function App() {
       {/* 2. TOP STATUS HEADER (Uber SOS Emergency & User Profile) */}
       <CameraHeader />
 
-      {/* 3. DEDICATED FULL SECTION PANELS (Settings, History, Languages, Accessibility, Family) */}
+      {/* 3. DEDICATED FULL SECTION PANELS (Settings, History, Languages, Family) */}
       <SectionViewPanel />
 
       {/* 4. SIGNATURE ROTATING AI MODE WHEEL & FIXED CENTER MIC (Voice-First Audio Guidance) */}
@@ -76,7 +71,6 @@ export default function App() {
       <SOSModal />
       <FamilyCompanionModal />
       <DesignSystemModal />
-      <CapturedPhotoPreviewModal />
     </SafeAreaView>
   );
 }

@@ -1,4 +1,4 @@
-import { NavMode, SupportedLanguageCode } from '../types';
+import { NavMode, SupportedLanguageCode, ThemeMode, FontScale } from '../types';
 
 export interface CommandParseResult {
   isCommand: boolean;
@@ -7,7 +7,8 @@ export interface CommandParseResult {
     | 'closeModal'
     | 'switchLanguage' 
     | 'switchMode' 
-    | 'cycleNextMode' 
+    | 'cycleNextMode'
+    | 'logoutUser'
     | 'updateUserName' 
     | 'updateUserPhone'
     | 'addMedicine'
@@ -204,13 +205,13 @@ export class VoiceCommandProcessor {
 
     // 9. UPDATE SETTINGS
     if (q.includes('dark mode') || q.includes('dark theme') || q.includes('black theme')) {
-      return { isCommand: true, action: 'updateTheme', targetTheme: 'dark' };
+      return { isCommand: true, action: 'updateTheme', targetTheme: 'highContrastDark' };
     }
     if (q.includes('light mode') || q.includes('light theme') || q.includes('white theme')) {
-      return { isCommand: true, action: 'updateTheme', targetTheme: 'light' };
+      return { isCommand: true, action: 'updateTheme', targetTheme: 'standard' };
     }
     if (q.includes('high contrast') || q.includes('contrast mode')) {
-      return { isCommand: true, action: 'updateTheme', targetTheme: 'high-contrast' };
+      return { isCommand: true, action: 'updateTheme', targetTheme: 'highContrastAmber' };
     }
     if (q.includes('speak faster') || q.includes('faster voice') || q.includes('increase speed')) {
       return { isCommand: true, action: 'updateSpeechRate', rateValue: 1.35 };
@@ -247,8 +248,9 @@ export class VoiceCommandProcessor {
     if (q.includes('settings') || q.includes('setting')) {
       return { isCommand: true, action: 'switchMode', targetMode: 'settings' };
     }
-    if (q.includes('accessibility')) {
-      return { isCommand: true, action: 'switchMode', targetMode: 'accessibility' };
+    if (q.includes('accessibility') || q.includes('accessible')) {
+      // Accessibility preferences are merged into Settings
+      return { isCommand: true, action: 'switchMode', targetMode: 'settings' };
     }
     if (q.includes('assist') || q.includes('home') || q.includes('main')) {
       return { isCommand: true, action: 'switchMode', targetMode: 'assist' };
