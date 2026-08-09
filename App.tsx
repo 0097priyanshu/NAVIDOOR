@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { StyleSheet, SafeAreaView, StatusBar, PanResponder } from 'react-native';
+import { StyleSheet, SafeAreaView, StatusBar, PanResponder, View } from 'react-native';
 import { useNavidoorStore } from './src/store/useNavidoorStore';
 import { CameraViewCanvas } from './src/components/camera/CameraViewCanvas';
 import { CameraHeader } from './src/components/header/CameraHeader';
@@ -10,10 +10,14 @@ import { SOSModal } from './src/components/sos/SOSModal';
 import { FamilyCompanionModal } from './src/components/family/FamilyCompanionModal';
 import { DesignSystemModal } from './src/components/designSystem/DesignSystemModal';
 import { SectionToastNotification } from './src/components/overlays/SectionToastNotification';
+import { RoleSelectionScreen } from './src/components/onboarding/RoleSelectionScreen';
+import { FamilyAuthScreen } from './src/components/family/FamilyAuthScreen';
+import { FamilyModeContainer } from './src/components/family/FamilyModeContainer';
+import { FamilyRequestReceivedModal } from './src/components/family/FamilyRequestReceivedModal';
 import * as Haptics from 'expo-haptics';
 
 export default function App() {
-  const { cycleNextMode, cyclePrevMode } = useNavidoorStore();
+  const { cycleNextMode, cyclePrevMode, userRole, familyUser } = useNavidoorStore();
 
   // WhatsApp / Instagram-style Full-Screen Horizontal Swipe Gesture Handler
   const panResponder = useRef(
@@ -42,6 +46,20 @@ export default function App() {
     })
   ).current;
 
+  // 1. Role Selection Screen (App Launch)
+  if (userRole === 'undecided') {
+    return <RoleSelectionScreen />;
+  }
+
+  // 2. Family Caregiver Mode Experience
+  if (userRole === 'family_member') {
+    if (!familyUser) {
+      return <FamilyAuthScreen />;
+    }
+    return <FamilyModeContainer />;
+  }
+
+  // 3. Existing NAVIDOOR User Experience (role === 'navidoor_user')
   return (
     <SafeAreaView 
       style={styles.rootContainer}
@@ -71,6 +89,9 @@ export default function App() {
       <SOSModal />
       <FamilyCompanionModal />
       <DesignSystemModal />
+
+      {/* Real-time family caregiver connection request approval popup */}
+      <FamilyRequestReceivedModal />
     </SafeAreaView>
   );
 }

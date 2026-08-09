@@ -54,6 +54,17 @@ class NavidoorSocketClient {
     this.socket?.emit('spatial:alert', { obstacle: obstacleInfo });
   }
 
+  registerPhone(phone: string, role: string) {
+    if (!this.socket) this.connect();
+    this.socket?.emit('register', { phone, role });
+    console.log(`[SocketClient] Emitted register for ${role} (${phone})`);
+  }
+
+  getSocket(): Socket | null {
+    if (!this.socket) this.connect();
+    return this.socket;
+  }
+
   disconnect() {
     if (this.socket) {
       this.socket.disconnect();

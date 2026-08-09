@@ -152,6 +152,9 @@ app.post('/api/tts', async (req, res) => {
     }
 
     const result = await piperService.synthesizeSpeech(text, language);
+    if (!result) {
+      return res.status(500).json({ success: false, error: 'Piper TTS synthesis failed.' });
+    }
 
     res.set({
       'Content-Type': result.contentType,
