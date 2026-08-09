@@ -104,6 +104,22 @@ interface NavidoorState {
 
   isDesignSystemOpen: boolean;
   setDesignSystemOpen: (open: boolean) => void;
+
+  // Family Mode additions
+  userRole: 'undecided' | 'navidoor_user' | 'family_member';
+  setUserRole: (role: 'undecided' | 'navidoor_user' | 'family_member') => void;
+  familyUser: { name: string; phone: string; email?: string; relationship?: string } | null;
+  setFamilyUser: (user: any) => void;
+  familyConnectedUserPhone: string | null;
+  setFamilyConnectedUserPhone: (phone: string | null) => void;
+  familyConnectionStatus: 'idle' | 'pending' | 'connected' | 'rejected';
+  setFamilyConnectionStatus: (status: 'idle' | 'pending' | 'connected' | 'rejected') => void;
+  familyConnectedUserData: any | null;
+  setFamilyConnectedUserData: (data: any) => void;
+  familyRequests: any[];
+  setFamilyRequests: (requests: any[]) => void;
+  activeSosAlert: any | null;
+  setActiveSosAlert: (alert: any | null) => void;
 }
 
 const INITIAL_OBJECTS: DetectedObject[] = [
@@ -529,4 +545,20 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
 
   isDesignSystemOpen: false,
   setDesignSystemOpen: (open) => set({ isDesignSystemOpen: open }),
+
+  // Family Mode implementation
+  userRole: 'undecided',
+  setUserRole: (role) => set({ userRole: role }),
+  familyUser: null,
+  setFamilyUser: (user) => set({ familyUser: user }),
+  familyConnectedUserPhone: null,
+  setFamilyConnectedUserPhone: (phone) => set({ familyConnectedUserPhone: phone }),
+  familyConnectionStatus: 'idle',
+  setFamilyConnectionStatus: (status) => set({ familyConnectionStatus: status }),
+  familyConnectedUserData: null,
+  setFamilyConnectedUserData: (data) => set({ familyConnectedUserData: data }),
+  familyRequests: [],
+  setFamilyRequests: (requests) => set({ familyRequests: requests }),
+  activeSosAlert: null,
+  setActiveSosAlert: (alert) => set({ activeSosAlert: alert }),
 }));
