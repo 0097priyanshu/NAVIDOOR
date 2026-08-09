@@ -44,6 +44,15 @@ interface NavidoorState {
   activeMode: NavMode;
   setActiveMode: (mode: NavMode) => void;
   rotateWheelToMode: (mode: NavMode) => void;
+  cycleNextMode: () => void;
+  cyclePrevMode: () => void;
+
+  cameraRef: any;
+  setCameraRef: (ref: any) => void;
+  capturedPhotoUri: string | null;
+  isCapturedPhotoModalOpen: boolean;
+  setIsCapturedPhotoModalOpen: (open: boolean) => void;
+  capturePhotoAndAnalyze: () => Promise<void>;
 
   spatialAudioEnabled: boolean;
   toggleSpatialAudio: () => void;

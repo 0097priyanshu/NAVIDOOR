@@ -142,3 +142,25 @@ export async function requestWhisperSTT(audioBlob: Blob | null, languageCode: Su
     return null;
   }
 }
+
+// Piper TTS: calls backend /api/tts and returns raw audio ArrayBuffer
+export async function requestPiperTTS(text: string, languageCode: SupportedLanguageCode = 'en'): Promise<ArrayBuffer | null> {
+  try {
+    const res = await fetchWithTimeout(`${BACKEND_URL}/api/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, language: languageCode })
+    }, 10000);
+    if (!res.ok) {
+      console.warn('[VoiceAssistantBackend] /api/tts response status:', res.status);
+      return null;
+    }
+    const buffer = await res.arrayBuffer();
+    console.log(`[VoiceAssistantBackend] Piper TTS audio received: ${buffer.byteLength} bytes`);
+    return buffer;
+  } catch (err) {
+    console.warn('[VoiceAssistantBackend] requestPiperTTS error:', err);
+    return null;
+  }
+}
+

@@ -38,7 +38,6 @@ export const TRANSLATIONS: Record<SupportedLanguageCode, TranslationDictionary> 
       history: { name: 'HISTORY', description: '3 recent text snippets saved in log.' },
       settings: { name: 'SETTINGS', description: 'System settings and contrast options.' },
       languages: { name: 'LANGUAGES', description: 'Active language: English.' },
-      accessibility: { name: 'ACCESSIBILITY', description: 'High contrast dark mode active.' }
     },
     sceneDescriptions: {
       assist: 'Clear path straight ahead. Chair detected 1.2 meters in front. Door 2.8 meters to your right.',
@@ -72,7 +71,6 @@ export const TRANSLATIONS: Record<SupportedLanguageCode, TranslationDictionary> 
       history: { name: 'इतिहास', description: '3 हाल के टेक्स्ट सहेजे गए हैं।' },
       settings: { name: 'सेटिंग्स', description: 'सिस्टम सेटिंग्स और कंट्रास्ट विकल्प।' },
       languages: { name: 'भाषाएं', description: 'सक्रिय भाषा: हिंदी।' },
-      accessibility: { name: 'सुगमता', description: 'उच्च कंट्रास्ट डार्क मोड सक्रिय है।' }
     },
     sceneDescriptions: {
       assist: 'आगे का रास्ता साफ है। 1.2 मीटर आगे कुर्सी है। आपके दाहिने 2.8 मीटर पर दरवाजा है।',
@@ -106,7 +104,6 @@ export const TRANSLATIONS: Record<SupportedLanguageCode, TranslationDictionary> 
       history: { name: 'इतिहास', description: '३ अलीकडील मजकूर जतन केले आहेत.' },
       settings: { name: 'सेटिंग्ज', description: 'प्रणाली सेटिंग्ज आणि पर्याय.' },
       languages: { name: 'भाषा', description: 'सक्रिय भाषा: मराठी.' },
-      accessibility: { name: 'सुलभता', description: 'उच्च कॉन्ट्रास्ट डार्क मोड चालू आहे.' }
     },
     sceneDescriptions: {
       assist: 'पुढील मार्ग मोकळा आहे. १.२ मीटरवर खुर्ची आहे. उजवीकडे २.८ मीटरवर दार आहे.',
@@ -140,7 +137,6 @@ export const TRANSLATIONS: Record<SupportedLanguageCode, TranslationDictionary> 
       history: { name: 'ઇતિહાસ', description: '3 તાજેતરના લખાણ સેવ થયા છે.' },
       settings: { name: 'સેટિંગ્સ', description: 'સિસ્ટમ સેટિંગ્સ અને વિકલ્પો.' },
       languages: { name: 'ભાષાઓ', description: 'સક્રિય ભાષા: ગુજરાતી.' },
-      accessibility: { name: 'એક્સેસિબિલિટી', description: 'હાઇ કોન્ટ્રાસ્ટ ડાર્ક મોડ ચાલુ છે.' }
     },
     sceneDescriptions: {
       assist: 'આગળનો રસ્તો સાફ છે. 1.2 મીટર આગળ ખુરશી છે. જમણી બાજુએ 2.8 મીટર પર દરવાજો છે.',
@@ -174,7 +170,6 @@ export const TRANSLATIONS: Record<SupportedLanguageCode, TranslationDictionary> 
       history: { name: 'ਇਤਿਹਾਸ', description: '3 ਹਾਲੀਆ ਲਿਖਤਾਂ ਸੰਭਾਲੀਆਂ ਗਈਆਂ ਹਨ।' },
       settings: { name: 'ਸੈੱਟਿੰਗਾਂ', description: 'ਸਿਸਟਮ ਸੈੱਟਿੰਗਾਂ ਅਤੇ ਵਿਕਲਪ।' },
       languages: { name: 'ਭਾਸ਼ਾਵਾਂ', description: 'ਸਰਗਰਮ ਭਾਸ਼ਾ: ਪੰਜਾਬੀ।' },
-      accessibility: { name: 'ਸੁਖਾਲਾਪਨ', description: 'ਹਾਈ ਕੰਟ੍ਰਾਸਟ ਡਾਰਕ ਮੋਡ ਚਾਲੂ ਹੈ।' }
     },
     sceneDescriptions: {
       assist: 'ਅੱਗੇ ਦਾ ਰਸਤਾ ਸਾਫ਼ ਹੈ। 1.2 ਮੀਟਰ ਅੱਗੇ ਕੁਰਸੀ ਹੈ। ਸੱਜੇ ਪਾਸੇ 2.8 ਮੀਟਰ ਤੇ ਦਰਵਾਜ਼ਾ ਹੈ।',
@@ -208,7 +203,6 @@ export const TRANSLATIONS: Record<SupportedLanguageCode, TranslationDictionary> 
       history: { name: 'ইতিহাস', description: '৩ টি সাম্প্রতিক লেখা সংরক্ষিত হয়েছে।' },
       settings: { name: 'সেটিংস', description: 'সিস্টেম সেটিংস এবং অপশন।' },
       languages: { name: 'ভাষা', description: 'সক্রিয় ভাষা: বাংলা।' },
-      accessibility: { name: 'সুগমতা', description: 'হাই কনট্রাস্ট ডার্ক মোড সক্রিয়।' }
     },
     sceneDescriptions: {
       assist: 'সামনের পথ পরিষ্কার। ১.২ মিটার সামনে চেয়ার রয়েছে। ডানদিকে ২.৮ মিটারে একটি দরজা আছে।',
@@ -242,7 +236,6 @@ export const TRANSLATIONS: Record<SupportedLanguageCode, TranslationDictionary> 
       history: { name: 'வரலாறு', description: '3 சமீபத்திய உரைகள் சேமிக்கப்பட்டுள்ளன.' },
       settings: { name: 'அமைப்புகள்', description: 'அமைப்புகள் மற்றும் விருப்பங்கள்.' },
       languages: { name: 'மொழிகள்', description: 'செயல்பாட்டில் உள்ள மொழி: தமிழ்.' },
-      accessibility: { name: 'அணுகல்தன்மை', description: 'டார்க் மோட் செயல்பாட்டில் உள்ளது.' }
     },
     sceneDescriptions: {
       assist: 'முன்னால் பாதை தெளிவாக உள்ளது. 1.2 மீட்டரில் நாற்காலி உள்ளது. வலதுபுறம் 2.8 மீட்டரில் கதவு உள்ளது.',
@@ -276,7 +269,6 @@ export const TRANSLATIONS: Record<SupportedLanguageCode, TranslationDictionary> 
       history: { name: 'చరిత్ర', description: '3 ఇటీవలి పాఠాలు భద్రపరచబడ్డాయి.' },
       settings: { name: 'సెట్టింగ్‌లు', description: 'సిస్టమ్ సెట్టింగ్‌లు మరియు ఎంపికలు.' },
       languages: { name: 'భాషలు', description: 'ప్రస్తుత భాష: తెలుగు.' },
-      accessibility: { name: 'యాక్సెసిబిలిటీ', description: 'డార్క్ మోడ్ యాక్టివ్‌లో ఉంది.' }
     },
     sceneDescriptions: {
       assist: 'ముందు దారి ఖాళీగా ఉంది. 1.2 మీటర్ల ముందు కుర్చీ ఉంది. కుడి వైపున 2.8 మీటర్ల దూరంలో తలుపు ఉంది.',
@@ -310,7 +302,6 @@ export const TRANSLATIONS: Record<SupportedLanguageCode, TranslationDictionary> 
       history: { name: 'ಇತಿಹಾಸ', description: '3 ಇತ್ತೀಚಿನ ಬರಹಗಳನ್ನು ಉಳಿಸಲಾಗಿದೆ.' },
       settings: { name: 'ಸೇಟಿಂಗ್ಸ್', description: 'ಸಿಸ್ಟಮ್ ಸೇಟಿಂಗ್ಸ್ ಮತ್ತು ಆಯ್ಕೆಗಳು.' },
       languages: { name: 'ಭಾಷೆಗಳು', description: 'ಸಕ್ರಿಯ ಭಾಷೆ: ಕನ್ನಡ.' },
-      accessibility: { name: 'ಸುಲಭತೆ', description: 'ಡಾರ್ಕ್ ಮೋಡ್ ಸಕ್ರಿಯವಾಗಿದೆ.' }
     },
     sceneDescriptions: {
       assist: 'ಮುಂದಿನ ಹಾದಿ ಸ್ಪಷ್ಟವಾಗಿದೆ. 1.2 ಮೀಟರ್ ಮುಂದೆ ಕುರ್ಚಿ ಇದೆ. ಬಲಭಾಗದಲ್ಲಿ 2.8 ಮೀಟರ್ ದೂರದಲ್ಲಿ ಬಾಗಿಲಿದೆ.',
@@ -344,7 +335,6 @@ export const TRANSLATIONS: Record<SupportedLanguageCode, TranslationDictionary> 
       history: { name: 'ചരിത്രം', description: '3 സമീപകാല കുറിപ്പുകൾ സൂക്ഷിച്ചിരിക്കുന്നു.' },
       settings: { name: 'സെറ്റിംഗ്സ്', description: 'സിസ്റ്റം സെറ്റിംഗ്സുകളും ഓപ്ഷനുകളും.' },
       languages: { name: 'ഭാഷകൾ', description: 'നിലവിലെ ഭാഷ: മലയാളം.' },
-      accessibility: { name: 'ആക്സസിബിലിറ്റി', description: 'ഡാർക്ക് മോഡ് സജീവമാണ്.' }
     },
     sceneDescriptions: {
       assist: 'മുന്നിലെ വഴി വ്യക്തമാണ്. 1.2 മീറ്റർ മുന്നിൽ കസേരയുണ്ട്. വലതുവശത്ത് 2.8 മീറ്ററിൽ വാതിലുണ്ട്.',

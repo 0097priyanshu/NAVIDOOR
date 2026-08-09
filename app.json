@@ -1,33 +1,44 @@
 {
   "expo": {
-    "name": "NAVIDOOR - AI Vision Assist",
-    "slug": "navidoor-app",
+    "name": "NAVIDOOR",
+    "slug": "navidoor",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "NAVIDOOR uses the camera continuously to provide real-time AI spatial guidance, object detection, OCR reading, and pill recognition for visually impaired users.",
-        "NSMicrophoneUsageDescription": "NAVIDOOR uses the microphone for continuous hands-free voice command navigation.",
-        "NSLocationWhenInUseUsageDescription": "NAVIDOOR uses your GPS location for turn-by-turn walking guidance and emergency SOS location sharing."
+        "NSCameraUsageDescription": "NAVIDOOR requires camera access for AI vision obstacle detection, text reading, and spatial navigation.",
+        "NSMicrophoneUsageDescription": "NAVIDOOR requires microphone access for voice assistant navigation commands."
       }
     },
     "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F172A"
+      },
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
+      "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
     "plugins": [
       [
         "expo-camera",
         {
-          "cameraPermission": "NAVIDOOR uses the camera continuously to provide real-time AI spatial guidance, object detection, OCR reading, and pill recognition for visually impaired users."
+          "cameraPermission": "Allow NAVIDOOR to access your camera for real-time spatial navigation and vision AI."
         }
       ]
     ]
