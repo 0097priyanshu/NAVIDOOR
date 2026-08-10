@@ -16,13 +16,14 @@ import { voiceCommandProcessor } from '../services/voiceCommandProcessor';
 import { voiceSearchService } from '../services/voiceSearchService';
 import { voiceConversationService } from '../services/voiceConversationService';
 import * as Haptics from 'expo-haptics';
+import { requestTranslation } from '../services/voiceAssistantBackend';
 
 interface NavidoorState {
   // Voice System First
   voiceState: VoiceState;
   setVoiceState: (state: VoiceState) => void;
   lastAnnouncement: string;
-  speak: (text: string, interrupt?: boolean) => void;
+  speak: (text: string, interrupt?: boolean) => Promise<void> | void;
   stopVoice: () => void;
   speechRate: number;
   setSpeechRate: (rate: number) => void;
@@ -181,14 +182,23 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   lastAnnouncement: 'NAVIDOOR AI Vision Assist Ready. Tap mic or rotate wheel.',
   speechRate: 1.0,
   setSpeechRate: (rate) => set({ speechRate: rate }),
-  speak: (text, interrupt = true) => {
-    set({ lastAnnouncement: text, voiceState: 'speaking' });
-    speakAnnouncement(text, { rate: get().speechRate, interrupt, languageCode: get().activeLanguageCode });
+  speak: async (text, interrupt = true) => {
+    const activeLang = get().activeLanguageCode;
+    let finalSpeechText = text;
+    
+    // Auto-translate any hardcoded English strings to the active selected language
+    if (activeLang !== 'en') {
+      finalSpeechText = await requestTranslation(text, activeLang);
+    }
+
+    set({ lastAnnouncement: finalSpeechText, voiceState: 'speaking' });
+    speakAnnouncement(finalSpeechText, { rate: get().speechRate, interrupt, languageCode: activeLang });
+    
     setTimeout(() => {
       if (get().voiceState === 'speaking') {
         set({ voiceState: 'idle' });
       }
-    }, Math.max(2500, text.length * 60));
+    }, Math.max(2500, finalSpeechText.length * 60));
   },
   stopVoice: () => {
     stopSpeech();

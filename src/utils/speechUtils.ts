@@ -25,7 +25,8 @@ export const speakAnnouncement = async (
 ) => {
   const { rate = 1.0, pitch = 1.0, interrupt = true, languageCode = 'en' } = options;
 
-  // On web: try Piper TTS backend first (plays via HTML Audio element)
+  // On web: Disabled slow backend TTS in favor of zero-latency native browser synthesis
+  /*
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     try {
       const audioBuffer = await requestPiperTTS(text, languageCode);
@@ -37,13 +38,14 @@ export const speakAnnouncement = async (
         const url = URL.createObjectURL(blob);
         currentAudioElement = new Audio(url);
         currentAudioElement.playbackRate = rate;
-        currentAudioElement.play();
+        currentAudioElement.play().catch(e => console.warn('Audio play blocked:', e));
         return;
       }
     } catch (_) {
       // Backend offline — fall through to Web Speech API
     }
   }
+  */
 
   // 3. Standard Web & Native Speech Synthesis Fallback
   const targetLang = LANG_CODE_MAP[languageCode] || 'en-US';

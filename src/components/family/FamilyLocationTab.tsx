@@ -1,30 +1,15 @@
-
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { socketClient } from '../../services/socketClient';
 import { MapPin, Battery, Navigation, ShieldAlert } from 'lucide-react-native';
-
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { socketClient } from '../../services/socketClient';
-import { MapPin, Battery, RefreshCw, Navigation, ShieldAlert } from 'lucide-react-native';
-
 import * as Haptics from 'expo-haptics';
 
 export const FamilyLocationTab: React.FC = () => {
   const { familyConnectedUserData, familyConnectedUserPhone, setFamilyConnectedUserData } = useNavidoorStore();
 
-
   // Fallback to coordinates
   const location = familyConnectedUserData?.location || { latitude: 28.6315, longitude: 77.2167, address: 'Connaught Place, New Delhi' };
-
-  const [loading, setLoading] = useState(false);
-
-  // Fallback to coordinates
-  const location = familyConnectedUserData?.location || { latitude: 37.7749, longitude: -122.4194, address: 'Oak Lane' };
-
   const permissions = familyConnectedUserData?.permissions || { location: true };
   const battery = familyConnectedUserData?.battery || 84;
   const lastUpdated = familyConnectedUserData?.lastUpdated || '10:42 PM';
@@ -105,17 +90,10 @@ export const FamilyLocationTab: React.FC = () => {
         
         {/* Simulated Streets */}
         <View style={styles.streetHorizontal}>
-
           <Text style={styles.streetName}>Connaught Place</Text>
         </View>
         <View style={styles.streetVertical}>
           <Text style={[styles.streetName, { transform: [{ rotate: '90deg' }] }]}>Janpath Road</Text>
-
-          <Text style={styles.streetName}>Market Street</Text>
-        </View>
-        <View style={styles.streetVertical}>
-          <Text style={[styles.streetName, { transform: [{ rotate: '90deg' }] }]}>4th Street</Text>
-
         </View>
 
         {/* Pulsing Pin Marker */}
