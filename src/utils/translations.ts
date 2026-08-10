@@ -29,12 +29,12 @@ export const TRANSLATIONS: Record<SupportedLanguageCode, TranslationDictionary> 
     languageChanged: 'Voice language set to English.',
     modes: {
       assist: { name: 'ASSIST', description: 'Path ahead is clear.' },
-      navigate: { name: 'GUIDE', description: 'Walk straight 45 meters towards Oak Lane.' },
+      navigate: { name: 'GUIDE', description: 'Walk straight 45 meters towards MG Road.' },
       read: { name: 'READ', description: 'Prescription text detected in view.' },
       medicine: { name: 'MEDICINE', description: 'Lisinopril bottle scanned. 14 pills left.' },
       transport: { name: 'TRANSIT', description: 'Bus 42 Northbound arriving in 3 minutes.' },
       emergency: { name: 'EMERGENCY', description: 'Emergency SOS ready. Broadcast standby.' },
-      family: { name: 'FAMILY', description: 'Sarah Jenkins ready for remote stream.' },
+      family: { name: 'FAMILY', description: 'Sunita Sharma ready for remote stream.' },
       history: { name: 'HISTORY', description: '3 recent text snippets saved in log.' },
       settings: { name: 'SETTINGS', description: 'System settings and contrast options.' },
       languages: { name: 'LANGUAGES', description: 'Active language: English.' },
@@ -44,7 +44,7 @@ export const TRANSLATIONS: Record<SupportedLanguageCode, TranslationDictionary> 
       read: 'Reading document text out loud: Prescription Lisinopril 10mg. Take 1 tablet daily with water after meal.',
       medicine: 'Pill bottle scanned in view: Lisinopril 10mg. 14 pills remaining in bottle.',
       transport: 'Bus stop sign detected 3 meters ahead. Bus 42 Northbound arriving in 3 minutes.',
-      navigate: 'Navigation guidance: Walk straight 45 meters towards Oak Lane. Doorways on your right.'
+      navigate: 'Navigation guidance: Walk straight 45 meters towards MG Road. Doorways on your right.'
     },
     actions: {
       flashlightOn: 'Flashlight enabled.',
