@@ -50,10 +50,10 @@ async function main() {
 
   console.log('=== NAVIDOOR Local Speech Pipeline One-Click Setup ===\n');
 
-  // 1. Download Multilingual Whisper Model (ggml-base.bin)
-  const whisperModelPath = path.join(whisperDir, 'ggml-base.bin');
-  if (!fs.existsSync(whisperModelPath) || fs.statSync(whisperModelPath).size < 100000000) {
-    await downloadFile('https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin', whisperModelPath);
+  // 1. Download Multilingual Whisper Model (ggml-tiny.bin)
+  const whisperModelPath = path.join(whisperDir, 'ggml-tiny.bin');
+  if (!fs.existsSync(whisperModelPath) || fs.statSync(whisperModelPath).size < 50000000) {
+    await downloadFile('https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin', whisperModelPath);
   } else {
     console.log(`[Whisper Model] Verified at ${whisperModelPath} (${fs.statSync(whisperModelPath).size} bytes)`);
   }

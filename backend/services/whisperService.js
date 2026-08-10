@@ -7,7 +7,7 @@ const { getLanguageMeta } = require('../config/languages');
 class WhisperService {
   constructor() {
     this.binPath = process.env.WHISPER_BIN_PATH || path.join(__dirname, '../bin/main.exe');
-    this.modelPath = process.env.WHISPER_MODEL_PATH || path.join(__dirname, '../models/whisper/ggml-base.bin');
+    this.modelPath = process.env.WHISPER_MODEL_PATH || path.join(__dirname, '../models/whisper/ggml-tiny.bin');
     this.isNativeAvailable = fs.existsSync(this.binPath) && fs.existsSync(this.modelPath);
 
     if (this.isNativeAvailable) {

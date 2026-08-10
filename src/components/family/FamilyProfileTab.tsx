@@ -2,11 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, Alert } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { socketClient } from '../../services/socketClient';
-
 import { User, Bell, LogOut, Check, X } from 'lucide-react-native';
-
-import { User, ShieldCheck, Bell, Lock, LogOut, Check, X, Phone } from 'lucide-react-native';
-
 import * as Haptics from 'expo-haptics';
 
 export const FamilyProfileTab: React.FC = () => {
@@ -18,7 +14,6 @@ export const FamilyProfileTab: React.FC = () => {
     setFamilyConnectedUserPhone, 
     setFamilyConnectedUserData,
     setUserRole, 
-
     setIsFirstTimeUser
   } = useNavidoorStore();
 
@@ -27,18 +22,6 @@ export const FamilyProfileTab: React.FC = () => {
     canViewActivity: true,
     canControlRemoteMic: false,
     canReceiveSOSAlerts: true
-
-    speak 
-  } = useNavidoorStore();
-
-  const permissions = familyConnectedUserData?.permissions || {
-    location: true,
-    journey: true,
-    activity: true,
-    medicine: true,
-    emergency: true,
-    cameraRemote: false
-
   };
 
   const triggerHaptic = () => {
@@ -50,10 +33,6 @@ export const FamilyProfileTab: React.FC = () => {
   const handleLogout = () => {
     triggerHaptic();
 
-
-    speak('Logged out from family portal.');
-
-
     // Disconnect socket
     socketClient.disconnect();
 
@@ -63,9 +42,7 @@ export const FamilyProfileTab: React.FC = () => {
     setFamilyConnectedUserData(null);
     setFamilyConnectionStatus('idle');
     setUserRole('undecided');
-
     setIsFirstTimeUser(false);
-
   };
 
   return (
@@ -100,7 +77,6 @@ export const FamilyProfileTab: React.FC = () => {
       </View>
 
       {/* Connected Users Box */}
-
       {familyConnectedUserData && (() => {
         const displayName = familyConnectedUserData.name || familyConnectedUserData.userName || 'Alex Rivers';
         const displayPhone = familyConnectedUserData.phone || familyConnectedUserData.userPhone || '+1 (555) 019-2831';
@@ -163,63 +139,6 @@ export const FamilyProfileTab: React.FC = () => {
           </View>
         );
       })()}
-
-      {familyConnectedUserData && (
-        <View style={styles.card}>
-          <Text style={styles.cardTag}>CONNECTED NAVIDOOR USERS</Text>
-          
-          <View style={styles.userItem}>
-            <View style={styles.userLeft}>
-              <View style={styles.userAvatar}>
-                <Text style={styles.userAvatarText}>{familyConnectedUserData.name.charAt(0).toUpperCase()}</Text>
-              </View>
-              <View>
-                <Text style={styles.connectedUserName}>{familyConnectedUserData.name}</Text>
-                <Text style={styles.connectedUserPhone}>{familyConnectedUserData.phone}</Text>
-              </View>
-            </View>
-            <View style={styles.connectedBadge}>
-              <Check size={14} color="#10B981" />
-              <Text style={styles.connectedBadgeText}>Connected</Text>
-            </View>
-          </View>
-
-          {/* Sharing Permissions list */}
-          <Text style={[styles.cardTag, { marginTop: 18, marginBottom: 8 }]}>ACTIVE SHARING PERMISSIONS</Text>
-          <Text style={styles.permNotice}>
-            Permissions are managed by the NAVIDOOR user. Caregivers cannot override them.
-          </Text>
-
-          <View style={styles.permList}>
-            {[
-              { label: 'Location Sharing', key: 'location' },
-              { label: 'Journey Monitoring', key: 'journey' },
-              { label: 'Activity Timeline', key: 'activity' },
-              { label: 'Medicine compliance checkup', key: 'medicine' },
-              { label: 'Emergency Alerts', key: 'emergency' },
-              { label: 'Camera Remote Assistance', key: 'cameraRemote' },
-            ].map((item) => {
-              const enabled = (permissions as any)[item.key];
-              return (
-                <View key={item.key} style={styles.permItem}>
-                  <Text style={styles.permLabel}>{item.label}</Text>
-                  {enabled ? (
-                    <View style={[styles.statusIndicator, styles.statusIndicatorEnabled]}>
-                      <Check size={12} color="#10B981" />
-                      <Text style={styles.statusIndicatorTextEnabled}>Enabled</Text>
-                    </View>
-                  ) : (
-                    <View style={[styles.statusIndicator, styles.statusIndicatorDisabled]}>
-                      <X size={12} color="#E11D48" />
-                      <Text style={styles.statusIndicatorTextDisabled}>Disabled</Text>
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        </View>
-      )}
 
       {/* Notification Settings Box */}
       <View style={styles.card}>
