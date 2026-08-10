@@ -170,6 +170,98 @@ app.post('/api/tts', async (req, res) => {
   }
 });
 
+// 7. Family Companion & User Management Endpoints (Mock / In-Memory Store)
+const familyConnectionsMemory = [];
+const registeredFamilyUsers = [];
+
+app.get('/api/user/pending-requests', (req, res) => {
+  const { phone } = req.query;
+  const requests = familyConnectionsMemory.filter(c => c.toUserPhone === phone && c.status === 'pending');
+  res.json({ success: true, requests });
+});
+
+app.post('/api/user/approve-connection', (req, res) => {
+  const { userPhone, familyPhone, action } = req.body;
+  const conn = familyConnectionsMemory.find(c => c.toUserPhone === userPhone && c.fromFamilyPhone === familyPhone);
+  if (conn) {
+    conn.status = action === 'accept' ? 'connected' : 'rejected';
+  }
+  res.json({ success: true, status: conn ? conn.status : 'idle' });
+});
+
+app.all(['/api/family/connection-status', '/api/family/connection-status/get'], (req, res) => {
+  const phone = req.query.phone || (req.body && req.body.familyPhone);
+  const requests = familyConnectionsMemory.filter(c => c.fromFamilyPhone === phone || c.toUserPhone === phone);
+  const connectedUsers = requests.filter(c => c.status === 'connected').map(c => c.toUserPhone === phone ? c.fromFamilyPhone : c.toUserPhone);
+  
+  // Auto-fallback connected user if none exist yet for demo
+  const finalConnected = connectedUsers.length > 0 ? connectedUsers : ['+91 98123 45678'];
+  res.json({ success: true, requests, connectedUsers: finalConnected });
+});
+
+app.post('/api/family/connect', (req, res) => {
+  const { familyPhone, familyName, relationship, userPhone } = req.body;
+  const targetPhone = userPhone || '+91 98123 45678';
+  const existing = familyConnectionsMemory.find(c => c.fromFamilyPhone === familyPhone && c.toUserPhone === targetPhone);
+  if (existing) {
+    existing.status = 'connected';
+  } else {
+    familyConnectionsMemory.push({
+      fromFamilyPhone: familyPhone,
+      familyName: familyName || 'Caregiver',
+      relationship: relationship || 'Family',
+      toUserPhone: targetPhone,
+      status: 'connected',
+      timestamp: Date.now()
+    });
+  }
+  res.json({ success: true, status: 'connected', connectedUserPhone: targetPhone });
+});
+
+app.post('/api/family/login', (req, res) => {
+  const { phone, password } = req.body;
+  const familyMember = {
+    id: `fam_${Date.now()}`,
+    name: 'Priya Sharma',
+    phone: phone || '+91 98765 43210',
+    relationship: 'Caregiver'
+  };
+  res.json({
+    success: true,
+    user: familyMember,
+    member: familyMember
+  });
+});
+
+app.post(['/api/family/register', '/api/family/signup'], (req, res) => {
+  const { name, phone, relationship, email } = req.body;
+  const familyMember = {
+    id: `fam_${Date.now()}`,
+    name: name || 'Priya Sharma',
+    phone: phone || '+91 98765 43210',
+    relationship: relationship || 'Family Companion',
+    email
+  };
+  res.json({
+    success: true,
+    user: familyMember,
+    member: familyMember
+  });
+});
+
+app.get(['/api/family/dashboard', '/api/family/dashboard-data'], (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      userName: 'Aarav Sharma',
+      userPhone: '+91 98123 45678',
+      location: { latitude: 28.6315, longitude: 77.2167, address: 'Connaught Place, Inner Circle, New Delhi' },
+      activity: { status: 'Walking safely with AI voice assist', battery: '85%' },
+      alerts: []
+    }
+  });
+});
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[NAVIDOOR Node.js + Express.js + Socket.IO Backend] Server running on http://0.0.0.0:${PORT} (LAN accessible)`);
 });

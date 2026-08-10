@@ -28,21 +28,21 @@ export const FamilyCompanionModal: React.FC = () => {
           {/* Connection Status Banner */}
           <View style={styles.statusBanner}>
             <View style={styles.livePulseDot} />
-            <Text style={styles.statusText}>Sarah Jenkins Connected (Live Video Shared)</Text>
+            <Text style={styles.statusText}>Sunita Sharma Connected (Live Video Shared)</Text>
           </View>
 
           {/* Remote Caretaker Voice Note */}
           <View style={styles.voiceNoteCard}>
             <View style={styles.noteTop}>
               <MessageSquare size={16} color="#0284C7" />
-              <Text style={styles.noteSender}>Sarah Jenkins (Daughter):</Text>
+              <Text style={styles.noteSender}>Sunita Sharma (Daughter):</Text>
             </View>
             <Text style={styles.noteText}>
-              "Dad, I'm watching your stream! The bakery entrance is directly to your right, next to the red awning."
+              "I am watching your stream! The entrance is directly to your right, next to the main gate."
             </Text>
             <TouchableOpacity 
               style={styles.listenBtn}
-              onPress={() => speak("Sarah says: The bakery entrance is directly to your right next to the red awning.")}
+              onPress={() => speak("Sunita says: The entrance is directly to your right, next to the main gate.")}
             >
               <Volume2 size={16} color="#FFFFFF" />
               <Text style={styles.listenBtnText}>Listen Voice Note</Text>
