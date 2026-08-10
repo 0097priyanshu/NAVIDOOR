@@ -47,6 +47,7 @@ export const FamilyAuthScreen: React.FC = () => {
       : { name, phone, password, relationship, email };
 
     try {
+
       let data: any = null;
       try {
         const response = await fetch(endpoint, {
@@ -70,10 +71,28 @@ export const FamilyAuthScreen: React.FC = () => {
           phone: phone || '+91 98765 43210',
           relationship: relationship || 'Family Companion'
         };
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Authentication failed');
+      }
+
+      if (isLogin) {
+        // Success Login
+        const user = data.member;
+
         setFamilyUser(user);
         
         // Connect socket
         socketClient.connect();
+
         if (user.phone) {
           socketClient.registerPhone(user.phone, 'family_member');
         }
@@ -117,6 +136,39 @@ export const FamilyAuthScreen: React.FC = () => {
       setFamilyUser(fallbackUser);
       setFamilyConnectedUserPhone('+91 98123 45678');
       setFamilyConnectionStatus('connected');
+
+        socketClient.registerPhone(user.phone, 'family_member');
+
+        // Fetch connection status
+        const statusRes = await fetch(`${BACKEND_URL}/api/family/connection-status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ familyPhone: user.phone })
+        });
+        const statusData = await statusRes.json();
+        
+        if (statusData.success) {
+          if (statusData.connectedUsers && statusData.connectedUsers.length > 0) {
+            setFamilyConnectedUserPhone(statusData.connectedUsers[0]);
+            setFamilyConnectionStatus('connected');
+          } else if (statusData.requests && statusData.requests.length > 0) {
+            setFamilyConnectionStatus('pending');
+          } else {
+            setFamilyConnectionStatus('idle');
+          }
+        }
+        
+        speak(`Logged in as family companion ${user.name}.`);
+      } else {
+        // Success Register -> auto toggle to login or direct login
+        Alert.alert('Account Created', 'Your family caregiver account is ready! Please log in.', [
+          { text: 'OK', onPress: () => setIsLogin(true) }
+        ]);
+        speak(`Account created for ${name}. Please login.`);
+      }
+    } catch (err: any) {
+      console.error('[Auth Error]:', err);
+      Alert.alert('Error', err.message || 'An error occurred during authentication.');
     } finally {
       setLoading(false);
     }
@@ -148,7 +200,11 @@ export const FamilyAuthScreen: React.FC = () => {
                 style={styles.input} 
                 value={name} 
                 onChangeText={setName} 
+
                 placeholder="Priya Sharma"
+
+                placeholder="Sarah Jenkins"
+
                 placeholderTextColor="#64748B"
               />
             </View>
@@ -190,7 +246,11 @@ export const FamilyAuthScreen: React.FC = () => {
             style={styles.input} 
             value={phone} 
             onChangeText={setPhone} 
+
             placeholder="+91 98765 43210"
+
+            placeholder="+1 (555) 234-5678"
+
             placeholderTextColor="#64748B"
             keyboardType="phone-pad"
           />
@@ -205,7 +265,11 @@ export const FamilyAuthScreen: React.FC = () => {
                 style={styles.input} 
                 value={email} 
                 onChangeText={setEmail} 
+
                 placeholder="priya@example.in"
+
+                placeholder="sarah@example.com"
+
                 placeholderTextColor="#64748B"
                 keyboardType="email-address"
                 autoCapitalize="none"

@@ -3,7 +3,11 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityInd
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { BACKEND_URL } from '../../services/voiceAssistantBackend';
 import { socketClient } from '../../services/socketClient';
+
 import { Users, Link, QrCode, Shield, Battery, MapPin, Activity } from 'lucide-react-native';
+
+import { Users, Link, QrCode, Shield, CheckCircle, RefreshCw, Battery, MapPin, Activity } from 'lucide-react-native';
+
 import * as Haptics from 'expo-haptics';
 
 export const FamilyHomeTab: React.FC = () => {
@@ -14,16 +18,30 @@ export const FamilyHomeTab: React.FC = () => {
     familyConnectedUserPhone,
     setFamilyConnectedUserPhone,
     familyConnectedUserData,
+
     setFamilyConnectedUserData
+
+    setFamilyConnectedUserData,
+    speak
+
   } = useNavidoorStore();
 
   const [connectPhone, setConnectPhone] = useState('');
   const [connecting, setConnecting] = useState(false);
 
+
   // Poll connection status & dashboard data
   const loadDashboardData = async () => {
     if (!familyUser?.phone) return;
 
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Poll connection status & dashboard data
+  const loadDashboardData = async (forceSpinner = false) => {
+    if (!familyUser?.phone) return;
+
+    if (forceSpinner) setRefreshing(true);
     try {
       // 1. Fetch connection states
       const connRes = await fetch(`${BACKEND_URL}/api/family/connection-status`, {
@@ -31,6 +49,7 @@ export const FamilyHomeTab: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ familyPhone: familyUser.phone })
       });
+
       if (!connRes.ok || !connRes.headers.get('content-type')?.includes('application/json')) {
         return;
       }
@@ -48,6 +67,7 @@ export const FamilyHomeTab: React.FC = () => {
               familyUser.phone
             )}&userPhone=${encodeURIComponent(connectedPhone)}`
           );
+
           if (dashRes.ok && dashRes.headers.get('content-type')?.includes('application/json')) {
             const dashData = await dashRes.json();
             if (dashData.success) {
@@ -68,15 +88,37 @@ export const FamilyHomeTab: React.FC = () => {
               alerts: []
             });
           }
+
+          const dashData = await dashRes.json();
+          if (dashData.success) {
+            setFamilyConnectedUserData(dashData.data);
+          }
+        } else if (connData.requests && connData.requests.length > 0) {
+          const pending = connData.requests.find((r: any) => r.status === 'pending');
+          if (pending) {
+            setFamilyConnectedUserPhone(pending.toUserPhone);
+            setFamilyConnectionStatus('pending');
+          } else {
+            setFamilyConnectionStatus('idle');
+          }
+        } else {
+          setFamilyConnectionStatus('idle');
+
         }
       }
     } catch (err) {
       console.warn('Dashboard load error:', err);
+
+
+    } finally {
+      if (forceSpinner) setRefreshing(false);
+
     }
   };
 
   useEffect(() => {
     loadDashboardData();
+
 
     if (!familyConnectedUserData) {
       setFamilyConnectedUserData({
@@ -125,7 +167,16 @@ export const FamilyHomeTab: React.FC = () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (e) {}
 
+
     const targetPhone = connectPhone.trim() || '+91 98123 45678';
+    setConnecting(true);
+
+
+    if (!connectPhone.trim()) {
+      Alert.alert('Required Info', 'Please enter a valid mobile number.');
+      return;
+    }
+
     setConnecting(true);
 
     try {
@@ -134,6 +185,7 @@ export const FamilyHomeTab: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           familyPhone: familyUser?.phone,
+
           userPhone: targetPhone
         })
       });
@@ -160,6 +212,29 @@ export const FamilyHomeTab: React.FC = () => {
           alerts: []
         });
       }
+
+          userPhone: connectPhone.trim()
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Connection failed.');
+      }
+
+      if (data.status === 'connected') {
+        setFamilyConnectionStatus('connected');
+        setFamilyConnectedUserPhone(connectPhone.trim());
+        loadDashboardData();
+      } else {
+        setFamilyConnectionStatus('pending');
+        setFamilyConnectedUserPhone(connectPhone.trim());
+      }
+      speak('Request submitted to user. Waiting for approval.');
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'An error occurred.');
+    } finally {
+
       setConnecting(false);
     }
   };
@@ -175,6 +250,7 @@ export const FamilyHomeTab: React.FC = () => {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       {/* Greeting Banner */}
       <View style={styles.greetingHeader}>
+
         <View style={styles.greetingAvatar}>
           <Users size={22} color="#FFFFFF" />
         </View>
@@ -182,6 +258,25 @@ export const FamilyHomeTab: React.FC = () => {
           <Text style={styles.greetSubtext}>{getGreetingTime()},</Text>
           <Text style={styles.greetNameText}>{familyUser?.name || 'Priya Sharma'}</Text>
         </View>
+
+        <View>
+          <Text style={styles.greetText}>{getGreetingTime()},</Text>
+          <Text style={styles.nameText}>{familyUser?.name || 'Caregiver'}</Text>
+        </View>
+        {familyConnectionStatus === 'connected' && (
+          <TouchableOpacity 
+            style={styles.refreshBtn} 
+            onPress={() => loadDashboardData(true)}
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <ActivityIndicator size="small" color="#0284C7" />
+            ) : (
+              <RefreshCw size={18} color="#0284C7" />
+            )}
+          </TouchableOpacity>
+        )}
+
       </View>
 
       {/* 1. NOT CONNECTED STATE */}
@@ -202,7 +297,11 @@ export const FamilyHomeTab: React.FC = () => {
               style={styles.input}
               value={connectPhone}
               onChangeText={setConnectPhone}
+
               placeholder="Enter mobile number (+91 98123 45678)..."
+
+              placeholder="Enter mobile number (+1 (555) 019-2831)..."
+
               placeholderTextColor="#64748B"
               keyboardType="phone-pad"
             />
@@ -219,7 +318,11 @@ export const FamilyHomeTab: React.FC = () => {
 
             <TouchableOpacity 
               style={styles.qrBtn} 
+
               onPress={() => Alert.alert('Scan QR Code', 'Scanning is simulated. You can type the phone number "+91 98123 45678" to connect to the active mock user.')}
+
+              onPress={() => Alert.alert('Scan QR Code', 'Scanning is simulated. You can type the phone number "+1 (555) 019-2831" to connect to the active mock user.')}
+
             >
               <QrCode size={20} color="#FFFFFF" />
               <Text style={styles.qrBtnText}>Scan QR</Text>
@@ -245,7 +348,11 @@ export const FamilyHomeTab: React.FC = () => {
             <Text style={styles.pendingIndicatorText}>Waiting for user approval...</Text>
           </View>
 
+
           <TouchableOpacity style={[styles.connectBtn, { backgroundColor: '#64748B' }]} onPress={() => loadDashboardData()}>
+
+          <TouchableOpacity style={[styles.connectBtn, { backgroundColor: '#64748B' }]} onPress={() => loadDashboardData(true)}>
+
             <Text style={styles.connectBtnText}>Check Approval Status</Text>
           </TouchableOpacity>
         </View>
@@ -270,6 +377,7 @@ export const FamilyHomeTab: React.FC = () => {
       )}
 
       {/* 4. CONNECTED STATE */}
+
       {(familyConnectionStatus === 'connected' || !familyConnectionStatus || familyConnectionStatus === 'idle') && (() => {
         const userData = familyConnectedUserData || {
           userName: 'Aarav Sharma',
@@ -357,7 +465,75 @@ export const FamilyHomeTab: React.FC = () => {
             </View>
           </>
         );
-      })()}
+      })()
+       {familyConnectionStatus === 'connected' && familyConnectedUserData && (
+        <>
+          {/* User Profile Card */}
+          <View style={styles.userProfileCard}>
+            <View style={styles.userCardHeader}>
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarText}>{familyConnectedUserData.name.charAt(0).toUpperCase()}</Text>
+              </View>
+              <View style={styles.userCardDetails}>
+                <Text style={styles.userName}>{familyConnectedUserData.name}</Text>
+                <View style={styles.statusBadge}>
+                  <View style={[styles.pulseDot, { backgroundColor: familyConnectedUserData.online ? '#10B981' : '#94A3B8' }]} />
+                  <Text style={styles.statusText}>{familyConnectedUserData.online ? 'Online' : 'Offline'}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.metricDivider} />
+
+            <View style={styles.metricsGrid}>
+              <View style={styles.metricItem}>
+                <Battery size={18} color="#0284C7" />
+                <View>
+                  <Text style={styles.metricLabel}>BATTERY</Text>
+                  <Text style={styles.metricVal}>{familyConnectedUserData.battery}%</Text>
+                </View>
+              </View>
+
+              <View style={styles.metricItem}>
+                <MapPin size={18} color="#0284C7" />
+                <View>
+                  <Text style={styles.metricLabel}>GPS STATUS</Text>
+                  <Text style={styles.metricVal}>{familyConnectedUserData.gpsStatus}</Text>
+                </View>
+              </View>
+            </View>
+
+            <Text style={styles.lastUpdatedText}>Last Updated: {familyConnectedUserData.lastUpdated}</Text>
+          </View>
+
+          {/* Quick Overview Cards */}
+          <View style={styles.gridContainer}>
+            {/* Live Location Box */}
+            <View style={styles.smallCard}>
+              <View style={styles.smallCardHeader}>
+                <MapPin size={18} color="#0284C7" />
+                <Text style={styles.smallCardTitle}>LOCATION</Text>
+              </View>
+              <Text style={styles.smallCardDesc}>{familyConnectedUserData.location.address}</Text>
+            </View>
+
+            {/* Active Journey Box */}
+            <View style={styles.smallCard}>
+              <View style={styles.smallCardHeader}>
+                <Activity size={18} color="#0284C7" />
+                <Text style={styles.smallCardTitle}>ACTIVE JOURNEY</Text>
+              </View>
+              <Text style={styles.smallCardDesc}>
+                {familyConnectedUserData.journey.status === 'In Progress' 
+                  ? `To: ${familyConnectedUserData.journey.to}`
+                  : 'No Active Journey'
+                }
+              </Text>
+            </View>
+          </View>
+        </>
+      )}
+
     </ScrollView>
   );
 };
@@ -373,6 +549,7 @@ const styles = StyleSheet.create({
   },
   greetingHeader: {
     flexDirection: 'row',
+
     alignItems: 'center',
     gap: 14,
     marginBottom: 20,
@@ -406,6 +583,22 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.3,
     marginTop: 1,
+
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  greetText: {
+    color: '#0F172A',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  nameText: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '900',
+    marginTop: 2,
+
   },
   refreshBtn: {
     width: 40,
@@ -530,6 +723,7 @@ const styles = StyleSheet.create({
     elevation: 6,
     marginBottom: 16,
   },
+
   connectedUserCardTag: {
     color: '#0284C7',
     fontSize: 10.5,
@@ -537,6 +731,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.0,
     marginBottom: 12,
   },
+
   userCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',

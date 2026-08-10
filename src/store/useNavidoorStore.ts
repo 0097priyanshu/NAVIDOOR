@@ -395,13 +395,13 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     get().setActiveMode(mode);
   },
   cycleNextMode: () => {
-    const modes: NavMode[] = ['assist', 'navigate', 'read', 'medicine', 'transport', 'family', 'history', 'languages', 'settings'];
+    const modes: NavMode[] = ['assist', 'navigate', 'read', 'medicine', 'transport', 'location', 'emergency', 'medical', 'family', 'history', 'languages', 'settings'];
     const currIdx = modes.indexOf(get().activeMode);
     const nextIdx = (currIdx + 1) % modes.length;
     get().rotateWheelToMode(modes[nextIdx]);
   },
   cyclePrevMode: () => {
-    const modes: NavMode[] = ['assist', 'navigate', 'read', 'medicine', 'transport', 'family', 'history', 'languages', 'settings'];
+    const modes: NavMode[] = ['assist', 'navigate', 'read', 'medicine', 'transport', 'location', 'emergency', 'medical', 'family', 'history', 'languages', 'settings'];
     const currIdx = modes.indexOf(get().activeMode);
     const prevIdx = (currIdx - 1 + modes.length) % modes.length;
     get().rotateWheelToMode(modes[prevIdx]);

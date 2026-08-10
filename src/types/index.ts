@@ -6,11 +6,13 @@ export type NavMode =
   | 'read'
   | 'medicine'
   | 'transport'
+  | 'location'
   | 'emergency'
   | 'family'
   | 'history'
   | 'settings'
-  | 'languages';
+  | 'languages'
+  | 'medical';
 
 export type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
 

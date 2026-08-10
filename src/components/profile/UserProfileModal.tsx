@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, TextInput } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { User, Phone, ShieldAlert, Pill, X, Edit2, Check, Mic, Loader2, LogOut } from 'lucide-react-native';
+import { User, Phone, ShieldAlert, Pill, X, Edit2, Check, Mic, Loader2, LogOut, MapPin } from 'lucide-react-native';
 import { UnifiedMicButton } from '../common/UnifiedMicButton';
 
 export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void }> = ({ visible, onClose }) => {
@@ -25,6 +25,17 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(userName);
   const [editPhone, setEditPhone] = useState(userPhone);
+  const [isLocationSharing, setIsLocationSharing] = useState(false);
+
+  const toggleLocationSharing = () => {
+    const nextState = !isLocationSharing;
+    setIsLocationSharing(nextState);
+    if (nextState) {
+      speak('Live location sharing activated. Broadcasting to your emergency contacts.');
+    } else {
+      speak('Live location sharing deactivated.');
+    }
+  };
 
   useEffect(() => {
     setIsProfileModalOpen(visible);
@@ -180,6 +191,27 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
                   </View>
                 </View>
               ))}
+            </View>
+
+            {/* Live Location Sharing */}
+            <View style={styles.sectionBox}>
+              <Text style={styles.sectionTag}>EMERGENCY LOCATION SHARING</Text>
+              <TouchableOpacity 
+                style={[styles.locationChip, isLocationSharing && styles.locationChipActive]}
+                onPress={toggleLocationSharing}
+                accessibilityLabel="Toggle Live Location Sharing"
+                accessibilityRole="button"
+              >
+                <MapPin size={18} color={isLocationSharing ? "#FFFFFF" : "#0284C7"} />
+                <View style={styles.contactTextGroup}>
+                  <Text style={[styles.contactName, isLocationSharing && { color: '#FFFFFF' }]}>
+                    {isLocationSharing ? 'Live Tracking Active' : 'Share Live Location'}
+                  </Text>
+                  <Text style={[styles.contactSub, isLocationSharing && { color: '#E2E8F0' }]}>
+                    {isLocationSharing ? 'Broadcasting: 37.7749° N, 122.4194° W' : 'Tap to enable continuous tracking'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             </View>
 
             {/* LOGOUT & RESET PROFILE SETUP BUTTON */}
@@ -379,6 +411,20 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     borderWidth: 1,
     borderColor: '#64748B',
+  },
+  locationChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#94A3B8',
+    padding: 12,
+    borderRadius: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#64748B',
+  },
+  locationChipActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#059669',
   },
   logoutBtn: {
     flexDirection: 'row',

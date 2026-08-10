@@ -2,7 +2,11 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { socketClient } from '../../services/socketClient';
+
 import { MapPin, CheckCircle, ShieldAlert, PlayCircle, Clock } from 'lucide-react-native';
+
+import { Flag, PlayCircle, MapPin, CheckCircle, ShieldAlert, Clock } from 'lucide-react-native';
+
 import * as Haptics from 'expo-haptics';
 
 export const FamilyActivityTab: React.FC = () => {
