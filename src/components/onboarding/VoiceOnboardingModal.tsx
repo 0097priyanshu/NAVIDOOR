@@ -11,6 +11,7 @@ import { UnifiedMicButton } from '../common/UnifiedMicButton';
 
 export const VoiceOnboardingModal: React.FC = () => {
   const { 
+    userRole,
     isFirstTimeUser, 
     setIsFirstTimeUser, 
     userName, 
@@ -32,12 +33,15 @@ export const VoiceOnboardingModal: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
 
   useEffect(() => {
-    if (isFirstTimeUser) {
+    if (isFirstTimeUser && userRole === 'navidoor_user') {
+      setStep(1);
       setTimeout(() => {
-        speakPromptForStep(step, userLanguage);
+        speakPromptForStep(1, userLanguage);
       }, 500);
+    } else {
+      setStep(1);
     }
-  }, [isFirstTimeUser, step]);
+  }, [isFirstTimeUser, userRole]);
 
   const handlePrevStep = () => {
     if (step > 1) {
@@ -66,6 +70,7 @@ export const VoiceOnboardingModal: React.FC = () => {
       setStep(6);
       speakPromptForStep(6);
     } else {
+      setStep(1);
       setIsFirstTimeUser(false);
       speak('Starting live AI vision assist.');
     }
@@ -121,6 +126,7 @@ export const VoiceOnboardingModal: React.FC = () => {
           speak(`Medicine schedule confirmed. Setup complete.`);
           setStep(6);
         } else {
+          setStep(1);
           setIsFirstTimeUser(false);
           speak('Starting live AI vision assist.');
         }
@@ -171,6 +177,7 @@ export const VoiceOnboardingModal: React.FC = () => {
             speak(`Medicine schedule confirmed. Setup complete.`);
             setStep(6);
           } else {
+            setStep(1);
             setIsFirstTimeUser(false);
             speak('Starting live AI vision assist.');
           }
@@ -198,7 +205,7 @@ export const VoiceOnboardingModal: React.FC = () => {
         break;
       case 4:
         speak(
-          `Phone number saved. Step 4: Confirm your primary emergency contact. Set to Sarah Jenkins, Daughter, phone number +1 555-234-5678. Tap anywhere to confirm.`
+          `Phone number saved. Step 4: Confirm your primary emergency contact. Set to Sunita Sharma, Daughter, phone number +91 98765-43210. Tap anywhere to confirm.`
         );
         break;
       case 5:
@@ -214,7 +221,7 @@ export const VoiceOnboardingModal: React.FC = () => {
     }
   };
 
-  if (!isFirstTimeUser) return null;
+  if (!isFirstTimeUser || userRole !== 'navidoor_user') return null;
 
   return (
     <Modal visible={isFirstTimeUser} transparent animationType="fade">

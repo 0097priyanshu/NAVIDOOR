@@ -171,7 +171,7 @@ const INITIAL_MEDICINES: MedicineInfo[] = [
 ];
 
 const INITIAL_EMERGENCY_CONTACTS: EmergencyContact[] = [
-  { id: 'ec-1', name: 'Sarah Jenkins', relation: 'Daughter', phone: '+1 (555) 234-5678', isPrimary: true },
+  { id: 'ec-1', name: 'Sunita Sharma', relation: 'Daughter', phone: '+91 98765 43210', isPrimary: true },
 ];
 
 export const useNavidoorStore = create<NavidoorState>((set, get) => ({
@@ -207,8 +207,13 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
         get().speak(parsed.feedbackPrompt || 'Opening Language and Profile settings.');
       } else if (parsed.action === 'logoutUser') {
         get().setIsProfileModalOpen(false);
-        get().setIsFirstTimeUser(true);
-        get().speak(parsed.feedbackPrompt || 'Logged out. Starting voice profile setup again.');
+        get().setFamilyUser(null);
+        get().setFamilyConnectedUserPhone(null);
+        get().setFamilyConnectedUserData(null);
+        get().setFamilyConnectionStatus('idle');
+        get().setUserRole('undecided');
+        get().setIsFirstTimeUser(false);
+        get().speak(parsed.feedbackPrompt || 'Logged out. Returning to role selection screen.');
       } else if (parsed.action === 'closeModal') {
         get().setIsProfileModalOpen(false);
         get().setSosModalOpen(false);
@@ -294,7 +299,12 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     if (intent) {
       if (intent.action === 'logoutUser') {
         get().setIsProfileModalOpen(false);
-        get().setIsFirstTimeUser(true);
+        get().setFamilyUser(null);
+        get().setFamilyConnectedUserPhone(null);
+        get().setFamilyConnectedUserData(null);
+        get().setFamilyConnectionStatus('idle');
+        get().setUserRole('undecided');
+        get().setIsFirstTimeUser(false);
       } else if (intent.action === 'switchLanguage' && intent.targetLanguage) {
         get().setActiveLanguageCode(intent.targetLanguage);
         if (intent.targetLanguageName) get().setUserLanguage(intent.targetLanguageName);
@@ -339,7 +349,7 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   // User Profile
   userName: 'Aadya',
   setUserName: (name) => set({ userName: name }),
-  userPhone: '+1 (555) 019-2831',
+  userPhone: '+91 98123 45678',
   setUserPhone: (phone) => set({ userPhone: phone }),
   userLanguage: 'English (US)',
   activeLanguageCode: 'en',
@@ -498,7 +508,7 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
 
   destination: 'Metro Pharmacy',
   navSteps: [
-    { id: 's-1', instruction: 'Walk straight 45 meters towards Oak Lane.', distanceText: '45 meters' },
+    { id: 's-1', instruction: 'Walk straight 45 meters towards MG Road.', distanceText: '45 meters' },
     { id: 's-2', instruction: 'Turn right at the corner.', distanceText: '12 meters' },
   ],
   currentStepIndex: 0,
@@ -536,7 +546,7 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   emergencyContacts: INITIAL_EMERGENCY_CONTACTS,
   triggerSosAlert: () => {
     set({ isSosModalOpen: true });
-    speakAnnouncement('Emergency alert activated. Location broadcasting to Sarah Jenkins.');
+    speakAnnouncement('Emergency alert activated. Location broadcasting to Sunita Sharma.');
     playObstacleBeep(1200, 400);
   },
 

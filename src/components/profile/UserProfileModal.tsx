@@ -15,6 +15,7 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
     medicines, 
     setIsProfileModalOpen,
     setIsFirstTimeUser,
+    setUserRole,
     voiceState,
     setVoiceState,
     speak,
@@ -51,8 +52,9 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
   const handleLogout = () => {
     setIsProfileModalOpen(false);
     onClose();
-    setIsFirstTimeUser(true);
-    speak('Logged out. Starting voice profile setup again.');
+    setUserRole('undecided');
+    setIsFirstTimeUser(false);
+    speak('Logged out. Returning to role selection screen.');
   };
 
   const handleMicPress = () => {
