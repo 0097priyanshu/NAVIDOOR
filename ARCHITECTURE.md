@@ -2,9 +2,12 @@
 
 ## What Is This App?
 
-**NAVIDOOR** is an offline-first AI accessibility assistant for visually impaired users.
-It runs as an Android app built with React Native (Expo) and communicates
-with a local Node.js backend server running on your PC over your LAN (Wi-Fi).
+**NAVIDOOR** is an Indian, offline-first AI accessibility assistant and dual-portal ecosystem designed for visually impaired users and their family caregivers.
+It runs as a React Native (Expo) mobile application with two distinct role experiences:
+1. **NAVIDOOR User Mode**: AI vision assist, camera OCR/object detection, voice assistant, and 9 navigation modes.
+2. **Family Companion Portal**: Dedicated visual dashboard for caregivers with real-time location monitoring, active journey tracking, emergency SOS alerts, and pairing management.
+
+It communicates with a local Node.js backend server running on your PC over your LAN (Wi-Fi).
 
 ---
 
@@ -12,7 +15,7 @@ with a local Node.js backend server running on your PC over your LAN (Wi-Fi).
 
 ```
 NAVIDOOR/
-├── App.tsx                  ← Root entry point (renders the whole app)
+├── App.tsx                  ← Root entry point (Dual-role routing: RoleSelectionScreen | FamilyModeContainer | Main User App)
 ├── index.js                 ← Registers App with Expo
 ├── index.html               ← Web entry HTML (for npx expo start --web)
 ├── app.json                 ← Expo config (permissions, splash, icon)
@@ -25,21 +28,22 @@ NAVIDOOR/
 │   │   ├── camera/          ← Camera view, photo capture, AI overlay
 │   │   ├── header/          ← Top status bar (SOS button, profile)
 │   │   ├── navigation/      ← Rotating AI Mode Wheel (bottom nav)
-│   │   ├── overlays/        ← Section panels, toast notifications
-│   │   ├── onboarding/      ← First-time voice setup flow
-│   │   ├── sos/             ← Emergency SOS modal
-│   │   ├── family/          ← Family Remote Assist modal
+│   │   ├── overlays/        ← Modular section panels & toast notifications
+│   │   │   └── panels/      ← Standalone overlay panels (Emergency, Location, Medical, Settings, etc.)
+│   │   ├── onboarding/      ← Role selection screen & voice setup flow
+│   │   ├── sos/             ← Emergency SOS modal & location broadcast
+│   │   ├── family/          ← Family Companion Portal (Container, Home, Location, Activity, Alerts, Profile tabs)
 │   │   ├── designSystem/    ← Dev-only design system preview modal
 │   │   ├── profile/         ← User profile / medical ID modal
 │   │   └── common/          ← Shared components (mic button)
-│   ├── store/               ← Global state (Zustand)
-│   ├── services/            ← Backend API clients + voice processing
-│   ├── theme/               ← Design tokens, colors, typography
+│   ├── store/               ← Global state management (Zustand store for user & family states)
+│   ├── services/            ← Backend API clients + voice processing + socket client
+│   ├── theme/               ← Design system tokens, colors, typography
 │   ├── types/               ← TypeScript type definitions
 │   └── utils/               ← Speech utils, translations, helpers
 │
-└── backend/                 ← Node.js Express server (runs on PC)
-    ├── index.js             ← Main server entry
+└── backend/                 ← Node.js Express server (runs on PC / LAN)
+    ├── index.js             ← Main Express server + Family & User REST APIs + Socket.IO server
     ├── bin/
     │   ├── main.exe         ← Whisper.cpp compiled binary (STT)
     │   └── piper/           ← Piper TTS binary + espeak-ng-data
@@ -49,11 +53,11 @@ NAVIDOOR/
     │   └── piper/
     │       └── en_US-lessac-high.onnx  ← Piper English voice (113MB)
     ├── config/
-    │   └── languages.js     ← 10 language configs
+    │   └── languages.js     ← 10 Indian language configs
     └── services/
         ├── whisperService.js     ← Whisper.cpp STT logic
         ├── piperService.js       ← Piper TTS logic
-        ├── socketService.js      ← Socket.IO real-time events
+        ├── socketService.js      ← Socket.IO real-time event hub
         ├── translationService.js
         └── aiAssistantService.js
 ```
@@ -72,40 +76,68 @@ NAVIDOOR/
 | **Zustand** | ^4.5.2 | Global state management (replaces Redux) |
 | **expo-camera** | ~15.0.16 | Real-time camera access & photo capture |
 | **expo-speech** | ~12.0.2 | Device TTS fallback for ALL languages on Android |
-| **expo-haptics** | ~13.0.1 | Vibration feedback on mode swipes |
-| **expo-location** | ~17.0.1 | GPS for navigation mode |
-| **expo-av** | ~14.0.7 | Audio/video playback (partially integrated) |
+| **expo-haptics** | ~13.0.1 | Vibration feedback on mode swipes & button interactions |
+| **expo-location** | ~17.0.1 | GPS for navigation mode & emergency SOS broadcast |
+| **expo-av** | ~14.0.7 | Audio recording for Whisper STT |
 | **expo-linear-gradient** | ~13.0.2 | UI gradient effects |
-| **lucide-react-native** | ^0.395.0 | All icons (ShieldAlert, Camera, etc.) |
-| **socket.io-client** | ^4.8.3 | Real-time family streaming |
+| **lucide-react-native** | ^0.395.0 | Complete icon system (Shield, MapPin, Activity, etc.) |
+| **socket.io-client** | ^4.8.3 | Real-time family stream & SOS event listener |
 
-### Backend (Node.js Express — runs on your PC)
+### Backend (Node.js Express — runs on PC / LAN)
 
 | Technology | Version | Purpose |
 |---|---|---|
-| **Node.js + Express** | ^4.22.2 | HTTP API server |
+| **Node.js + Express** | ^4.22.2 | HTTP API server & Family REST Endpoints |
 | **Whisper.cpp** | Native binary | Offline multilingual Speech-to-Text |
 | **Piper TTS** | Native binary | Offline Text-to-Speech (English only currently) |
 | **ffmpeg-static** | ^5.3.0 | Converts M4A/AAC mic recordings → 16kHz WAV for Whisper |
-| **Socket.IO** | ^4.8.3 | Real-time family remote assist streaming |
+| **Socket.IO** | ^4.8.3 | Real-time family remote assist & pairing socket gateway |
 | **multer** | ^1.4.5 | Handles audio file uploads from the app |
-| **cors** | ^2.8.6 | Allows Android app to call backend over LAN |
+| **cors** | ^2.8.6 | Allows mobile app to call backend over LAN |
 
 ---
 
-## How It All Works — Data Flow
+## Architecture & Data Flow
 
-### 1. App Startup
+### 1. Dual-Role Routing (App Startup)
 ```
-Android opens app
-→ App.tsx renders
-→ Zustand store initializes
-→ Backend health check (GET /api/health)
-→ If backend is online: shows "NAVIDOOR Ready"
-→ If offline: app still works (expo-speech fallback)
+App launch (App.tsx)
+├── Checks userRole in Zustand store
+├── Case 'undecided': Renders <RoleSelectionScreen />
+│     ├── NAVIDOOR User Card -> Sets userRole = 'navidoor_user', opens setup onboarding
+│     └── Family Member Card -> Sets userRole = 'family_member', opens caregiver portal
+├── Case 'family_member':
+│     ├── If not logged in -> Renders <FamilyAuthScreen />
+│     └── If logged in -> Renders <FamilyModeContainer /> (Caregiver Portal)
+└── Case 'navidoor_user': Renders main AI Accessibility workspace (<CameraViewCanvas />, <RotatingAIModeWheel />, <SectionViewPanel />)
 ```
 
-### 2. Voice Input (Speaking to the app)
+### 2. Family Companion Caregiver Portal (`src/components/family/`)
+```
+<FamilyModeContainer />
+├── Semi-Circle Arc Wheel Navbar: 5 tabs sit on a curved arc dock (HOME, LOCATION, ACTIVITY, ALERTS, PROFILE)
+├── Full-Screen & Wheel Gestures: Horizontal swipe gestures cycle smoothly between tabs with haptic feedback
+├── FamilyHomeTab: Displays caregiver greeting (Priya Sharma), connected NAVIDOOR user profile card (Aarav Sharma), live location summary, active journey, battery/GPS status
+├── FamilyLocationTab: Interactive map canvas with Indian street mapping (Connaught Place, Janpath Road)
+├── FamilyActivityTab: Detailed journey progress and activity timelines
+├── FamilyAlertsTab: Emergency SOS log and 1-tap contact dialer
+└── FamilyProfileTab: Active sharing permissions manager and portal logout
+```
+
+### 3. Modular Panel Overlays Architecture (`src/components/overlays/panels/`)
+```
+<SectionViewPanel />
+├── Renders modular panel overlay based on activeMode:
+│     ├── 'emergency' -> <EmergencyPanel />
+│     ├── 'medicine' -> <MedicalInfoPanel />
+│     ├── 'navigate' / 'assist' -> <LocationPanel />
+│     ├── 'settings' -> <SettingsPanel />
+│     ├── 'languages' -> <LanguagesPanel />
+│     ├── 'history' -> <HistoryPanel />
+│     └── 'family' -> <FamilyPanel />
+```
+
+### 4. Voice Input (Speaking to the app)
 ```
 User holds MIC button
 → expo-av records microphone audio (M4A file)
@@ -118,7 +150,7 @@ User holds MIC button
 → OR: text sent to POST /api/chat for AI assistant response
 ```
 
-### 3. Voice Output (App speaking back to you)
+### 5. Voice Output (App speaking back to you)
 ```
 App calls speakAnnouncement(text, { languageCode })
 → On WEB: tries Piper TTS backend (POST /api/tts) first
@@ -129,45 +161,13 @@ App calls speakAnnouncement(text, { languageCode })
    → Device's built-in TTS engine (supports all 10 Indian languages natively)
 ```
 
-### 4. Camera & AI Vision
+### 6. Emergency SOS & Family Remote Assist
 ```
-expo-camera streams live frames
-→ CameraViewCanvas renders the live camera view
-→ AIVisionOverlay simulates detected objects (obstacles, text, doors)
-→ User presses capture button
-→ Photo saved to device
-→ CapturedPhotoPreviewModal shows photo + AI analysis text
-→ Analysis spoken aloud via speakAnnouncement()
-```
-
-### 5. Navigation (9 Modes)
-```
-User swipes LEFT/RIGHT on screen (PanResponder)
-  OR taps a mode on the bottom RotatingAIModeWheel
-→ cycleNextMode() / cyclePrevMode() called in Zustand store
-→ activeMode changes to one of:
-  assist | navigate | read | medicine | transport |
-  emergency | family | history | languages | settings
-→ SectionViewPanel shows the relevant panel
-→ SectionToastNotification flashes the mode name
-→ Haptics.impactAsync() vibrates the phone
-```
-
-### 6. Emergency SOS
-```
-User taps SOS button in header
-→ SOSModal opens
-→ Uses expo-location to get GPS coordinates
-→ Sends alert + GPS link to emergency contacts via Socket.IO
-→ Family app receives real-time alert
-```
-
-### 7. Family Remote Assist
-```
-User opens FAMILY mode
-→ Socket.IO connects to backend
-→ Family member on another device gets a camera stream
-→ Live guidance can be sent back as voice
+User triggers Emergency SOS (Voice or Header SOS button)
+→ SOSModal opens with countdown & alert sound
+→ Obtains GPS coordinates via expo-location
+→ Transmits SOS alert payload via Socket.IO gateway (`family:sosAlert`)
+→ Family Companion Portal receives instant alert and location details
 ```
 
 ---
@@ -187,18 +187,6 @@ User opens FAMILY mode
 | Kannada | ❌ No Piper model exists | ✅ Device TTS works great |
 | Malayalam | ❌ No Piper model exists | ✅ Device TTS works great |
 
-> **Bottom line**: For Android users, all 10 languages work via Android's built-in TTS.
-> Piper TTS only adds value for English on the web version.
-
-## Current Reality of STT Languages
-
-| Engine | Languages | Status |
-|---|---|---|
-| **Whisper.cpp ggml-base.bin** | All 10 languages | ✅ Works — multilingual model handles all Indian languages |
-
-> Whisper's `ggml-base.bin` is a **multilingual model** — it transcribes all 10 supported
-> languages from a single 147MB file. No per-language model download needed.
-
 ---
 
 ## Backend API Endpoints
@@ -206,27 +194,19 @@ User opens FAMILY mode
 | Method | Route | What it does |
 |---|---|---|
 | GET | `/api/health` | Backend health check |
-| GET | `/api/languages` | Returns list of 10 supported languages |
+| GET | `/api/languages` | Returns list of 10 supported Indian languages |
 | POST | `/api/stt` | Whisper.cpp: audio file → transcribed text |
 | POST | `/api/tts` | Piper TTS: text → WAV audio buffer |
 | POST | `/api/translate` | Translation service |
 | POST | `/api/chat` | AI assistant response |
-| WS | Socket.IO | Real-time family streaming & SOS alerts |
-
----
-
-## How the Backend Connects to the App
-
-The backend runs at `http://0.0.0.0:5001` on your PC.
-
-The Expo app auto-detects the backend IP using:
-```typescript
-const hostUri = Constants.expoConfig?.hostUri; // e.g. "192.168.1.5:8081"
-const ip = hostUri.split(':')[0];              // "192.168.1.5"
-const BACKEND_URL = `http://${ip}:5001`;       // "http://192.168.1.5:5001"
-```
-
-> **Your PC and Android phone must be on the same Wi-Fi network.**
+| POST | `/api/family/login` | Family companion caregiver authentication |
+| POST | `/api/family/register` | Family companion caregiver account signup |
+| POST | `/api/family/connect` | Connection request submit & pairing handling |
+| POST | `/api/family/connection-status` | Connection state & paired users overview |
+| GET | `/api/family/dashboard-data` | Caregiver dashboard data payload |
+| GET | `/api/user/pending-requests` | User pending caregiver connection requests |
+| POST | `/api/user/approve-connection` | User consent approval / rejection |
+| WS | Socket.IO Gateway | Real-time location streams, SOS alerts, and pairing events |
 
 ---
 
@@ -234,14 +214,15 @@ const BACKEND_URL = `http://${ip}:5001`;       // "http://192.168.1.5:5001"
 
 | File | What it does |
 |---|---|
-| `App.tsx` | Root layout + full-screen swipe gesture handler |
-| `src/store/useNavidoorStore.ts` | ALL global state: mode, voice, camera, user, settings |
-| `src/components/camera/CameraViewCanvas.tsx` | Camera view + AI overlay rendering |
-| `src/components/navigation/RotatingAIModeWheel.tsx` | Bottom nav wheel + mic button |
-| `src/components/overlays/SectionViewPanel.tsx` | All 9 section panels (Settings, History, etc.) |
-| `src/services/voiceCommandProcessor.ts` | Parses voice commands → actions |
-| `src/utils/speechUtils.ts` | TTS: Piper (web) → expo-speech (Android) |
-| `src/services/voiceAssistantBackend.ts` | All HTTP calls to the Node.js backend |
-| `backend/index.js` | Express server with all API routes |
-| `backend/services/whisperService.js` | Whisper.cpp runner (STT) |
-| `backend/services/piperService.js` | Piper TTS runner |
+| `App.tsx` | Root layout + dual-role routing (`userRole`) + full-screen swipe handler |
+| `src/store/useNavidoorStore.ts` | Global Zustand state: mode, voice, camera, user role, family caregiver state |
+| `src/components/onboarding/RoleSelectionScreen.tsx` | App launch role selection screen (Navidoor User vs Family Companion) |
+| `src/components/family/FamilyModeContainer.tsx` | Caregiver Portal shell with semi-circle rotating wheel navbar & swipe gestures |
+| `src/components/family/FamilyHomeTab.tsx` | Caregiver main overview dashboard (Monitored user card, location, journey, battery) |
+| `src/components/family/FamilyLocationTab.tsx` | Real-time location map canvas with Indian street mapping |
+| `src/components/family/FamilyAuthScreen.tsx` | Caregiver login & account registration screen |
+| `src/components/overlays/SectionViewPanel.tsx` | Root section view panel container |
+| `src/components/overlays/panels/` | Modular overlay panels (Emergency, Location, Medical, Settings, Languages, etc.) |
+| `src/services/voiceAssistantBackend.ts` | Backend HTTP API client + LAN auto-discovery |
+| `src/services/socketClient.ts` | Socket.IO real-time client wrapper |
+| `backend/index.js` | Express server with STT/TTS routes, family REST APIs, and Socket.IO gateway |
