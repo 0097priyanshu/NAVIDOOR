@@ -151,10 +151,18 @@ export async function requestPiperTTS(text: string, languageCode: SupportedLangu
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, language: languageCode })
     }, 10000);
+    
     if (!res.ok) {
       console.warn('[VoiceAssistantBackend] /api/tts response status:', res.status);
       return null;
     }
+
+    const engine = res.headers.get('X-Voice-Engine');
+    if (engine && engine.includes('offline')) {
+      console.log(`[VoiceAssistantBackend] Backend lacks native Piper TTS model. Forcing fallback to Web Speech API.`);
+      return null;
+    }
+
     const buffer = await res.arrayBuffer();
     console.log(`[VoiceAssistantBackend] Piper TTS audio received: ${buffer.byteLength} bytes`);
     return buffer;

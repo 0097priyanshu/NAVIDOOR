@@ -269,7 +269,10 @@ export class VoiceCommandProcessor {
     if (
       q.includes('trigger sos') || q.includes('emergency sos') || q.includes('send sos') ||
       q.includes('sos alert') || q.includes('call sos') || q.includes('emergency help') ||
-      q.includes('आपातकालीन मदद') || q.includes('एसओएस')
+      q.includes('help me') || q.includes('i need help') || q.includes('call 911') || 
+      q.includes('call police') || q.includes('call ambulance') || q.includes('save me') ||
+      q.includes('आपातकालीन मदद') || q.includes('एसओएस') || q.includes('बचाओ') || 
+      q.includes('मुझे मदद चाहिए') || q.includes('मदत करा') || q.includes('वाचवा')
     ) {
       return { isCommand: true, action: 'triggerSosAlert' };
     }

@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { Sparkles, Eye, ShieldCheck, Heart } from 'lucide-react-native';
+import { Sparkles, Eye, ShieldCheck, Heart, AlertCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 export const RoleSelectionScreen: React.FC = () => {
-  const { setUserRole, speak } = useNavidoorStore();
+  const { setUserRole, speak, triggerSosAlert } = useNavidoorStore();
 
   const handleSelectRole = (role: 'navidoor_user' | 'family_member') => {
     try {
@@ -89,6 +89,18 @@ export const RoleSelectionScreen: React.FC = () => {
           <ShieldCheck size={16} color="#94A3B8" />
           <Text style={styles.footerText}>Secure Link • Approved Consent Required</Text>
         </View>
+
+        {/* Universal SOS Button */}
+        <TouchableOpacity 
+          style={styles.sosButton}
+          onPress={triggerSosAlert}
+          activeOpacity={0.8}
+          accessibilityLabel="Trigger Emergency SOS"
+          accessibilityRole="button"
+        >
+          <AlertCircle size={22} color="#FFFFFF" />
+          <Text style={styles.sosButtonText}>EMERGENCY SOS</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -219,10 +231,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
+    marginBottom: 10,
   },
   footerText: {
     color: '#94A3B8',
     fontSize: 11,
     fontWeight: '800',
+  },
+  sosButton: {
+    flexDirection: 'row',
+    backgroundColor: '#E11D48',
+    padding: 16,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+    shadowColor: '#E11D48',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  sosButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 16,
+    letterSpacing: 1,
   },
 });
