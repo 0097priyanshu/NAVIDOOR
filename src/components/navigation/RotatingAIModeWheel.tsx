@@ -27,7 +27,10 @@ import {
   Eye,
   Mic,
   Loader2,
-  Camera
+  Camera,
+  MapPin,
+  Phone,
+  Activity
 } from 'lucide-react-native';
 
 import { voiceRecordingService } from '../../services/voiceRecordingService';
@@ -48,6 +51,9 @@ const WHEEL_ITEMS: WheelItem[] = [
   { id: 'read', label: 'READ', icon: <BookOpen size={22} color="#FFFFFF" /> },
   { id: 'medicine', label: 'MEDICINE', icon: <Pill size={22} color="#FFFFFF" /> },
   { id: 'transport', label: 'TRANSIT', icon: <Bus size={22} color="#FFFFFF" /> },
+  { id: 'location', label: 'LIVE LOC', icon: <MapPin size={22} color="#FFFFFF" /> },
+  { id: 'emergency', label: 'CALL SOS', icon: <Phone size={22} color="#FFFFFF" /> },
+  { id: 'medical', label: 'MEDICAL', icon: <Activity size={22} color="#FFFFFF" /> },
   { id: 'family', label: 'FAMILY', icon: <Users size={22} color="#FFFFFF" /> },
   { id: 'history', label: 'HISTORY', icon: <Clock size={22} color="#FFFFFF" /> },
   { id: 'languages', label: 'LANG', icon: <Globe size={22} color="#FFFFFF" /> },
