@@ -61,6 +61,14 @@ const SECTION_DETAILS: Record<NavMode, SectionMeta> = {
     title: 'SYSTEM SETTINGS',
     icon: <Settings size={44} color="#FFFFFF" />,
   },
+  location: {
+    title: 'LOCATION & GPS',
+    icon: <Compass size={44} color="#FFFFFF" />,
+  },
+  medical: {
+    title: 'MEDICAL INFO',
+    icon: <Pill size={44} color="#FFFFFF" />,
+  },
 };
 
 export const SectionToastNotification: React.FC = () => {

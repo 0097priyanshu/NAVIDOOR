@@ -78,7 +78,7 @@ export const FamilyAuthScreen: React.FC = () => {
           socketClient.registerPhone(user.phone, 'family_member');
         }
 
-        // Fetch connection status safely
+        // Fetch connection status
         try {
           const statusRes = await fetch(`${BACKEND_URL}/api/family/connection-status`, {
             method: 'POST',
@@ -93,6 +93,10 @@ export const FamilyAuthScreen: React.FC = () => {
               setFamilyConnectionStatus('connected');
               setLoading(false);
               return;
+            } else if (statusData.requests && statusData.requests.length > 0) {
+              setFamilyConnectionStatus('pending');
+            } else {
+              setFamilyConnectionStatus('idle');
             }
           }
         } catch (e) {}
