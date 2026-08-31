@@ -22,6 +22,10 @@ export const FamilyRequestReceivedModal: React.FC = () => {
     const checkPending = async () => {
       try {
         const res = await fetch(`${BACKEND_URL}/api/user/pending-requests?phone=${encodeURIComponent(userPhone)}`);
+        if (!res.ok) return;
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) return;
+
         const data = await res.json();
         if (data.success && data.requests && data.requests.length > 0) {
           const req = data.requests[0];

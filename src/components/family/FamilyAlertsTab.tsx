@@ -5,7 +5,7 @@ import { AlertOctagon, Phone, ShieldCheck, MapPin, Calendar } from 'lucide-react
 import * as Haptics from 'expo-haptics';
 
 export const FamilyAlertsTab: React.FC = () => {
-  const { activeSosAlert, setActiveSosAlert, familyConnectedUserData, speak } = useNavidoorStore();
+  const { activeSosAlert, setActiveSosAlert, familyConnectedUserData } = useNavidoorStore();
 
   const handleCall = () => {
     try {
@@ -26,7 +26,6 @@ export const FamilyAlertsTab: React.FC = () => {
     } catch (e) {}
 
     setActiveSosAlert(null);
-    speak('Emergency alert acknowledged.');
     Alert.alert('Alert Acknowledged', 'Emergency state cleared and logged.');
   };
 

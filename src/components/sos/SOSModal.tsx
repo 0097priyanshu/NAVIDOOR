@@ -19,7 +19,7 @@ export const SOSModal: React.FC = () => {
         }, 1000);
       } else if (countdown === 0) {
         setIsBroadcastSent(true);
-        speak('Emergency broadcast sent to Sarah Jenkins and Emergency Dispatch.');
+        speak('Emergency broadcast sent to Sunita Sharma and Emergency Dispatch.');
       }
     }
     return () => {
@@ -84,7 +84,7 @@ export const SOSModal: React.FC = () => {
               </View>
               <Text style={styles.sentTitle}>EMERGENCY DISTRESS BROADCAST ACTIVE</Text>
               <Text style={styles.sentSub}>
-                Live video feed & GPS coordinates are being transmitted to Sarah Jenkins (+1 555 234-5678) and Emergency Dispatch.
+                Live video feed & GPS coordinates are being transmitted to Sunita Sharma (+91 98765 43210) and Emergency Dispatch.
               </Text>
 
               <View style={styles.gpsBox}>
