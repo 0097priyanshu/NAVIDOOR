@@ -33,10 +33,12 @@ export class VoiceRecordingService {
   private pcmSamples: Float32Array[] = [];
   private scriptNode: ScriptProcessorNode | null = null;
 
+  private activeLangCode: string = 'en';
+
   async requestMicrophonePermission(): Promise<boolean> {
     console.log('[VoiceRecordingService]: Requesting physical device microphone permission...');
     
-    if (ExpoAudio) {
+    if (Platform.OS !== 'web' && ExpoAudio) {
       try {
         const response = await ExpoAudio.requestPermissionsAsync();
         console.log(`MIC PERMISSION: ${response.granted ? 'GRANTED' : 'DENIED'}`);
@@ -71,6 +73,7 @@ export class VoiceRecordingService {
       return false;
     }
 
+    this.activeLangCode = langCode;
     this.lastLiveTranscript = '';
     this.isRecording = true;
     this.audioChunks = [];
@@ -79,7 +82,7 @@ export class VoiceRecordingService {
 
     console.log('RECORDING STARTED: YES');
 
-    if (ExpoAudio) {
+    if (Platform.OS !== 'web' && ExpoAudio) {
       try {
         await ExpoAudio.setAudioModeAsync({
           allowsRecordingIOS: true,
@@ -156,12 +159,14 @@ export class VoiceRecordingService {
           };
 
           this.speechRecognition.onend = () => {
-            if (this.lastLiveTranscript && this.onAutoResultCallback) {
+            if (this.onAutoResultCallback) {
               const text = this.lastLiveTranscript;
               this.lastLiveTranscript = '';
               const cb = this.onAutoResultCallback;
               this.onAutoResultCallback = null;
-              cb(text);
+              if (text && text.trim()) {
+                cb(text.trim());
+              }
             }
           };
 
@@ -244,12 +249,12 @@ export class VoiceRecordingService {
       try { this.mediaRecorder.stop(); } catch (e) {}
     }
 
-    if (this.audioChunks && this.audioChunks.length > 0) {
-      blob = new Blob(this.audioChunks, { type: 'audio/wav' });
-      this.audioChunks = [];
-    } else if (this.pcmSamples && this.pcmSamples.length > 0) {
+    if (this.pcmSamples && this.pcmSamples.length > 0) {
       blob = this.buildWavFromPcm(this.pcmSamples, 16000);
       this.pcmSamples = [];
+    } else if (this.audioChunks && this.audioChunks.length > 0) {
+      blob = new Blob(this.audioChunks, { type: 'audio/wav' });
+      this.audioChunks = [];
     }
 
     if (this.recording) {

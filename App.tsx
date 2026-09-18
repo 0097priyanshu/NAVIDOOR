@@ -48,15 +48,7 @@ export default function App() {
 
   // 1. Role Selection Screen (App Launch)
   if (userRole === 'undecided') {
-
     return <RoleSelectionScreen />;
-    return (
-      <>
-        <RoleSelectionScreen />
-        <SOSModal />
-      </>
-    );
-
   }
 
   // 2. Family Caregiver Mode Experience

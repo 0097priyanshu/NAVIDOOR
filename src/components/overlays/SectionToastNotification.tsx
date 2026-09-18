@@ -62,11 +62,11 @@ const SECTION_DETAILS: Record<NavMode, SectionMeta> = {
     icon: <Settings size={44} color="#FFFFFF" />,
   },
   location: {
-    title: 'LOCATION & GPS',
+    title: 'LIVE LOCATION & GPS',
     icon: <Compass size={44} color="#FFFFFF" />,
   },
   medical: {
-    title: 'MEDICAL INFO',
+    title: 'MEDICAL & PRESCRIPTION',
     icon: <Pill size={44} color="#FFFFFF" />,
   },
 };

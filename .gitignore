@@ -21,11 +21,18 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Local AI Models, Binaries, and Temp Files
+# Local AI Models, Binaries, Virtual Environments, and Temp Files
 backend/bin/
 backend/models/
 backend/temp/
 backend/uploads/
+backend/indicf5_env/
+*_env/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
 *.bin
 *.onnx
 *.exe

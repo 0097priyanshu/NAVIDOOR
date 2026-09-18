@@ -1,6 +1,6 @@
 # NAVIDOOR Local Multilingual Speech Pipeline Setup Guide
 
-This guide provides step-by-step instructions for team members to set up and run the 100% offline **Whisper.cpp STT** and **Piper TTS** voice navigation pipeline locally without API keys, cloud services, or external databases.
+This guide provides step-by-step instructions for team members to set up and run the 100% offline **Whisper.cpp STT** speech pipeline locally without API keys, cloud services, or external databases.
 
 ---
 
@@ -21,10 +21,7 @@ Socket.IO Event Bus & AI Q&A Engine (/api/chat)
   │
   ├── Dynamic response generation from user speech + live camera context
   │
-  ▼
-Local Piper TTS Engine (piper.exe + en_US-lessac-high.onnx voice model)
-  │
-  └── Device Speaker Audio Playback
+  └── Device Speaker Audio Playback (expo-speech / Web Speech API)
 ```
 
 ---
@@ -37,19 +34,12 @@ Ensure the following directory structure exists in your project workspace:
 NAVIDOOR/
 ├── backend/
 │   ├── bin/
-│   │   ├── main.exe                   # Whisper.cpp binary
-│   │   └── piper/                     # Piper TTS directory
-│   │       ├── piper.exe              # Piper executable
-│   │       └── espeak-ng-data/        # Phonetic voice data
+│   │   └── main.exe                   # Whisper.cpp binary
 │   ├── models/
-│   │   ├── whisper/
-│   │   │   └── ggml-base.bin          # Multilingual Whisper model (~148 MB)
-│   │   └── piper/
-│   │       ├── en_US-lessac-high.onnx # Piper ONNX voice model (~114 MB)
-│   │       └── en_US-lessac-high.onnx.json
+│   │   └── whisper/
+│   │       └── ggml-base.bin          # Multilingual Whisper model (~148 MB)
 │   ├── services/
-│   │   ├── whisperService.js
-│   │   └── piperService.js
+│   │   └── whisperService.js
 │   └── temp/                          # Temporary WAV processing folder
 ```
 
@@ -63,8 +53,6 @@ To automatically download all required models and binaries, run:
 node backend/scripts/setup_speech_pipeline.js
 ```
 
-> **Note**: If `setup_speech_pipeline.js` is not present, use the manual download links in Section 4 below.
-
 ---
 
 ## 4. Manual Model & Binary Download Links
@@ -76,32 +64,18 @@ If setting up manually, download the exact files below into their designated fol
 - **Download Link**: [HuggingFace ggml-base.bin](https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin) (~148 MB)
 - **Supported Languages**: 99 languages (English, Hindi, Marathi, Gujarati, Punjabi, Bengali, Tamil, Telugu, Kannada, Malayalam, etc.).
 
-### B. Piper TTS Voice Model (English Default)
-- **Save Location**: `backend/models/piper/en_US-lessac-high.onnx`
-- **Download Link (.onnx)**: [HuggingFace ONNX Model](https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high/en_US-lessac-high.onnx) (~114 MB)
-- **Download Link (.json)**: [HuggingFace JSON Config](https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high/en_US-lessac-high.onnx.json)
-
-### C. Executable Binaries (Windows AMD64)
+### B. Executable Binaries (Windows AMD64)
 - **Whisper CLI Release**: [whisper-bin-x64.zip (v1.5.4)](https://github.com/ggerganov/whisper.cpp/releases/download/v1.5.4/whisper-bin-x64.zip)
   - Extract `main.exe` and `whisper.dll` to `backend/bin/`.
-- **Piper CLI Release**: [piper_windows_amd64.zip (v1.2.0)](https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip)
-  - Extract contents into `backend/bin/piper/`.
 
 ---
 
-## 5. Verification Commands
+## 5. Verification Command
 
-Run these commands in PowerShell or Terminal to verify local model execution before launching the app:
+Run this command in PowerShell or Terminal to verify local model execution:
 
-### Test 1: Piper TTS Synthesis Test
 ```powershell
-echo "Hello, where is the nearest exit?" | & "backend/bin/piper/piper.exe" --model "backend/models/piper/en_US-lessac-high.onnx" --output_file "backend/temp/test_output.wav"
-```
-- **Expected Result**: Generates `backend/temp/test_output.wav` (~112 KB audio file in ~0.7 seconds).
-
-### Test 2: Whisper.cpp Transcription Test
-```powershell
-& "backend/bin/main.exe" -m "backend/models/whisper/ggml-base.bin" -f "backend/temp/test_output.wav" -l en
+& "backend/bin/main.exe" -m "backend/models/whisper/ggml-base.bin" -f "backend/temp/sample.wav" -l en
 ```
 - **Expected Result Output**:
   ```text
