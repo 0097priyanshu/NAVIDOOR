@@ -299,60 +299,66 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     }
 
     // Interactive Real-Time Voice Conversation Q&A & NLP Intent Engine
-    const liveContext = {
-      detectedObjects: get().detectedObjects,
-      activeMode: get().activeMode,
-      torchOn: get().torchOn
-    };
-    const { answer, intent } = await voiceConversationService.processUserSpeech(input, get().activeLanguageCode, liveContext);
+    try {
+      const liveContext = {
+        detectedObjects: get().detectedObjects,
+        activeMode: get().activeMode,
+        torchOn: get().torchOn
+      };
+      const { answer, intent } = await voiceConversationService.processUserSpeech(input, get().activeLanguageCode, liveContext);
 
-    if (intent) {
-      if (intent.action === 'logoutUser') {
-        get().setIsProfileModalOpen(false);
-        get().setFamilyUser(null);
-        get().setFamilyConnectedUserPhone(null);
-        get().setFamilyConnectedUserData(null);
-        get().setFamilyConnectionStatus('idle');
-        get().setUserRole('undecided');
-        get().setIsFirstTimeUser(false);
-      } else if (intent.action === 'switchLanguage' && intent.targetLanguage) {
-        get().setActiveLanguageCode(intent.targetLanguage);
-        if (intent.targetLanguageName) get().setUserLanguage(intent.targetLanguageName);
-      } else if (intent.action === 'switchMode' && intent.targetMode) {
-        get().setActiveMode(intent.targetMode);
-      } else if (intent.action === 'cycleNextMode') {
-        const modes: NavMode[] = ['assist', 'read', 'medicine', 'transport', 'navigate', 'family', 'history'];
-        const currIdx = modes.indexOf(get().activeMode);
-        get().setActiveMode(modes[(currIdx + 1) % modes.length]);
-      } else if (intent.action === 'updateProfile') {
-        if (intent.updateField === 'userName' && intent.updateValue) get().setUserName(intent.updateValue);
-        if (intent.updateField === 'userPhone' && intent.updateValue) get().setUserPhone(intent.updateValue);
-      } else if (intent.action === 'manageMedication') {
-        if (intent.subAction === 'add' && intent.medicationName) {
-          const newMed = {
-            id: `med-${Date.now()}`,
-            name: intent.medicationName,
-            dosage: '1 Pill',
-            instructions: 'Take daily as prescribed',
-            remainingPills: 20,
-            nextScheduledTime: '8:00 AM Today',
-            prescribedFor: 'General Health'
-          };
-          set({ medicines: [newMed, ...(get().medicines || [])] });
-          get().setActiveMode('medicine');
-        } else if (intent.subAction === 'confirm') {
-          const meds = get().medicines;
-          if (meds && meds.length > 0) get().confirmMedicineTaken(meds[0].id);
+      if (intent) {
+        if (intent.action === 'logoutUser') {
+          get().setIsProfileModalOpen(false);
+          get().setFamilyUser(null);
+          get().setFamilyConnectedUserPhone(null);
+          get().setFamilyConnectedUserData(null);
+          get().setFamilyConnectionStatus('idle');
+          get().setUserRole('undecided');
+          get().setIsFirstTimeUser(false);
+        } else if (intent.action === 'switchLanguage' && intent.targetLanguage) {
+          get().setActiveLanguageCode(intent.targetLanguage);
+          if (intent.targetLanguageName) get().setUserLanguage(intent.targetLanguageName);
+        } else if (intent.action === 'switchMode' && intent.targetMode) {
+          get().setActiveMode(intent.targetMode);
+        } else if (intent.action === 'cycleNextMode') {
+          const modes: NavMode[] = ['assist', 'read', 'medicine', 'transport', 'navigate', 'family', 'history'];
+          const currIdx = modes.indexOf(get().activeMode);
+          get().setActiveMode(modes[(currIdx + 1) % modes.length]);
+        } else if (intent.action === 'updateProfile') {
+          if (intent.updateField === 'userName' && intent.updateValue) get().setUserName(intent.updateValue);
+          if (intent.updateField === 'userPhone' && intent.updateValue) get().setUserPhone(intent.updateValue);
+        } else if (intent.action === 'manageMedication') {
+          if (intent.subAction === 'add' && intent.medicationName) {
+            const newMed = {
+              id: `med-${Date.now()}`,
+              name: intent.medicationName,
+              dosage: '1 Pill',
+              instructions: 'Take daily as prescribed',
+              remainingPills: 20,
+              nextScheduledTime: '8:00 AM Today',
+              prescribedFor: 'General Health'
+            };
+            set({ medicines: [newMed, ...(get().medicines || [])] });
+            get().setActiveMode('medicine');
+          } else if (intent.subAction === 'confirm') {
+            const meds = get().medicines;
+            if (meds && meds.length > 0) get().confirmMedicineTaken(meds[0].id);
+          }
+        } else if (intent.action === 'updateSettings') {
+          if (intent.theme) get().setThemeMode(intent.theme);
+          if (intent.speechRate) get().setSpeechRate(intent.speechRate);
+          if (intent.fontScale) get().setFontScale(intent.fontScale);
         }
-      } else if (intent.action === 'updateSettings') {
-        if (intent.theme) get().setThemeMode(intent.theme);
-        if (intent.speechRate) get().setSpeechRate(intent.speechRate);
-        if (intent.fontScale) get().setFontScale(intent.fontScale);
       }
-    }
 
-    if (answer) {
-      get().speak(answer);
+      if (answer) {
+        get().speak(answer);
+      }
+    } catch (err: any) {
+      console.error('[NavidoorStore] Voice AI Assistant Error:', err.message || err);
+      get().stopVoice();
+      get().speak('AI assistant is temporarily unavailable.');
     }
   },
 

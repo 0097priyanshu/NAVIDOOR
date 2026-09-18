@@ -4,10 +4,10 @@
 
 **NAVIDOOR** is an Indian, offline-first AI accessibility assistant and dual-portal ecosystem designed for visually impaired users and their family caregivers.
 It runs as a React Native (Expo) mobile application with two distinct role experiences:
-1. **NAVIDOOR User Mode**: AI vision assist, camera OCR/object detection, voice assistant, and 9 navigation modes.
+1. **NAVIDOOR User Mode**: AI vision assist, camera OCR/object detection (YOLOv11), general-purpose local LLM voice assistant, and 9 navigation modes.
 2. **Family Companion Portal**: Dedicated visual dashboard for caregivers with real-time location monitoring, active journey tracking, emergency SOS alerts, and pairing management.
 
-It communicates with a local Node.js backend server running on your PC over your LAN (Wi-Fi).
+It communicates with a local Node.js backend server running on your PC over your LAN (Wi-Fi), integrated with a local Ollama LLM runtime and AI4Bharat IndicF5 neural TTS microservice.
 
 ---
 
@@ -25,7 +25,7 @@ NAVIDOOR/
 │
 ├── src/                     ← All React Native frontend code
 │   ├── components/          ← All UI components
-│   │   ├── camera/          ← Camera view, photo capture, AI overlay
+│   │   ├── camera/          ← Camera view, photo capture, AI overlay (YOLOv11)
 │   │   ├── header/          ← Top status bar (SOS button, profile)
 │   │   ├── navigation/      ← Rotating AI Mode Wheel (bottom nav)
 │   │   ├── overlays/        ← Modular section panels & toast notifications
@@ -43,23 +43,22 @@ NAVIDOOR/
 │   └── utils/               ← Speech utils, translations, helpers
 │
 └── backend/                 ← Node.js Express server (runs on PC / LAN)
-    ├── index.js             ← Main Express server + Family & User REST APIs + Socket.IO server
+    ├── index.js             ← Main Express server + STT/TTS/Chat REST APIs + Socket.IO server
     ├── bin/
-    │   ├── main.exe         ← Whisper.cpp compiled binary (STT)
-    │   └── piper/           ← Piper TTS binary + espeak-ng-data
+    │   └── main.exe         ← Whisper.cpp compiled binary (STT)
     ├── models/
-    │   ├── whisper/
-    │   │   └── ggml-base.bin           ← Whisper multilingual model (147MB)
-    │   └── piper/
-    │       └── en_US-lessac-high.onnx  ← Piper English voice (113MB)
+    │   └── whisper/
+    │       └── ggml-base.bin           ← Whisper multilingual model (147MB)
     ├── config/
-    │   └── languages.js     ← 10 Indian language configs
+    │   └── languages.js     ← 10 Indian language configs (en, hi, mr, gu, pa, bn, ta, te, kn, ml)
+    ├── indicf5/
+    │   └── indicf5_server.py           ← AI4Bharat IndicF5 Python Neural TTS microservice (port 5002)
     └── services/
-        ├── whisperService.js     ← Whisper.cpp STT logic
-        ├── piperService.js       ← Piper TTS logic
+        ├── whisperService.js     ← Whisper.cpp STT engine wrapper (-t 8 -bs 5 -bo 5 -l auto)
+        ├── indicf5Service.js     ← AI4Bharat IndicF5 TTS engine client wrapper
+        ├── aiAssistantService.js ← Local Ollama LLM Reasoning Engine (qwen2.5-coder:7b / llama3)
         ├── socketService.js      ← Socket.IO real-time event hub
-        ├── translationService.js
-        └── aiAssistantService.js
+        └── translationService.js ← Regional Indian language translation engine
 ```
 
 ---
@@ -75,7 +74,7 @@ NAVIDOOR/
 | **TypeScript** | ~5.3.3 | Type safety across all frontend code |
 | **Zustand** | ^4.5.2 | Global state management (replaces Redux) |
 | **expo-camera** | ~15.0.16 | Real-time camera access & photo capture |
-| **expo-speech** | ~12.0.2 | Device TTS fallback for ALL languages on Android |
+| **expo-speech** | ~12.0.2 | Device TTS fallback for Web & Native |
 | **expo-haptics** | ~13.0.1 | Vibration feedback on mode swipes & button interactions |
 | **expo-location** | ~17.0.1 | GPS for navigation mode & emergency SOS broadcast |
 | **expo-av** | ~14.0.7 | Audio recording for Whisper STT |
@@ -83,14 +82,15 @@ NAVIDOOR/
 | **lucide-react-native** | ^0.395.0 | Complete icon system (Shield, MapPin, Activity, etc.) |
 | **socket.io-client** | ^4.8.3 | Real-time family stream & SOS event listener |
 
-### Backend (Node.js Express — runs on PC / LAN)
+### Backend & AI Engine (Node.js Express + Python Microservices — runs on PC / LAN)
 
-| Technology | Version | Purpose |
+| Technology | Version / Model | Purpose |
 |---|---|---|
-| **Node.js + Express** | ^4.22.2 | HTTP API server & Family REST Endpoints |
-| **Whisper.cpp** | Native binary | Offline multilingual Speech-to-Text |
-| **Piper TTS** | Native binary | Offline Text-to-Speech (English only currently) |
-| **ffmpeg-static** | ^5.3.0 | Converts M4A/AAC mic recordings → 16kHz WAV for Whisper |
+| **Node.js + Express** | ^4.22.2 | Main HTTP API server & Family REST Endpoints |
+| **Whisper.cpp** | Native binary (`ggml-base.bin`) | Offline multilingual Speech-to-Text (STT) |
+| **Local Ollama LLM** | `qwen2.5-coder:7b` / `llama3` | General-purpose AI reasoning & vision context Q&A engine |
+| **AI4Bharat IndicF5** | PyTorch / Python microservice | Neural Text-to-Speech (TTS) for 10 regional Indian languages |
+| **ffmpeg-static** | ^5.3.0 | Resamples microphone recordings → 16kHz Mono PCM WAV for Whisper |
 | **Socket.IO** | ^4.8.3 | Real-time family remote assist & pairing socket gateway |
 | **multer** | ^1.4.5 | Handles audio file uploads from the app |
 | **cors** | ^2.8.6 | Allows mobile app to call backend over LAN |
@@ -112,19 +112,52 @@ App launch (App.tsx)
 └── Case 'navidoor_user': Renders main AI Accessibility workspace (<CameraViewCanvas />, <RotatingAIModeWheel />, <SectionViewPanel />)
 ```
 
-### 2. Family Companion Caregiver Portal (`src/components/family/`)
+### 2. General-Purpose Voice AI & Reasoning Pipeline
 ```
-<FamilyModeContainer />
-├── Semi-Circle Arc Wheel Navbar: 5 tabs sit on a curved arc dock (HOME, LOCATION, ACTIVITY, ALERTS, PROFILE)
-├── Full-Screen & Wheel Gestures: Horizontal swipe gestures cycle smoothly between tabs with haptic feedback
-├── FamilyHomeTab: Displays caregiver greeting (Priya Sharma), connected NAVIDOOR user profile card (Aarav Sharma), live location summary, active journey, battery/GPS status
-├── FamilyLocationTab: Interactive map canvas with Indian street mapping (Connaught Place, Janpath Road)
-├── FamilyActivityTab: Detailed journey progress and activity timelines
-├── FamilyAlertsTab: Emergency SOS log and 1-tap contact dialer
-└── FamilyProfileTab: Active sharing permissions manager and portal logout
+                  ┌───────────────┐
+                  │  Microphone   │
+                  └───────┬───────┘
+                          ↓
+                  ┌───────────────┐
+                  │  Whisper.cpp  │ (Offline STT: -t 8 -bs 5 -bo 5 -l auto)
+                  └───────┬───────┘
+                          ↓
+                      Transcript
+                          ↓
+                  ┌───────────────┐
+                  │ Node /api/chat│
+                  │ Local Ollama  │ (qwen2.5-coder:7b / llama3)
+                  └───────┬───────┘
+                          ↓
+                     Real Answer
+                          ↓
+                  ┌───────────────┐
+                  │  IndicF5 TTS  │ (Neural Speech Synthesis for 10 Indian Languages)
+                  └───────┬───────┘
+                          ↓
+                       Speaker
 ```
 
-### 3. Modular Panel Overlays Architecture (`src/components/overlays/panels/`)
+### 3. Camera Perception & Vision Question Pipeline
+```
+Camera Feed
+   ↓
+YOLOv11 Object Detection
+   ↓
+real detectedObjects (class, confidence, distance, position)
+   ↓
+context payload
+   ↓
+Node /api/chat
+   ↓
+Local Ollama LLM (System Prompt integrates visual context without hallucinating)
+   ↓
+Context-Aware Spoken Answer
+   ↓
+AI4Bharat IndicF5 TTS
+```
+
+### 4. Modular Panel Overlays Architecture (`src/components/overlays/panels/`)
 ```
 <SectionViewPanel />
 ├── Renders modular panel overlay based on activeMode:
@@ -137,31 +170,7 @@ App launch (App.tsx)
 │     └── 'family' -> <FamilyPanel />
 ```
 
-### 4. Voice Input (Speaking to the app)
-```
-User holds MIC button
-→ expo-av records microphone audio (M4A file)
-→ Audio file uploaded to backend POST /api/stt
-→ Backend runs FFmpeg: M4A → 16kHz Mono WAV
-→ Backend runs whisper.cpp: WAV → text transcription
-→ Text returned to app
-→ voiceCommandProcessor.parseCommand(text)
-  → Switches nav mode / changes language / opens SOS etc.
-→ OR: text sent to POST /api/chat for AI assistant response
-```
-
-### 5. Voice Output (App speaking back to you)
-```
-App calls speakAnnouncement(text, { languageCode })
-→ On WEB: tries Piper TTS backend (POST /api/tts) first
-   → Backend runs piper.exe with onnx model → WAV audio
-   → App plays WAV via HTML Audio element
-   → If backend offline: falls back to Web Speech API
-→ On ANDROID: goes directly to expo-speech
-   → Device's built-in TTS engine (supports all 10 Indian languages natively)
-```
-
-### 6. Emergency SOS & Family Remote Assist
+### 5. Emergency SOS & Family Remote Assist
 ```
 User triggers Emergency SOS (Voice or Header SOS button)
 → SOSModal opens with countdown & alert sound
@@ -172,33 +181,16 @@ User triggers Emergency SOS (Voice or Header SOS button)
 
 ---
 
-## Current Reality of TTS Languages
-
-| Language | Piper TTS (backend) | expo-speech (Android) |
-|---|---|---|
-| English | ✅ en_US-lessac-high (113MB, high quality) | ✅ |
-| Hindi | ⚠️ Model file not downloaded | ✅ Device TTS works great |
-| Marathi | ❌ No Piper model exists | ✅ Device TTS works great |
-| Gujarati | ❌ No Piper model exists | ✅ Device TTS works great |
-| Punjabi | ❌ No Piper model exists | ✅ Device TTS works great |
-| Bengali | ❌ No Piper model exists | ✅ Device TTS works great |
-| Tamil | ❌ No Piper model exists | ✅ Device TTS works great |
-| Telugu | ❌ No Piper model exists | ✅ Device TTS works great |
-| Kannada | ❌ No Piper model exists | ✅ Device TTS works great |
-| Malayalam | ❌ No Piper model exists | ✅ Device TTS works great |
-
----
-
 ## Backend API Endpoints
 
 | Method | Route | What it does |
 |---|---|---|
-| GET | `/api/health` | Backend health check |
+| GET | `/api/health` | Backend & IndicF5 health check |
 | GET | `/api/languages` | Returns list of 10 supported Indian languages |
-| POST | `/api/stt` | Whisper.cpp: audio file → transcribed text |
-| POST | `/api/tts` | Piper TTS: text → WAV audio buffer |
-| POST | `/api/translate` | Translation service |
-| POST | `/api/chat` | AI assistant response |
+| POST | `/api/stt` | Whisper.cpp: audio file → 16kHz WAV → transcribed text |
+| POST | `/api/chat` | Local Ollama LLM: user query + context → real AI answer |
+| POST | `/api/tts` | AI4Bharat IndicF5: text + language → synthesized WAV buffer |
+| POST | `/api/translate` | Regional language translation service |
 | POST | `/api/family/login` | Family companion caregiver authentication |
 | POST | `/api/family/register` | Family companion caregiver account signup |
 | POST | `/api/family/connect` | Connection request submit & pairing handling |
@@ -224,5 +216,10 @@ User triggers Emergency SOS (Voice or Header SOS button)
 | `src/components/overlays/SectionViewPanel.tsx` | Root section view panel container |
 | `src/components/overlays/panels/` | Modular overlay panels (Emergency, Location, Medical, Settings, Languages, etc.) |
 | `src/services/voiceAssistantBackend.ts` | Backend HTTP API client + LAN auto-discovery |
+| `src/services/voiceRecordingService.ts` | Mic permission, Web PCM sample recorder & native audio capture |
 | `src/services/socketClient.ts` | Socket.IO real-time client wrapper |
-| `backend/index.js` | Express server with STT/TTS routes, family REST APIs, and Socket.IO gateway |
+| `backend/index.js` | Express server with STT/TTS/Chat routes, family REST APIs, and Socket.IO gateway |
+| `backend/services/whisperService.js` | Whisper.cpp native STT execution engine |
+| `backend/services/aiAssistantService.js` | Local Ollama LLM Reasoning Engine (`qwen2.5-coder:7b` / `llama3`) |
+| `backend/services/indicf5Service.js` | AI4Bharat IndicF5 Neural TTS microservice client |
+| `backend/indicf5/indicf5_server.py` | Python Flask microservice serving AI4Bharat IndicF5 PyTorch TTS |

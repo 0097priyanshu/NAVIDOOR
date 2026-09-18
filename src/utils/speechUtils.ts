@@ -1,7 +1,7 @@
 import * as Speech from 'expo-speech';
 import { Platform } from 'react-native';
 import { SupportedLanguageCode } from '../types';
-import { requestPiperTTS } from '../services/voiceAssistantBackend';
+import { requestIndicF5TTS } from '../services/voiceAssistantBackend';
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let currentAudioElement: HTMLAudioElement | null = null;
@@ -25,12 +25,11 @@ export const speakAnnouncement = async (
 ) => {
   const { rate = 1.0, pitch = 1.0, interrupt = true, languageCode = 'en' } = options;
 
-  // On web: Disabled slow backend TTS in favor of zero-latency native browser synthesis
-  /*
+  // 1. On Web: Try AI4Bharat IndicF5 backend synthesis first
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     try {
-      const audioBuffer = await requestPiperTTS(text, languageCode);
-      if (audioBuffer) {
+      const audioBuffer = await requestIndicF5TTS(text, languageCode);
+      if (audioBuffer && audioBuffer.byteLength > 100) {
         if (interrupt && currentAudioElement) {
           currentAudioElement.pause();
         }
@@ -38,16 +37,15 @@ export const speakAnnouncement = async (
         const url = URL.createObjectURL(blob);
         currentAudioElement = new Audio(url);
         currentAudioElement.playbackRate = rate;
-        currentAudioElement.play().catch(e => console.warn('Audio play blocked:', e));
+        await currentAudioElement.play().catch(e => console.warn('[IndicF5 Playback Note]:', e));
         return;
       }
     } catch (_) {
-      // Backend offline — fall through to Web Speech API
+      // Backend offline or loading — fall through to Web Speech API
     }
   }
-  */
 
-  // 3. Standard Web & Native Speech Synthesis Fallback
+  // 2. Standard Web & Native Speech Synthesis Fallback
   const targetLang = LANG_CODE_MAP[languageCode] || 'en-US';
 
   if (Platform.OS === 'web') {
