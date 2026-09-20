@@ -8,7 +8,10 @@
     "web": "expo start --web",
     "build:web": "expo export -p web",
     "lint": "tsc --noEmit",
-    "server": "node backend/index.js"
+    "server": "node backend/index.js",
+    "flutter:run": "flutter run -d chrome --target navidoor_flutter/lib/main.dart",
+    "flutter:web": "flutter run -d chrome --target navidoor_flutter/lib/main.dart",
+    "flutter:desktop": "flutter run -d windows --target navidoor_flutter/lib/main.dart"
   },
   "dependencies": {
     "@expo/html-elements": "^0.9.0",
