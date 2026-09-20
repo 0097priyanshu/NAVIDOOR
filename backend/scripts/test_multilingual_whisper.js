@@ -4,8 +4,6 @@ const path = require('path');
 
 const binPath = path.join(__dirname, '../bin/main.exe');
 const modelPath = path.join(__dirname, '../models/whisper/ggml-base.bin');
-const piperBin = path.join(__dirname, '../bin/piper/piper.exe');
-const piperModel = path.join(__dirname, '../models/piper/en_US-lessac-high.onnx');
 
 const TEST_LANGUAGES = [
   { code: 'en', name: 'English', text: 'Where is the nearest doorway?' },
@@ -71,9 +69,9 @@ for (const lang of TEST_LANGUAGES) {
   const wav16k = path.join(__dirname, `../temp/synth_${lang.code}_16k.wav`);
 
   try {
-    // 1. Synthesize audio sample using Piper
-    execSync(`echo "${lang.text.replace(/"/g, '\\"')}" | "${piperBin}" --model "${piperModel}" --output_file "${rawWav}"`, { stdio: 'ignore' });
-    resampleTo16kMono(rawWav, wav16k);
+    if (!fs.existsSync(wav16k) && fs.existsSync(rawWav)) {
+      resampleTo16kMono(rawWav, wav16k);
+    }
 
     // 2. Run Whisper.cpp with auto-language detection (-dl)
     const startTime = Date.now();

@@ -1,0 +1,9 @@
+f5-tts
+torch
+torchaudio
+soundfile
+transformers
+huggingface_hub
+flask
+scipy
+pydantic

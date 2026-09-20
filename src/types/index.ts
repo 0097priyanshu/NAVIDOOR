@@ -68,14 +68,12 @@ export interface LanguageMeta {
   name: string;
   nativeName: string;
   flag: string;
-  piperVoice: string;
   whisperLang: string;
 }
 
 export interface VoiceBackendStatus {
   online: boolean;
   whisperEngine: 'whisper.cpp' | 'simulated';
-  piperEngine: 'piper-tts' | 'simulated';
   activeLanguage: SupportedLanguageCode;
   supportedLanguages: SupportedLanguageCode[];
 }

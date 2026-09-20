@@ -8,7 +8,7 @@ const { Server } = require('socket.io');
 
 const { SUPPORTED_LANGUAGES } = require('./config/languages');
 const whisperService = require('./services/whisperService');
-const piperService = require('./services/piperService');
+const indicf5Service = require('./services/indicf5Service');
 const translationService = require('./services/translationService');
 const aiAssistantService = require('./services/aiAssistantService');
 const { setupSocketIO } = require('./services/socketService');
@@ -47,12 +47,15 @@ const io = new Server(server, {
 setupSocketIO(io);
 
 // 1. Health check endpoint
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  const indicf5Status = await indicf5Service.checkStatus();
   res.json({
     status: 'online',
     system: 'NAVIDOOR Backend Engine',
     whisperEngine: 'whisper.cpp-native',
-    piperEngine: 'piper-tts-native'
+    indicf5Engine: indicf5Status.engine,
+    indicf5Online: indicf5Status.online,
+    indicf5Device: indicf5Status.device || 'CPU'
   });
 });
 
@@ -76,17 +79,21 @@ app.post('/api/translate', async (req, res) => {
   }
 });
 
-// 4. AI Assistant Query Endpoint
+// 4. AI Assistant Query Endpoint (Local Ollama LLM Reasoning Engine)
 app.post('/api/chat', async (req, res) => {
   try {
-    const { query, language = 'en', context = {} } = req.body;
+    const { query, language = 'en', context = {}, sessionId = 'default' } = req.body;
     if (!query) {
       return res.status(400).json({ success: false, error: 'Query parameter is required.' });
     }
 
-    const result = await aiAssistantService.processQuery(query, language, context);
+    const result = await aiAssistantService.processQuery(query, language, context, sessionId);
     const answer = typeof result === 'string' ? result : (result.answer || '');
     const intent = typeof result === 'object' ? result.intent : null;
+
+    if (!answer) {
+      return res.status(500).json({ success: false, error: 'Local AI LLM returned empty answer.' });
+    }
 
     io.emit('ai_response', { query, answer, intent, language, timestamp: Date.now() });
 
@@ -95,11 +102,16 @@ app.post('/api/chat', async (req, res) => {
       query,
       answer,
       intent,
-      language
+      language,
+      model: result.model || 'qwen2.5-coder:7b',
+      source: result.source || 'ollama'
     });
   } catch (err) {
-    console.error('[API /api/chat Error]:', err);
-    res.status(500).json({ success: false, error: 'AI Assistant processing failed.' });
+    console.error('[API /api/chat Error]:', err.message);
+    res.status(503).json({
+      success: false,
+      error: `Local LLM AI Service (Ollama) Unavailable: ${err.message}`
+    });
   }
 });
 
@@ -143,30 +155,29 @@ app.post('/api/stt', upload.single('audio'), async (req, res) => {
   }
 });
 
-// 6. Text-to-Speech Endpoint (Piper TTS)
+// 6. Text-to-Speech Endpoint (AI4Bharat IndicF5 Neural TTS)
 app.post('/api/tts', async (req, res) => {
   try {
     const { text, language = 'en' } = req.body;
     if (!text) {
-      return res.status(400).json({ success: false, error: 'Text is required.' });
+      return res.status(400).json({ success: false, error: 'Text parameter is required.' });
     }
 
-    const result = await piperService.synthesizeSpeech(text, language);
-    if (!result) {
-      return res.status(500).json({ success: false, error: 'Piper TTS synthesis failed.' });
+    const result = await indicf5Service.synthesizeSpeech(text, language);
+    if (!result || !result.audioBuffer) {
+      return res.status(500).json({ success: false, error: 'AI4Bharat IndicF5 synthesis failed.' });
     }
 
     res.set({
-      'Content-Type': result.contentType,
+      'Content-Type': result.contentType || 'audio/wav',
       'Content-Length': result.audioBuffer.length,
-      'X-Voice-Engine': result.engine,
-      'X-Voice-Model': result.voice
+      'X-Voice-Engine': result.engine || 'indicf5-ai4bharat'
     });
 
     res.send(result.audioBuffer);
   } catch (err) {
     console.error('[API /api/tts Error]:', err);
-    res.status(500).json({ success: false, error: 'Piper TTS synthesis failed.' });
+    res.status(500).json({ success: false, error: 'IndicF5 synthesis failed.' });
   }
 });
 
