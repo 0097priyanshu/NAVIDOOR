@@ -1,10 +1,33 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:provider/provider.dart';
 import '../models/nav_models.dart';
 import '../providers/navidoor_provider.dart';
-import '../theme/design_system.dart';
-import 'modals/sos_modal.dart';
+
+enum FamilyTab { home, location, activity, alerts, profile }
+
+class FamilyTabItem {
+  final FamilyTab id;
+  final String label;
+  final IconData icon;
+  final bool isAlert;
+
+  const FamilyTabItem({
+    required this.id,
+    required this.label,
+    required this.icon,
+    this.isAlert = false,
+  });
+}
+
+const List<FamilyTabItem> kFamilyTabs = [
+  FamilyTabItem(id: FamilyTab.home, label: 'HOME', icon: LucideIcons.house),
+  FamilyTabItem(id: FamilyTab.location, label: 'LOCATION', icon: LucideIcons.map_pin),
+  FamilyTabItem(id: FamilyTab.activity, label: 'ACTIVITY', icon: LucideIcons.activity),
+  FamilyTabItem(id: FamilyTab.alerts, label: 'ALERTS', icon: LucideIcons.triangle_alert, isAlert: true),
+  FamilyTabItem(id: FamilyTab.profile, label: 'PROFILE', icon: LucideIcons.user),
+];
 
 class FamilyPortalScreen extends StatefulWidget {
   const FamilyPortalScreen({super.key});
@@ -14,549 +37,1011 @@ class FamilyPortalScreen extends StatefulWidget {
 }
 
 class _FamilyPortalScreenState extends State<FamilyPortalScreen> {
-  int _selectedTabIndex = 0;
+  FamilyTab _activeTab = FamilyTab.home;
+  double _lastStepDx = 0;
+
+  void _cycleNextTab() {
+    final idx = kFamilyTabs.indexWhere((t) => t.id == _activeTab);
+    final nextIdx = (idx + 1) % kFamilyTabs.length;
+    setState(() => _activeTab = kFamilyTabs[nextIdx].id);
+  }
+
+  void _cyclePrevTab() {
+    final idx = kFamilyTabs.indexWhere((t) => t.id == _activeTab);
+    final prevIdx = (idx - 1 + kFamilyTabs.length) % kFamilyTabs.length;
+    setState(() => _activeTab = kFamilyTabs[prevIdx].id);
+  }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<NavidoorProvider>();
-    final isDesktop = ResponsiveHelper.isDesktop(context);
 
-    // If caregiver not logged in, show simple pairing auth card
+    // 1. If caregiver is not logged in, render FamilyAuthScreen (matching React Native FamilyAuthScreen.tsx)
     if (provider.familyUser == null) {
-      return _buildCaregiverAuth(context, provider);
+      return const _FamilyAuthView();
     }
 
+    // 2. Family Mode Container Experience (matching React Native FamilyModeContainer.tsx)
+    final activeIndex = math.max(0, kFamilyTabs.indexWhere((t) => t.id == _activeTab));
+    final screenWidth = MediaQuery.of(context).size.width;
+    final dockWidth = math.min(screenWidth - 14, 460.0);
+
     return Scaffold(
-      backgroundColor: AppColors.darkGray,
-      appBar: AppBar(
-        backgroundColor: AppColors.lightGrayBg,
-        elevation: 2,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: const BoxDecoration(
-                color: AppColors.cyanPrimary,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(LucideIcons.heart_handshake, color: AppColors.pureWhite, size: 18),
-            ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'FAMILY COMPANION PORTAL',
-                  style: TextStyle(
-                    color: AppColors.pureWhite,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 14,
-                    letterSpacing: 1.0,
+      backgroundColor: const Color(0xFF64748B),
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: (details) {
+          final velocity = details.primaryVelocity ?? 0;
+          if (velocity < -200) {
+            _cycleNextTab();
+          } else if (velocity > 200) {
+            _cyclePrevTab();
+          }
+        },
+        child: SafeArea(
+          child: Stack(
+            children: [
+              // Screen Tab Content Area
+              Positioned.fill(
+                bottom: 95,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: _buildActiveTab(context, provider),
                   ),
                 ),
+              ),
+
+              // Continuous Semi-Circle Arc Wheel Navbar (identical to React Native FamilyModeContainer.tsx)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 100,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: GestureDetector(
+                    onHorizontalDragStart: (details) => _lastStepDx = details.localPosition.dx,
+                    onHorizontalDragUpdate: (details) {
+                      final currentX = details.localPosition.dx;
+                      final diff = currentX - _lastStepDx;
+                      if (diff.abs() > 28) {
+                        if (diff < 0) {
+                          _cycleNextTab();
+                        } else {
+                          _cyclePrevTab();
+                        }
+                        _lastStepDx = currentX;
+                      }
+                    },
+                    child: Container(
+                      width: dockWidth,
+                      height: 92,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(38),
+                          topRight: Radius.circular(38),
+                        ),
+                        border: Border(
+                          top: BorderSide(color: Color(0xFF64748B), width: 1.5),
+                          left: BorderSide(color: Color(0xFF64748B), width: 1.5),
+                          right: BorderSide(color: Color(0xFF64748B), width: 1.5),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Color(0x260284C7),
+                            offset: Offset(0, -8),
+                            blurRadius: 16,
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        clipBehavior: Clip.none,
+                        children: kFamilyTabs.asMap().entries.map((entry) {
+                          final idx = entry.key;
+                          final item = entry.value;
+                          final offset = idx - activeIndex;
+                          final isActive = idx == activeIndex;
+
+                          // Arc offset
+                          final angle = (offset * math.pi) / 6.2;
+                          final posX = math.sin(angle) * (dockWidth > 400 ? 135 : (dockWidth * 0.35));
+                          final posY = (1 - math.cos(angle)) * 16;
+
+                          final scale = isActive ? 1.25 : (offset.abs() == 1 ? 0.95 : 0.78);
+                          final opacity = isActive ? 1.0 : (offset.abs() == 1 ? 0.88 : 0.58);
+
+                          final badgeBg = isActive
+                              ? (item.isAlert ? const Color(0xFFE11D48) : const Color(0xFF0284C7))
+                              : const Color(0xFF94A3B8);
+
+                          final labelColor = isActive
+                              ? (item.isAlert ? const Color(0xFFE11D48) : const Color(0xFF0284C7))
+                              : const Color(0xFF0F172A);
+
+                          return Positioned(
+                            bottom: 12 - posY,
+                            child: Transform.translate(
+                              offset: Offset(posX, 0),
+                              child: Transform.scale(
+                                scale: scale,
+                                child: Opacity(
+                                  opacity: opacity,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 52,
+                                        height: 52,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: badgeBg,
+                                        ),
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          shape: const CircleBorder(),
+                                          child: InkWell(
+                                            customBorder: const CircleBorder(),
+                                            onTap: () => setState(() => _activeTab = item.id),
+                                            child: Center(
+                                              child: Icon(
+                                                item.icon,
+                                                size: 22,
+                                                color: isActive ? Colors.white : const Color(0xFF0F172A),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        item.label,
+                                        style: TextStyle(
+                                          color: labelColor,
+                                          fontSize: 11.5,
+                                          fontWeight: isActive ? FontWeight.w900 : FontWeight.w700,
+                                          letterSpacing: 0.6,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveTab(BuildContext context, NavidoorProvider provider) {
+    switch (_activeTab) {
+      case FamilyTab.home:
+        return _buildHomeTab(context, provider);
+      case FamilyTab.location:
+        return _buildLocationTab(context, provider);
+      case FamilyTab.activity:
+        return _buildActivityTab(context, provider);
+      case FamilyTab.alerts:
+        return _buildAlertsTab(context, provider);
+      case FamilyTab.profile:
+        return _buildProfileTab(context, provider);
+    }
+  }
+
+  // 1. HOME TAB (matching React Native FamilyHomeTab.tsx)
+  Widget _buildHomeTab(BuildContext context, NavidoorProvider provider) {
+    final caregiverName = provider.familyUser?.name ?? 'Priya Sharma';
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Greeting Banner
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFF0284C7),
+                ),
+                child: const Center(
+                  child: Icon(LucideIcons.users, size: 22, color: Colors.white),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Good day,',
+                    style: TextStyle(
+                      color: Color(0xFFE2E8F0),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    caregiverName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Connected Navidoor User Status Card
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFCBD5E1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF475569), width: 1.5),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x260284C7),
+                  offset: Offset(0, 6),
+                  blurRadius: 16,
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(LucideIcons.circle_dot, color: Color(0xFF10B981), size: 14),
+                        SizedBox(width: 6),
+                        Text(
+                          'MONITORING ACTIVE',
+                          style: TextStyle(
+                            color: Color(0xFF10B981),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        '85% Battery',
+                        style: TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 Text(
-                  'Monitoring: ${provider.userName} (${provider.userPhone})',
+                  'Aarav Sharma (${provider.familyConnectedUserPhone ?? "+91 98123 45678"})',
                   style: const TextStyle(
-                    color: AppColors.cyanLight,
-                    fontSize: 11,
+                    color: Color(0xFF0F172A),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Walking safely with AI voice assist • 1.2 m/s',
+                  style: TextStyle(
+                    color: Color(0xFF475569),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Divider(color: Color(0xFF94A3B8), height: 24),
+                const Row(
+                  children: [
+                    Icon(LucideIcons.map_pin, size: 16, color: Color(0xFF0284C7)),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Block B, Connaught Place, New Delhi',
+                        style: TextStyle(
+                          color: Color(0xFF0F172A),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Journey In-Progress Card
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFCBD5E1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF475569), width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(LucideIcons.play, size: 18, color: Color(0xFF0284C7)),
+                    SizedBox(width: 8),
+                    Text(
+                      'ACTIVE WALKING JOURNEY',
+                      style: TextStyle(
+                        color: Color(0xFF0284C7),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'From: Connaught Place',
+                  style: TextStyle(
+                    color: Color(0xFF475569),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'To: AIIMS Hospital',
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Started 10:15 AM • Estimated ETA: 10:45 AM',
+                  style: TextStyle(
+                    color: Color(0xFF10B981),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 2. LOCATION TAB (matching React Native FamilyLocationTab.tsx)
+  Widget _buildLocationTab(BuildContext context, NavidoorProvider provider) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Column(
+        children: [
+          // Simulated Map Canvas
+          Container(
+            height: 260,
+            decoration: BoxDecoration(
+              color: const Color(0xFFCBD5E1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF475569), width: 1.5),
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Simulated grid & streets
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _MapGridPainter(),
+                  ),
+                ),
+                // Connaught Place street label
+                Positioned(
+                  top: 70,
+                  left: 20,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'Connaught Place',
+                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                // Janpath Road street label
+                Positioned(
+                  bottom: 70,
+                  right: 20,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'Janpath Road',
+                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                // Pulsing Center Marker
+                Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF0284C7).withValues(alpha: 0.25),
+                  ),
+                  child: Center(
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Color(0xFF0284C7),
+                      ),
+                      child: const Center(
+                        child: Icon(LucideIcons.navigation, size: 16, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Address Card
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFCBD5E1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF475569), width: 1.5),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(LucideIcons.map_pin, size: 18, color: Color(0xFF0284C7)),
+                    SizedBox(width: 8),
+                    Text(
+                      'CURRENT ADDRESS',
+                      style: TextStyle(
+                        color: Color(0xFF0284C7),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'Block B, Connaught Place, New Delhi',
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Coordinates: 28.6315° N, 77.2167° E • GPS Signal Strong',
+                  style: TextStyle(
+                    color: Color(0xFF475569),
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
             ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(LucideIcons.log_out, color: AppColors.pureWhite),
-            tooltip: 'Switch Role',
-            onPressed: () => provider.setUserRole(UserRole.undecided),
           ),
         ],
       ),
-      body: Stack(
+    );
+  }
+
+  // 3. ACTIVITY TAB (matching React Native FamilyActivityTab.tsx)
+  Widget _buildActivityTab(BuildContext context, NavidoorProvider provider) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Column(
         children: [
-          isDesktop
-              ? Row(
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFCBD5E1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF475569), width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
                   children: [
-                    // Desktop Navigation Rail
-                    NavigationRail(
-                      backgroundColor: AppColors.lightGrayBg.withValues(alpha: 0.35),
-                      selectedIndex: _selectedTabIndex,
-                      onDestinationSelected: (idx) => setState(() => _selectedTabIndex = idx),
-                      labelType: NavigationRailLabelType.all,
-                      selectedLabelTextStyle: const TextStyle(
-                        color: AppColors.cyanLight,
-                        fontWeight: FontWeight.bold,
+                    Icon(LucideIcons.activity, size: 18, color: Color(0xFF0284C7)),
+                    SizedBox(width: 8),
+                    Text(
+                      'ACTIVITY TIMELINE',
+                      style: TextStyle(
+                        color: Color(0xFF0284C7),
                         fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.0,
                       ),
-                      unselectedLabelTextStyle: const TextStyle(
-                        color: AppColors.pureWhite,
-                        fontSize: 11,
-                      ),
-                      destinations: const [
-                        NavigationRailDestination(
-                          icon: Icon(LucideIcons.house, color: AppColors.pureWhite),
-                          selectedIcon: Icon(LucideIcons.house, color: AppColors.cyanLight),
-                          label: Text('HOME'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(LucideIcons.map_pin, color: AppColors.pureWhite),
-                          selectedIcon: Icon(LucideIcons.map_pin, color: AppColors.cyanLight),
-                          label: Text('LOCATION'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(LucideIcons.activity, color: AppColors.pureWhite),
-                          selectedIcon: Icon(LucideIcons.activity, color: AppColors.cyanLight),
-                          label: Text('ACTIVITY'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(LucideIcons.triangle_alert, color: AppColors.pureWhite),
-                          selectedIcon: Icon(LucideIcons.triangle_alert, color: AppColors.uberSafetyRed),
-                          label: Text('ALERTS'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(LucideIcons.user, color: AppColors.pureWhite),
-                          selectedIcon: Icon(LucideIcons.user, color: AppColors.cyanLight),
-                          label: Text('PROFILE'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildTimelineItem('10:15 AM', 'Journey started from Connaught Place', isFirst: true),
+                _buildTimelineItem('10:22 AM', 'Crossed Janpath traffic intersection safely'),
+                _buildTimelineItem('10:30 AM', 'Scanned pharmacy storefront via AI vision'),
+                _buildTimelineItem('10:40 AM', 'Arrived at AIIMS Hospital entrance doorway', isLast: true),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineItem(String time, String text, {bool isFirst = false, bool isLast = false}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            Container(
+              width: 12,
+              height: 12,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF0284C7),
+              ),
+            ),
+            if (!isLast)
+              Container(
+                width: 2,
+                height: 38,
+                color: const Color(0xFF94A3B8),
+              ),
+          ],
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                time,
+                style: const TextStyle(
+                  color: Color(0xFF0284C7),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                text,
+                style: const TextStyle(
+                  color: Color(0xFF0F172A),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 4. ALERTS TAB (matching React Native FamilyAlertsTab.tsx)
+  Widget _buildAlertsTab(BuildContext context, NavidoorProvider provider) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFFCBD5E1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF475569), width: 1.5),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 68,
+                  height: 68,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFF10B981),
+                  ),
+                  child: const Center(
+                    child: Icon(LucideIcons.shield_check, size: 38, color: Colors.white),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'No Active Alerts',
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'All connected family members are safe. Emergency channels are monitored in real time.',
+                  style: TextStyle(
+                    color: Color(0xFF475569),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const Divider(color: Color(0xFF94A3B8), height: 32),
+                _buildSecurityCheck('Real-Time SOS trigger channel active'),
+                const SizedBox(height: 8),
+                _buildSecurityCheck('GPS position heartbeats active'),
+                const SizedBox(height: 8),
+                _buildSecurityCheck('Consent and security tokens valid'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSecurityCheck(String text) {
+    return Row(
+      children: [
+        const Icon(LucideIcons.circle_check, size: 16, color: Color(0xFF10B981)),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: const TextStyle(
+            color: Color(0xFF0F172A),
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 5. PROFILE TAB (matching React Native FamilyProfileTab.tsx)
+  Widget _buildProfileTab(BuildContext context, NavidoorProvider provider) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFCBD5E1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF475569), width: 1.5),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFF0284C7),
+                  ),
+                  child: const Center(
+                    child: Icon(LucideIcons.user, size: 30, color: Colors.white),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  provider.familyUser?.name ?? 'Caregiver',
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  provider.familyUser?.phone ?? '+91 98765 43210',
+                  style: const TextStyle(
+                    color: Color(0xFF475569),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Divider(color: Color(0xFF94A3B8), height: 32),
+
+                // Logout & Reset Button
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE11D48),
+                    minimumSize: const Size(double.infinity, 48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: () {
+                    provider.setFamilyUser(null);
+                    provider.setUserRole(UserRole.undecided);
+                  },
+                  icon: const Icon(LucideIcons.log_out, size: 18, color: Colors.white),
+                  label: const Text(
+                    'LOGOUT & SWITCH ROLE',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// CAREGIVER AUTH SCREEN (matching React Native FamilyAuthScreen.tsx)
+class _FamilyAuthView extends StatefulWidget {
+  const _FamilyAuthView();
+
+  @override
+  State<_FamilyAuthView> createState() => _FamilyAuthViewState();
+}
+
+class _FamilyAuthViewState extends State<_FamilyAuthView> {
+  bool _isLogin = true;
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController(text: '+91 98765 43210');
+  final _passwordController = TextEditingController(text: '••••••••');
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _handleSubmit() {
+    final provider = context.read<NavidoorProvider>();
+    final name = _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : 'Priya Sharma';
+    final phone = _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : '+91 98765 43210';
+
+    provider.setFamilyUser(FamilyUser(name: name, phone: phone));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.read<NavidoorProvider>();
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF64748B),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Column(
+                children: [
+                  // Brand Header
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFF10B981),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x4D10B981),
+                          offset: Offset(0, 4),
+                          blurRadius: 8,
                         ),
                       ],
                     ),
-                    const VerticalDivider(color: AppColors.lightGrayBorder, width: 1),
-                    // Desktop Content Dashboard
-                    Expanded(
-                      child: _buildDesktopDashboard(context, provider),
+                    child: const Center(
+                      child: Icon(LucideIcons.heart, size: 30, color: Colors.white),
                     ),
-                  ],
-                )
-              : _buildTabBody(context, provider),
-          const SOSModal(),
-        ],
-      ),
-      bottomNavigationBar: isDesktop
-          ? null
-          : BottomNavigationBar(
-              currentIndex: _selectedTabIndex,
-              onTap: (idx) => setState(() => _selectedTabIndex = idx),
-              backgroundColor: AppColors.darkGray,
-              selectedItemColor: AppColors.cyanLight,
-              unselectedItemColor: AppColors.lightGrayCard,
-              type: BottomNavigationBarType.fixed,
-              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-              unselectedLabelStyle: const TextStyle(fontSize: 10),
-              items: const [
-                BottomNavigationBarItem(icon: Icon(LucideIcons.house, size: 20), label: 'HOME'),
-                BottomNavigationBarItem(icon: Icon(LucideIcons.map_pin, size: 20), label: 'LOCATION'),
-                BottomNavigationBarItem(icon: Icon(LucideIcons.activity, size: 20), label: 'ACTIVITY'),
-                BottomNavigationBarItem(icon: Icon(LucideIcons.triangle_alert, size: 20), label: 'ALERTS'),
-                BottomNavigationBarItem(icon: Icon(LucideIcons.user, size: 20), label: 'PROFILE'),
-              ],
-            ),
-    );
-  }
-
-  // Caregiver Authentication / Pairing Card
-  Widget _buildCaregiverAuth(BuildContext context, NavidoorProvider provider) {
-    final nameCtrl = TextEditingController(text: 'Sunita Sharma');
-    final phoneCtrl = TextEditingController(text: '+91 98765 43210');
-
-    return Scaffold(
-      backgroundColor: AppColors.darkGray,
-      body: Center(
-        child: Container(
-          width: 420,
-          margin: const EdgeInsets.all(24),
-          padding: const EdgeInsets.all(28),
-          decoration: BoxDecoration(
-            color: AppColors.lightGrayBg.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.cyanLight, width: 2),
-            boxShadow: const [
-              BoxShadow(color: AppColors.cyanGlow, blurRadius: 20, spreadRadius: 2),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: const BoxDecoration(
-                  color: AppColors.cyanPrimary,
-                  shape: BoxShape.circle,
-                ),
-                child: const Center(
-                  child: Icon(LucideIcons.heart_handshake, color: AppColors.pureWhite, size: 32),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'CAREGIVER SETUP',
-                style: TextStyle(
-                  color: AppColors.pureWhite,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.0,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Enter caregiver details to link with NAVIDOOR user',
-                style: TextStyle(color: AppColors.lightGrayCard, fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: nameCtrl,
-                style: const TextStyle(color: AppColors.pureWhite),
-                decoration: InputDecoration(
-                  labelText: 'Caregiver Full Name',
-                  labelStyle: const TextStyle(color: AppColors.cyanLight),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.lightGrayBorder),
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: phoneCtrl,
-                style: const TextStyle(color: AppColors.pureWhite),
-                decoration: InputDecoration(
-                  labelText: 'Phone Number',
-                  labelStyle: const TextStyle(color: AppColors.cyanLight),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.lightGrayBorder),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.cyanPrimary,
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                onPressed: () {
-                  provider.setFamilyUser(
-                    FamilyUser(
-                      name: nameCtrl.text.trim(),
-                      phone: phoneCtrl.text.trim(),
-                      relationship: 'Daughter',
-                    ),
-                  );
-                },
-                child: const Text(
-                  'CONNECT & OPEN PORTAL',
-                  style: TextStyle(color: AppColors.pureWhite, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Desktop Responsive Dashboard View
-  Widget _buildDesktopDashboard(BuildContext context, NavidoorProvider provider) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Left Column (60%): Live Stream Canvas & GPS Map Card
-          Expanded(
-            flex: 6,
-            child: Column(
-              children: [
-                _buildLiveStreamCard(context, provider),
-                const SizedBox(height: 20),
-                _buildGpsMapCard(context, provider),
-              ],
-            ),
-          ),
-          const SizedBox(width: 24),
-          // Right Column (40%): Telemetry, Activity & Alerts
-          Expanded(
-            flex: 4,
-            child: Column(
-              children: [
-                _buildTelemetryCards(context, provider),
-                const SizedBox(height: 20),
-                _buildActivityListCard(context, provider),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Mobile Tab View Switcher
-  Widget _buildTabBody(BuildContext context, NavidoorProvider provider) {
-    switch (_selectedTabIndex) {
-      case 1:
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: _buildGpsMapCard(context, provider),
-        );
-      case 2:
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: _buildActivityListCard(context, provider),
-        );
-      case 3:
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: _buildAlertsListCard(context, provider),
-        );
-      case 4:
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: _buildProfileTab(context, provider),
-        );
-      case 0:
-      default:
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              _buildLiveStreamCard(context, provider),
-              const SizedBox(height: 16),
-              _buildTelemetryCards(context, provider),
-              const SizedBox(height: 16),
-              _buildActivityListCard(context, provider),
-            ],
-          ),
-        );
-    }
-  }
-
-  // Sub-Cards
-  Widget _buildLiveStreamCard(BuildContext context, NavidoorProvider provider) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.lightGrayBg.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.cyanLight, width: 1.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: const BoxDecoration(
-              color: AppColors.lightGrayBg,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'LIVE USER CAMERA STREAM',
-                  style: TextStyle(color: AppColors.pureWhite, fontWeight: FontWeight.w900, fontSize: 12),
-                ),
-                const Spacer(),
-                const Text(
-                  '1080p • 30 FPS • 42ms LATENCY',
-                  style: TextStyle(color: AppColors.cyanLight, fontSize: 10, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            height: 240,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFF1E293B),
-                  AppColors.lightGrayBg.withValues(alpha: 0.8),
-                ],
-              ),
-            ),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(LucideIcons.video, size: 48, color: AppColors.cyanLight),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Active Assist Mode: ${provider.activeMode.name.toUpperCase()}',
-                    style: const TextStyle(color: AppColors.pureWhite, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 12),
                   const Text(
-                    'Obstacle: Chair detected 1.2m center • Door 2.8m right',
-                    style: TextStyle(color: AppColors.cyanLight, fontSize: 12),
+                    'NAVIDOOR FAMILY',
+                    style: TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2.0,
+                    ),
+                  ),
+                  const Text(
+                    'Caregiver Companion Portal',
+                    style: TextStyle(
+                      color: Color(0xFFE2E8F0),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Main Card
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: const Color(0xFF475569), width: 1.5),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _isLogin ? 'Login to Portal' : 'Create Caregiver Account',
+                          style: const TextStyle(
+                            color: Color(0xFF0F172A),
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        if (!_isLogin) ...[
+                          const Text(
+                            'FULL NAME',
+                            style: TextStyle(color: Color(0xFF0F172A), fontSize: 11, fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _nameController,
+                            decoration: InputDecoration(
+                              prefixIcon: const Icon(LucideIcons.user, color: Color(0xFF0284C7), size: 18),
+                              hintText: 'Priya Sharma',
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
+
+                        const Text(
+                          'MOBILE NUMBER',
+                          style: TextStyle(color: Color(0xFF0F172A), fontSize: 11, fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(LucideIcons.phone, color: Color(0xFF0284C7), size: 18),
+                            hintText: '+91 98765 43210',
+                            filled: true,
+                            fillColor: const Color(0xFFF8FAFC),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        const Text(
+                          'PASSWORD',
+                          style: TextStyle(color: Color(0xFF0F172A), fontSize: 11, fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: _passwordController,
+                          obscureText: true,
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(LucideIcons.lock, color: Color(0xFF0284C7), size: 18),
+                            hintText: '••••••••',
+                            filled: true,
+                            fillColor: const Color(0xFFF8FAFC),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0284C7),
+                            minimumSize: const Size(double.infinity, 48),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          onPressed: _handleSubmit,
+                          child: Text(
+                            _isLogin ? 'LOG IN' : 'REGISTER',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+
+                        Center(
+                          child: TextButton(
+                            onPressed: () => setState(() => _isLogin = !_isLogin),
+                            child: Text(
+                              _isLogin ? "Don't have an account? Create one" : 'Already have an account? Log in',
+                              style: const TextStyle(color: Color(0xFF0284C7), fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Back to Role Selection
+                  TextButton(
+                    onPressed: () => provider.setUserRole(UserRole.undecided),
+                    child: const Text(
+                      '← Change App Role',
+                      style: TextStyle(color: Color(0xFFE2E8F0), fontWeight: FontWeight.w800),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGpsMapCard(BuildContext context, NavidoorProvider provider) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.lightGrayBg.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.lightGrayBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(LucideIcons.map_pin, color: AppColors.cyanLight, size: 20),
-              const SizedBox(width: 8),
-              const Text('LIVE GPS LOCATION', style: TextStyle(color: AppColors.pureWhite, fontWeight: FontWeight.bold)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)),
-                child: const Text('SAFE ZONE', style: TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Text('Oak Lane, Near City Hospital, MG Road', style: TextStyle(color: AppColors.pureWhite, fontSize: 15, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          const Text('19.0760° N, 72.8777° E • Speed: 1.1 m/s • Accuracy: ±2m', style: TextStyle(color: AppColors.cyanLight, fontSize: 12)),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.cyanPrimary),
-                  icon: const Icon(LucideIcons.phone, size: 16, color: AppColors.pureWhite),
-                  label: const Text('Call User', style: TextStyle(color: AppColors.pureWhite)),
-                  onPressed: () {},
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.uberSafetyRed),
-                  icon: const Icon(LucideIcons.bell, size: 16, color: AppColors.pureWhite),
-                  label: const Text('Ring Chime', style: TextStyle(color: AppColors.pureWhite)),
-                  onPressed: () {
-                    provider.speak('Caregiver Sunita triggered spatial alert chime.');
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTelemetryCards(BuildContext context, NavidoorProvider provider) {
-    return Row(
-      children: [
-        Expanded(child: _buildMetricTile('BATTERY', '84%', LucideIcons.battery_charging, Colors.greenAccent)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildMetricTile('DAILY STEPS', '2,480', LucideIcons.footprints, AppColors.cyanLight)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildMetricTile('MEDICINE', 'Taken', LucideIcons.circle_check, Colors.greenAccent)),
-      ],
-    );
-  }
-
-  Widget _buildMetricTile(String label, String val, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.lightGrayBg.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.lightGrayBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: color),
-          const SizedBox(height: 8),
-          Text(val, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w900)),
-          Text(label, style: const TextStyle(color: AppColors.lightGrayCard, fontSize: 10, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActivityListCard(BuildContext context, NavidoorProvider provider) {
-    final activities = [
-      {'time': '8:12 AM', 'title': 'Morning Lisinopril 10mg taken', 'icon': LucideIcons.pill},
-      {'time': '8:45 AM', 'title': 'Navigated 45m towards MG Road', 'icon': LucideIcons.compass},
-      {'time': '9:10 AM', 'title': 'Avoided chair obstacle (1.2m front)', 'icon': LucideIcons.shield_check},
-    ];
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.lightGrayBg.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.lightGrayBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('RECENT USER ACTIVITY', style: TextStyle(color: AppColors.pureWhite, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          ...activities.map((a) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    Icon(a['icon'] as IconData, size: 18, color: AppColors.cyanLight),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(a['title'] as String, style: const TextStyle(color: AppColors.pureWhite, fontSize: 13)),
-                    ),
-                    Text(a['time'] as String, style: const TextStyle(color: AppColors.lightGrayCard, fontSize: 11)),
-                  ],
-                ),
-              )),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAlertsListCard(BuildContext context, NavidoorProvider provider) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.lightGrayBg.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: const Text('No critical alerts in the last 24 hours. User is safe.', style: TextStyle(color: AppColors.pureWhite)),
-    );
-  }
-
-  Widget _buildProfileTab(BuildContext context, NavidoorProvider provider) {
-    return Column(
-      children: [
-        Text('Caregiver: ${provider.familyUser?.name ?? "Sunita Sharma"}', style: const TextStyle(color: AppColors.pureWhite)),
-        const SizedBox(height: 16),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: AppColors.uberSafetyRed),
-          onPressed: () => provider.setUserRole(UserRole.undecided),
-          child: const Text('Unpair / Exit Caregiver Mode', style: TextStyle(color: AppColors.pureWhite)),
         ),
-      ],
+      ),
     );
   }
+}
+
+class _MapGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0x33475569)
+      ..strokeWidth = 1.0;
+
+    canvas.drawLine(Offset(0, size.height * 0.35), Offset(size.width, size.height * 0.35), paint);
+    canvas.drawLine(Offset(0, size.height * 0.7), Offset(size.width, size.height * 0.7), paint);
+    canvas.drawLine(Offset(size.width * 0.4, 0), Offset(size.width * 0.4, size.height), paint);
+    canvas.drawLine(Offset(size.width * 0.75, 0), Offset(size.width * 0.75, size.height), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
