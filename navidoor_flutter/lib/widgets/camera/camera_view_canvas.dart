@@ -1,190 +1,338 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:provider/provider.dart';
+import '../../models/nav_models.dart';
 import '../../providers/navidoor_provider.dart';
-import '../../theme/design_system.dart';
-import 'ai_vision_overlay.dart';
 
 class CameraViewCanvas extends StatelessWidget {
   const CameraViewCanvas({super.key});
 
+  static const List<NavMode> visionModes = [
+    NavMode.assist,
+    NavMode.navigate,
+    NavMode.read,
+    NavMode.medicine,
+    NavMode.transport,
+  ];
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<NavidoorProvider>();
+    final isVisionMode = visionModes.contains(provider.activeMode);
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Camera Canvas Backdrop (Deep Slate Contrast with Subtle HUD Matrix)
-        Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                const Color(0xFF1E293B),
-                AppColors.lightGrayBg.withValues(alpha: 0.9),
-                const Color(0xFF0F172A),
-              ],
-            ),
-          ),
-          child: CustomPaint(
-            painter: _HUDGridPainter(),
-          ),
-        ),
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: const Color(0xFFCBD5E1),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 1. Room Background / Depth Rings (when in vision mode)
+          if (isVisionMode)
+            _buildSimulatedRoom(context, provider)
+          else
+            // Solid Light Gray Utility Canvas
+            Container(color: const Color(0xFFCBD5E1)),
 
-        // YOLOv11 AI Detection Overlay
-        AIVisionOverlay(
-          detectedObjects: provider.detectedObjects,
-          isDetectionActive: provider.isDetectionActive,
-        ),
-
-        // Floating Camera Quick Action Toolbar (Right vertical strip)
-        Positioned(
-          top: 70,
-          right: 16,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-            decoration: BoxDecoration(
-              color: AppColors.darkGray.withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.lightGrayBorder, width: 1.5),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Torch Toggle
-                _buildToolButton(
-                  icon: provider.torchOn ? LucideIcons.zap : LucideIcons.zap_off,
-                  label: 'Flashlight',
-                  isActive: provider.torchOn,
-                  onTap: () => provider.toggleTorch(),
-                ),
-                const SizedBox(height: 8),
-
-                // Camera Facing Flip
-                _buildToolButton(
-                  icon: LucideIcons.switch_camera,
-                  label: 'Flip Camera',
-                  isActive: false,
-                  onTap: () => provider.toggleCameraFacing(),
-                ),
-                const SizedBox(height: 8),
-
-                // AI Vision Perception Toggle
-                _buildToolButton(
-                  icon: provider.isDetectionActive ? LucideIcons.eye : LucideIcons.eye_off,
-                  label: 'AI Vision',
-                  isActive: provider.isDetectionActive,
-                  onTap: () => provider.toggleDetection(),
-                ),
-                const SizedBox(height: 8),
-
-                // Spatial Audio Toggle
-                _buildToolButton(
-                  icon: provider.spatialAudioEnabled
-                      ? LucideIcons.volume_2
-                      : LucideIcons.volume_x,
-                  label: 'Spatial Audio',
-                  isActive: provider.spatialAudioEnabled,
-                  onTap: () => provider.toggleSpatialAudio(),
-                ),
-                const SizedBox(height: 8),
-
-                // Photo Snapshot & Scene Perception
-                _buildToolButton(
-                  icon: LucideIcons.camera,
-                  label: 'Inspect Scene',
-                  isActive: false,
-                  isAction: true,
-                  onTap: () => provider.capturePhotoAndAnalyze(),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // Bottom Context Insight Floating Card (Above wheel)
-        Positioned(
-          bottom: 12,
-          left: 16,
-          right: 16,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.darkGray.withValues(alpha: 0.92),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.cyanLight, width: 1.5),
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black38,
-                  blurRadius: 10,
-                  offset: Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                const Icon(LucideIcons.sparkles, size: 20, color: AppColors.cyanLight),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    provider.currentInsight.text,
-                    style: const TextStyle(
-                      color: AppColors.pureWhite,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      height: 1.3,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+          // 2. Camera Controls Overlay (Top Utility Pills at top: 72)
+          if (isVisionMode)
+            Positioned(
+              top: 72,
+              left: 0,
+              right: 0,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildControlsOverlay(context, provider),
                   ),
                 ),
-              ],
+              ),
             ),
+
+          // 3. AI Vision HUD Announcement Overlay (at top: 132)
+          if (isVisionMode)
+            Positioned(
+              top: 132,
+              left: 0,
+              right: 0,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildVoiceHudOverlay(context, provider),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSimulatedRoom(BuildContext context, NavidoorProvider provider) {
+    return Stack(
+      children: [
+        // Grid lines (perspective grid matching React Native)
+        Positioned.fill(
+          child: CustomPaint(
+            painter: _GridPainter(),
+          ),
+        ),
+
+        // Depth concentric rings in center
+        Center(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0x330284C7),
+                    width: 2,
+                  ),
+                ),
+              ),
+              Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0x550284C7),
+                    width: 2,
+                  ),
+                ),
+              ),
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0x220284C7),
+                  border: Border.all(
+                    color: const Color(0xFF0284C7),
+                    width: 2,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    LucideIcons.scan,
+                    color: Color(0xFF0284C7),
+                    size: 28,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Detected Objects Overlays
+        ...provider.detectedObjects.map((obj) {
+          final size = MediaQuery.of(context).size;
+          final top = obj.yRatio * size.height * 0.7;
+          final left = obj.xRatio * size.width * 0.85;
+
+          return Positioned(
+            top: top.clamp(190, size.height - 300),
+            left: left.clamp(16, size.width - 160),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xCC0F172A),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF0284C7), width: 1.5),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x400284C7),
+                    blurRadius: 8,
+                    offset: Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(obj.emojiIcon, style: const TextStyle(fontSize: 16)),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${obj.label} ${obj.distanceMeters.toStringAsFixed(1)}m',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildControlsOverlay(BuildContext context, NavidoorProvider provider) {
+    return Row(
+      children: [
+        // 1. Flashlight Light Mode Toggle
+        Expanded(
+          child: _buildUtilityPill(
+            icon: provider.torchOn ? LucideIcons.zap : LucideIcons.zap_off,
+            label: provider.torchOn ? 'LIGHT ON' : 'LIGHT OFF',
+            isActive: provider.torchOn,
+            activeColor: const Color(0xFFF59E0B),
+            onTap: () => provider.toggleTorch(),
+          ),
+        ),
+        const SizedBox(width: 8),
+
+        // 2. Rear / Front Camera Facing Toggle
+        Expanded(
+          child: _buildUtilityPill(
+            icon: LucideIcons.refresh_cw,
+            label: provider.cameraFacingBack ? 'REAR CAM' : 'FRONT CAM',
+            isActive: false,
+            onTap: () => provider.toggleCameraFacing(),
+          ),
+        ),
+        const SizedBox(width: 8),
+
+        // 3. Repeat Speech / Read Out Loud
+        Expanded(
+          child: _buildUtilityPill(
+            icon: LucideIcons.volume_2,
+            label: 'REPEAT',
+            isActive: false,
+            onTap: () => provider.speak(provider.lastAnnouncement, interrupt: true),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildToolButton({
+  Widget _buildUtilityPill({
     required IconData icon,
     required String label,
     required bool isActive,
-    bool isAction = false,
+    Color activeColor = const Color(0xFF0284C7),
     required VoidCallback onTap,
   }) {
-    return Semantics(
-      button: true,
-      label: label,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: onTap,
-          child: Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: isActive
-                  ? AppColors.cyanPrimary
-                  : isAction
-                      ? AppColors.cyanLight.withValues(alpha: 0.25)
-                      : Colors.transparent,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Icon(
-                icon,
-                size: 20,
-                color: isActive
-                    ? AppColors.pureWhite
-                    : isAction
-                        ? AppColors.cyanLight
-                        : AppColors.pureWhite.withValues(alpha: 0.85),
+    final bgColor = isActive ? activeColor : const Color(0xFF0284C7);
+
+    return Material(
+      color: bgColor,
+      borderRadius: BorderRadius.circular(24),
+      elevation: 6,
+      shadowColor: const Color(0x590284C7),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          height: 48,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 18, color: Colors.white),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.5,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVoiceHudOverlay(BuildContext context, NavidoorProvider provider) {
+    return Material(
+      color: const Color(0xFFCBD5E1),
+      borderRadius: BorderRadius.circular(20),
+      elevation: 8,
+      shadowColor: const Color(0x400284C7),
+      child: InkWell(
+        onTap: () => provider.speak(provider.lastAnnouncement, interrupt: true),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF64748B), width: 1.5),
+          ),
+          child: Row(
+            children: [
+              // Sparkles badge
+              Container(
+                width: 32,
+                height: 32,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0x2E0284C7),
+                ),
+                child: const Center(
+                  child: Icon(
+                    LucideIcons.sparkles,
+                    size: 18,
+                    color: Color(0xFF0284C7),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+
+              // Last announcement text
+              Expanded(
+                child: Text(
+                  provider.lastAnnouncement.isNotEmpty
+                      ? provider.lastAnnouncement
+                      : 'AI Vision active. Scanning surroundings...',
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    height: 1.35,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 10),
+
+              // Replay volume badge
+              Container(
+                width: 28,
+                height: 28,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFF0284C7),
+                ),
+                child: const Center(
+                  child: Icon(
+                    LucideIcons.volume_2,
+                    size: 16,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -192,27 +340,26 @@ class CameraViewCanvas extends StatelessWidget {
   }
 }
 
-class _HUDGridPainter extends CustomPainter {
+class _GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = AppColors.cyanLight.withValues(alpha: 0.08)
+      ..color = const Color(0x1F475569)
       ..strokeWidth = 1.0;
 
-    // Subtle center crosshairs
-    final cx = size.width / 2;
-    final cy = size.height / 2;
+    // Horizontal lines
+    final numH = 10;
+    for (int i = 1; i < numH; i++) {
+      final y = size.height * (i / numH);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
 
-    canvas.drawLine(Offset(cx - 30, cy), Offset(cx + 30, cy), paint);
-    canvas.drawLine(Offset(cx, cy - 30), Offset(cx, cy + 30), paint);
-
-    final circlePaint = Paint()
-      ..color = AppColors.cyanLight.withValues(alpha: 0.05)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-
-    canvas.drawCircle(Offset(cx, cy), 60, circlePaint);
-    canvas.drawCircle(Offset(cx, cy), 130, circlePaint);
+    // Vertical lines
+    final numV = 6;
+    for (int i = 1; i < numV; i++) {
+      final x = size.width * (i / numV);
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
   }
 
   @override

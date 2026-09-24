@@ -3,152 +3,173 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:provider/provider.dart';
 import '../models/nav_models.dart';
 import '../providers/navidoor_provider.dart';
-import '../theme/design_system.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key});
 
+  void _handleSelectRole(BuildContext context, UserRole role) {
+    final provider = context.read<NavidoorProvider>();
+    provider.setUserRole(role);
+
+    if (role == UserRole.navidoorUser) {
+      provider.setIsFirstTimeUser(true);
+      provider.speak('Selected Navidoor User mode. Loading setup onboarding.');
+    } else {
+      provider.setIsFirstTimeUser(false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final provider = context.read<NavidoorProvider>();
-    final isDesktop = ResponsiveHelper.isDesktop(context);
-
     return Scaffold(
-      backgroundColor: AppColors.darkGray,
+      backgroundColor: const Color(0xFF64748B),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(
-              horizontal: isDesktop ? 48 : 24,
-              vertical: 32,
-            ),
+            physics: const ClampingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: isDesktop ? 960 : 440,
-              ),
+              constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Header Logo & Badge
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: const BoxDecoration(
-                      color: AppColors.cyanPrimary,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.cyanGlow,
-                          blurRadius: 20,
-                          spreadRadius: 4,
-                        ),
-                      ],
-                    ),
-                    child: const Center(
-                      child: Icon(LucideIcons.eye, size: 40, color: AppColors.pureWhite),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'NAVIDOOR',
-                    style: TextStyle(
-                      color: AppColors.pureWhite,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 2.0,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'AI ACCESSIBILITY & DUAL-ROLE ECOSYSTEM',
-                    style: TextStyle(
-                      color: AppColors.cyanLight.withValues(alpha: 0.9),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.5,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 36),
-
-                  // Cards: Side-by-side on desktop, stacked on mobile
-                  if (isDesktop)
-                    Row(
+                  // Top-Left Brand Header (exact 1-to-1 match with React Native)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: _buildRoleCard(
-                            context: context,
-                            icon: LucideIcons.user,
-                            title: 'I NEED ASSISTANCE',
-                            subtitle: 'For blind, visually impaired, or elderly users',
-                            features: [
-                              'Live Camera Obstacle & Doorway Perception',
-                              'Voice-First 10 Regional Indian Languages',
-                              'Turn-by-Turn AR Audio Walking Guidance',
-                              'Instant 1-Tap Emergency SOS Broadcast',
-                            ],
-                            buttonText: 'ENTER ASSIST MODE',
-                            isPrimary: true,
-                            onTap: () => provider.setUserRole(UserRole.navidoorUser),
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                        Expanded(
-                          child: _buildRoleCard(
-                            context: context,
-                            icon: LucideIcons.heart_handshake,
-                            title: 'I AM A FAMILY CAREGIVER',
-                            subtitle: 'For family members, guardians & caregivers',
-                            features: [
-                              'Live GPS Location & Walking Route Map',
-                              'Real-Time Camera Video Stream Assist',
-                              'Emergency SOS Audible Chime Monitor',
-                              'Medication & Activity Confirmation Logs',
-                            ],
-                            buttonText: 'ENTER CAREGIVER PORTAL',
-                            isPrimary: false,
-                            onTap: () => provider.setUserRole(UserRole.familyMember),
-                          ),
-                        ),
-                      ],
-                    )
-                  else
-                    Column(
-                      children: [
-                        _buildRoleCard(
-                          context: context,
-                          icon: LucideIcons.user,
-                          title: 'I NEED ASSISTANCE',
-                          subtitle: 'For blind, visually impaired, or elderly users',
-                          features: [
-                            'Live Camera Obstacle & Doorway Perception',
-                            'Voice-First 10 Regional Indian Languages',
-                            'Turn-by-Turn AR Audio Walking Guidance',
-                            'Instant 1-Tap Emergency SOS Broadcast',
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0284C7),
+                                shape: BoxShape.circle,
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.black26,
+                                    offset: Offset(0, 3),
+                                    blurRadius: 6,
+                                  ),
+                                ],
+                              ),
+                              child: const Center(
+                                child: Icon(
+                                  LucideIcons.sparkles,
+                                  size: 24,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'NAVIDOOR',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 26,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 2.5,
+                              ),
+                            ),
                           ],
-                          buttonText: 'ENTER ASSIST MODE',
-                          isPrimary: true,
-                          onTap: () => provider.setUserRole(UserRole.navidoorUser),
                         ),
-                        const SizedBox(height: 20),
-                        _buildRoleCard(
-                          context: context,
-                          icon: LucideIcons.heart_handshake,
-                          title: 'I AM A FAMILY CAREGIVER',
-                          subtitle: 'For family members, guardians & caregivers',
-                          features: [
-                            'Live GPS Location & Walking Route Map',
-                            'Real-Time Camera Video Stream Assist',
-                            'Emergency SOS Audible Chime Monitor',
-                            'Medication & Activity Confirmation Logs',
-                          ],
-                          buttonText: 'ENTER CAREGIVER PORTAL',
-                          isPrimary: false,
-                          onTap: () => provider.setUserRole(UserRole.familyMember),
+                        const SizedBox(height: 4),
+                        const Padding(
+                          padding: EdgeInsets.only(left: 2),
+                          child: Text(
+                            'AI MOBILITY & SAFETY',
+                            style: TextStyle(
+                              color: Color(0xFFE2E8F0),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
                         ),
                       ],
                     ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  // Welcome Section
+                  const Column(
+                    children: [
+                      Text(
+                        'Welcome',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w900,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Select your role to proceed:',
+                        style: TextStyle(
+                          color: Color(0xFFF1F5F9),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Role Cards Container
+                  Column(
+                    children: [
+                      // Card 1: NAVIDOOR USER
+                      _buildRoleCard(
+                        context: context,
+                        title: 'NAVIDOOR USER',
+                        subtitle: 'Voice navigation & camera vision',
+                        accentColor: const Color(0xFF0284C7),
+                        icon: LucideIcons.eye,
+                        onTap: () => _handleSelectRole(context, UserRole.navidoorUser),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Card 2: FAMILY MEMBER
+                      _buildRoleCard(
+                        context: context,
+                        title: 'FAMILY MEMBER',
+                        subtitle: 'Live tracking & emergency alerts',
+                        accentColor: const Color(0xFF4F46E5),
+                        icon: LucideIcons.heart,
+                        onTap: () => _handleSelectRole(context, UserRole.familyMember),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 36),
+
+                  // Bottom Footer Note
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        LucideIcons.shield_check,
+                        size: 16,
+                        color: Color(0xFFE2E8F0),
+                      ),
+                      SizedBox(width: 6),
+                      Text(
+                        'Secure Encrypted Link',
+                        style: TextStyle(
+                          color: Color(0xFFE2E8F0),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -160,49 +181,37 @@ class RoleSelectionScreen extends StatelessWidget {
 
   Widget _buildRoleCard({
     required BuildContext context,
-    required IconData icon,
     required String title,
     required String subtitle,
-    required List<String> features,
-    required String buttonText,
-    required bool isPrimary,
+    required Color accentColor,
+    required IconData icon,
     required VoidCallback onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.lightGrayBg.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isPrimary ? AppColors.cyanLight : AppColors.lightGrayBorder,
-          width: 2.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isPrimary ? AppColors.cyanGlow : Colors.black26,
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+    return Material(
+      color: const Color(0xFFF8FAFC),
+      borderRadius: BorderRadius.circular(18),
+      elevation: 4,
+      shadowColor: const Color(0x1A0F172A),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: accentColor, width: 2),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+          child: Row(
             children: [
               Container(
-                width: 48,
-                height: 48,
+                width: 46,
+                height: 46,
                 decoration: BoxDecoration(
-                  color: isPrimary ? AppColors.cyanPrimary : AppColors.lightGrayCard,
-                  shape: BoxShape.circle,
+                  color: accentColor,
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
-                  child: Icon(
-                    icon,
-                    size: 26,
-                    color: isPrimary ? AppColors.pureWhite : AppColors.darkText,
-                  ),
+                  child: Icon(icon, size: 24, color: Colors.white),
                 ),
               ),
               const SizedBox(width: 14),
@@ -213,70 +222,32 @@ class RoleSelectionScreen extends StatelessWidget {
                     Text(
                       title,
                       style: const TextStyle(
-                        color: AppColors.pureWhite,
+                        color: Color(0xFF0F172A),
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
-                        letterSpacing: 0.8,
+                        letterSpacing: 0.5,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       subtitle,
                       style: const TextStyle(
-                        color: AppColors.lightGrayCard,
+                        color: Color(0xFF475569),
                         fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                 ),
               ),
+              Icon(
+                LucideIcons.chevron_right,
+                size: 22,
+                color: accentColor,
+              ),
             ],
           ),
-          const SizedBox(height: 20),
-          ...features.map(
-            (f) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.circle_check, size: 16, color: AppColors.cyanLight),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      f,
-                      style: const TextStyle(
-                        color: AppColors.pureWhite,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isPrimary ? AppColors.cyanPrimary : AppColors.pureWhite,
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              elevation: 4,
-            ),
-            onPressed: onTap,
-            child: Text(
-              buttonText,
-              style: TextStyle(
-                color: isPrimary ? AppColors.pureWhite : AppColors.darkText,
-                fontWeight: FontWeight.w900,
-                fontSize: 13,
-                letterSpacing: 1.0,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

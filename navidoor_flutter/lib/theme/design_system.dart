@@ -20,9 +20,10 @@ class AppColors {
   static const Color cyanGlow = Color(0x400284C7);
 
   // Unmistakable Prominent Slate Gray Backgrounds & Cards
-  static const Color lightGrayBg = Color(0xFF64748B);     // Distinct Slate Gray Background
-  static const Color lightGrayCard = Color(0xFF94A3B8);   // Prominent Slate Gray Card
-  static const Color lightGrayBorder = Color(0xFF475569); // Darker Slate Border
+  static const Color lightGrayBg = Color(0xFF64748B);     // Distinct Slate Gray Background (#64748B)
+  static const Color lightGrayCard = Color(0xFF94A3B8);   // Medium Slate Gray Card
+  static const Color slateCard = Color(0xFFCBD5E1);      // Light Slate Gray Card (#CBD5E1)
+  static const Color lightGrayBorder = Color(0xFF475569); // Darker Slate Border (#475569)
   static const Color pureWhite = Color(0xFFFFFFFF);
   
   // High-Contrast Typography
@@ -34,6 +35,7 @@ class AppColors {
   static const Color uberSafetyRed = Color(0xFFE11D48);
   static const Color uberSafetyGreen = Color(0xFF0284C7);
   static const Color uberWarningAmber = Color(0xFFF59E0B);
+  static const Color successGreen = Color(0xFF10B981);
 
   // Mic Button Accents (Cyan Buttons)
   static const Color micIdleBg = Color(0xFF0284C7);
@@ -112,7 +114,7 @@ class ThemeColors {
         );
       case ThemeModeOption.standard:
         return const ThemeColors(
-          bgCard: Color(0xFF64748B),
+          bgCard: Color(0xFFCBD5E1),
           bgHeader: Color(0xFF64748B),
           textPrimary: Color(0xFF0F172A),
           textSecondary: Color(0xFF334155),
@@ -163,6 +165,11 @@ class FontSizes {
 }
 
 class ResponsiveHelper {
+  static const double maxContentWidth = 480.0;
+
+  static bool isWideScreen(BuildContext context) =>
+      MediaQuery.of(context).size.width > maxContentWidth;
+
   static bool isMobile(BuildContext context) =>
       MediaQuery.of(context).size.width < 768;
 

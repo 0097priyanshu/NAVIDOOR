@@ -6,7 +6,6 @@ import 'providers/navidoor_provider.dart';
 import 'screens/family_portal_screen.dart';
 import 'screens/main_user_screen.dart';
 import 'screens/role_selection_screen.dart';
-import 'theme/design_system.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,8 +26,8 @@ class NavidoorApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           brightness: Brightness.dark,
-          scaffoldBackgroundColor: AppColors.darkGray,
-          primaryColor: AppColors.cyanPrimary,
+          scaffoldBackgroundColor: const Color(0xFF64748B),
+          primaryColor: const Color(0xFF0284C7),
           textTheme: GoogleFonts.interTextTheme(
             ThemeData(brightness: Brightness.dark).textTheme,
           ),
@@ -51,7 +50,7 @@ class AppRootNavigator extends StatelessWidget {
       return const RoleSelectionScreen();
     }
 
-    // 2. Family Caregiver Mode Experience
+    // 2. Family Caregiver Mode Experience (matching React Native FamilyAuthScreen & FamilyModeContainer)
     if (provider.userRole == UserRole.familyMember) {
       return const FamilyPortalScreen();
     }
@@ -62,7 +61,7 @@ class AppRootNavigator extends StatelessWidget {
       onHorizontalDragEnd: (details) {
         final velocity = details.primaryVelocity ?? 0;
         if (velocity < -200) {
-          // Swiped LEFT -> Move to next mode
+          // Swiped LEFT -> Move to next mode (matching React Native cycleNextMode)
           provider.cycleNextMode();
         } else if (velocity > 200) {
           // Swiped RIGHT -> Move to previous mode
