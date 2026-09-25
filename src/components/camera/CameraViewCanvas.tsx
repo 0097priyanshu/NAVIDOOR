@@ -199,7 +199,7 @@ export const CameraViewCanvas: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: '#CBD5E1',
   },
   cameraView: {

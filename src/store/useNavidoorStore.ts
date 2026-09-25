@@ -186,8 +186,9 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     const activeLang = get().activeLanguageCode;
     let finalSpeechText = text;
     
-    // Auto-translate any hardcoded English strings to the active selected language
-    if (activeLang !== 'en') {
+    // Auto-translate pure English strings to active language (skip if already localized)
+    const isPureEnglish = /^[a-zA-Z0-9\s.,!?'"-]+$/.test(text.trim());
+    if (activeLang !== 'en' && isPureEnglish) {
       finalSpeechText = await requestTranslation(text, activeLang);
     }
 
@@ -245,10 +246,7 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
       } else if (parsed.action === 'switchMode' && parsed.targetMode) {
         get().setActiveMode(parsed.targetMode);
       } else if (parsed.action === 'cycleNextMode') {
-        const modes: NavMode[] = ['assist', 'read', 'medicine', 'transport', 'navigate', 'family', 'history'];
-        const currIdx = modes.indexOf(get().activeMode);
-        const nextMode = modes[(currIdx + 1) % modes.length];
-        get().setActiveMode(nextMode);
+        get().cycleNextMode();
       } else if (parsed.action === 'addMedicine' && parsed.valueString) {
         const newMed = {
           id: `med-${Date.now()}`,
@@ -316,18 +314,27 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
           get().setFamilyConnectionStatus('idle');
           get().setUserRole('undecided');
           get().setIsFirstTimeUser(false);
+        } else if (intent.action === 'openProfileModal') {
+          get().setIsProfileModalOpen(true);
+        } else if (intent.action === 'openSosModal') {
+          get().setSosModalOpen(true);
+        } else if (intent.action === 'openFamilyCompanion') {
+          get().setFamilyCompanionOpen(true);
+        } else if (intent.action === 'closeModal') {
+          get().setIsProfileModalOpen(false);
+          get().setSosModalOpen(false);
+          get().setFamilyCompanionOpen(false);
+          get().setDesignSystemOpen(false);
         } else if (intent.action === 'switchLanguage' && intent.targetLanguage) {
           get().setActiveLanguageCode(intent.targetLanguage);
           if (intent.targetLanguageName) get().setUserLanguage(intent.targetLanguageName);
         } else if (intent.action === 'switchMode' && intent.targetMode) {
           get().setActiveMode(intent.targetMode);
         } else if (intent.action === 'cycleNextMode') {
-          const modes: NavMode[] = ['assist', 'read', 'medicine', 'transport', 'navigate', 'family', 'history'];
-          const currIdx = modes.indexOf(get().activeMode);
-          get().setActiveMode(modes[(currIdx + 1) % modes.length]);
+          get().cycleNextMode();
         } else if (intent.action === 'updateProfile') {
-          if (intent.updateField === 'userName' && intent.updateValue) get().setUserName(intent.updateValue);
-          if (intent.updateField === 'userPhone' && intent.updateValue) get().setUserPhone(intent.updateValue);
+          if ((intent.updateField === 'userName' || intent.field === 'userName') && intent.updateValue) get().setUserName(intent.updateValue);
+          if ((intent.updateField === 'userPhone' || intent.field === 'userPhone') && intent.updateValue) get().setUserPhone(intent.updateValue);
         } else if (intent.action === 'manageMedication') {
           if (intent.subAction === 'add' && intent.medicationName) {
             const newMed = {
@@ -346,9 +353,24 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
             if (meds && meds.length > 0) get().confirmMedicineTaken(meds[0].id);
           }
         } else if (intent.action === 'updateSettings') {
-          if (intent.theme) get().setThemeMode(intent.theme);
+          if (intent.theme) {
+            const themeMap: Record<string, ThemeMode> = {
+              dark: 'highContrastDark',
+              light: 'standard',
+              'high-contrast': 'highContrastAmber'
+            };
+            get().setThemeMode(themeMap[intent.theme] || 'highContrastDark');
+          }
           if (intent.speechRate) get().setSpeechRate(intent.speechRate);
           if (intent.fontScale) get().setFontScale(intent.fontScale);
+        } else if (intent.action === 'triggerSosAlert') {
+          get().triggerSosAlert();
+        } else if (intent.action === 'toggleTorch') {
+          get().toggleTorch();
+        } else if (intent.action === 'toggleCameraFacing') {
+          get().toggleCameraFacing();
+        } else if (intent.action === 'toggleSpatialAudio') {
+          get().toggleSpatialAudio();
         }
       }
 

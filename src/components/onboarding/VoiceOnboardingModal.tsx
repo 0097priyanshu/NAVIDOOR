@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Platform, StatusBar, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { SUPPORTED_LANGUAGES_META } from '../../services/voiceAssistantBackend';
 import { Mic, User, Phone, ShieldAlert, Pill, Sparkles, ArrowRight, ArrowLeft, Check } from 'lucide-react-native';
@@ -224,214 +225,232 @@ export const VoiceOnboardingModal: React.FC = () => {
   if (!isFirstTimeUser || userRole !== 'navidoor_user') return null;
 
   return (
-    <Modal visible={isFirstTimeUser} transparent animationType="fade">
-      <TouchableOpacity 
-        style={styles.backdrop} 
-        activeOpacity={0.98}
-        onPress={handleNextStep}
-        accessibilityLabel="Tap anywhere to advance setup"
-      >
-        <View style={styles.container}>
-          {/* Header Branding */}
-          <View style={styles.brandRow}>
-            <Sparkles size={24} color="#0284C7" />
-            <Text style={styles.brandTitle}>NAVIDOOR AI SETUP</Text>
-          </View>
-
-          {/* Center Voice Mic Indicator */}
-          <TouchableOpacity 
-            style={styles.micAnchorContainer}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleVoiceSetupAnswer();
-            }}
-            accessibilityLabel="Tap to speak setup answer"
+    <Modal visible={isFirstTimeUser} transparent statusBarTranslucent animationType="fade">
+      <View style={styles.fullScreenWrapper}>
+        <StatusBar barStyle="light-content" backgroundColor="#64748B" />
+        <SafeAreaView style={styles.safeArea}>
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.container}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
           >
-            <UnifiedMicButton
-              voiceState={isListening ? 'listening' : 'idle'}
-              onPress={handleVoiceSetupAnswer}
-              showLabel={false}
-              size={68}
-            />
-          </TouchableOpacity>
-
-          {/* STEP 1: LANGUAGE SELECTION */}
-          {step === 1 && (
-            <View style={styles.stepCard}>
-              <Text style={styles.stepTag}>STEP 1 OF 6 • VOICE LANGUAGE (OFFLINE ENGINE)</Text>
-              <Text style={styles.stepTitle}>Select Preferred Language</Text>
-              
-              <View style={styles.langGrid}>
-                {SUPPORTED_LANGUAGES_META.map((lang) => {
-                  const isActive = activeLanguageCode === lang.code;
-                  return (
-                    <TouchableOpacity
-                      key={lang.code}
-                      style={[styles.langChip, isActive && styles.langChipActive]}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        setActiveLanguageCode(lang.code);
-                        setUserLanguage(lang.name);
-                        speak(`Language selected: ${lang.name}`);
-                      }}
-                      accessibilityLabel={`Select language ${lang.name}`}
-                    >
-                      <Text style={{ fontSize: 16 }}>{lang.flag}</Text>
-                      <Text style={[styles.langText, isActive && styles.langTextActive]}>{lang.name}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+            {/* Header Branding */}
+            <View style={styles.brandRow}>
+              <Sparkles size={24} color="#0284C7" />
+              <Text style={styles.brandTitle}>NAVIDOOR AI SETUP</Text>
             </View>
-          )}
 
-          {/* STEP 2: USER NAME */}
-          {step === 2 && (
-            <View style={styles.stepCard}>
-              <Text style={styles.stepTag}>STEP 2 OF 6 • USER PROFILE</Text>
-              <Text style={styles.stepTitle}>What is your name?</Text>
-              <Text style={styles.stepDesc}>Speak your full name into the microphone or type below.</Text>
-              
-              <View style={styles.inputBox}>
-                <User size={20} color="#0284C7" />
-                <TextInput
-                  style={styles.textInput}
-                  value={inputName}
-                  onChangeText={setInputName}
-                  placeholder="Enter your name..."
-                  placeholderTextColor="#64748B"
-                />
-              </View>
-            </View>
-          )}
-
-          {/* STEP 3: USER PHONE */}
-          {step === 3 && (
-            <View style={styles.stepCard}>
-              <Text style={styles.stepTag}>STEP 3 OF 6 • CONTACT INFO</Text>
-              <Text style={styles.stepTitle}>Your Phone Number</Text>
-              <Text style={styles.stepDesc}>Used for emergency SMS alerts and family caregiver connection.</Text>
-
-              <View style={styles.inputBox}>
-                <Phone size={20} color="#0284C7" />
-                <TextInput
-                  style={styles.textInput}
-                  value={inputPhone}
-                  onChangeText={setInputPhone}
-                  keyboardType="phone-pad"
-                  placeholder="Enter phone number..."
-                  placeholderTextColor="#64748B"
-                />
-              </View>
-            </View>
-          )}
-
-          {/* STEP 4: EMERGENCY CONTACT */}
-          {step === 4 && (
-            <View style={styles.stepCard}>
-              <Text style={styles.stepTag}>STEP 4 OF 6 • EMERGENCY CONTACT</Text>
-              <Text style={styles.stepTitle}>Primary Contact Confirmed</Text>
-
-              {emergencyContacts.map((c) => (
-                <View key={c.id} style={styles.contactItem}>
-                  <ShieldAlert size={20} color="#E11D48" />
-                  <View style={styles.contactTextGroup}>
-                    <Text style={styles.contactName}>{c.name} ({c.relation})</Text>
-                    <Text style={styles.contactPhone}>{c.phone}</Text>
-                  </View>
-                  <Check size={20} color="#0284C7" />
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* STEP 5: MEDICINE SCANNER SETUP */}
-          {step === 5 && (
-            <View style={styles.stepCard}>
-              <Text style={styles.stepTag}>STEP 5 OF 6 • MEDICINE TRACKER & DOSAGE</Text>
-              <Text style={styles.stepTitle}>Prescription Schedule</Text>
-
-              {medicines.map((m) => (
-                <View key={m.id} style={styles.medItem}>
-                  <Pill size={20} color="#0284C7" />
-                  <View style={styles.contactTextGroup}>
-                    <Text style={styles.contactName}>{m.name}</Text>
-                    <Text style={styles.contactPhone}>{m.dosage} • {m.instructions}</Text>
-                  </View>
-                  <Check size={20} color="#0284C7" />
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* STEP 6: SETUP COMPLETE */}
-          {step === 6 && (
-            <View style={styles.stepCard}>
-              <Text style={styles.stepTag}>STEP 6 OF 6 • SETUP COMPLETE</Text>
-              <Text style={styles.stepTitle}>Ready for AI Vision Assist</Text>
-              <Text style={styles.stepSub}>
-                All profile settings, emergency contacts, and language options are configured.
-              </Text>
-            </View>
-          )}
-
-          {/* DUAL ACTION BUTTON ROW: PREVIOUS & CONTINUE */}
-          <View style={styles.actionRow}>
-            {step > 1 && (
-              <TouchableOpacity
-                style={styles.prevBtn}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handlePrevStep();
-                }}
-                accessibilityLabel="Go back to previous setup step"
-                accessibilityHint="Tap to return to the previous setup step"
-              >
-                <ArrowLeft size={18} color="#0284C7" />
-                <Text style={styles.prevBtnText}>BACK</Text>
-              </TouchableOpacity>
-            )}
-
+            {/* Center Voice Mic Indicator */}
             <TouchableOpacity 
-              style={[styles.actionBtn, step > 1 && { flex: 1 }]}
+              style={styles.micAnchorContainer}
               onPress={(e) => {
                 e.stopPropagation();
-                handleNextStep();
+                handleVoiceSetupAnswer();
               }}
-              accessibilityLabel="Advance setup step"
+              accessibilityLabel="Tap to speak setup answer"
             >
-              <Text style={styles.actionBtnText}>
-                {step === 6 ? 'START AI ASSIST' : 'CONTINUE'}
-              </Text>
-              <ArrowRight size={20} color="#FFFFFF" />
+              <UnifiedMicButton
+                voiceState={isListening ? 'listening' : 'idle'}
+                onPress={handleVoiceSetupAnswer}
+                showLabel={false}
+                size={68}
+              />
             </TouchableOpacity>
-          </View>
-        </View>
-      </TouchableOpacity>
+
+            {/* STEP 1: LANGUAGE SELECTION */}
+            {step === 1 && (
+              <View style={styles.stepCard}>
+                <Text style={styles.stepTag}>STEP 1 OF 6 • VOICE LANGUAGE (OFFLINE ENGINE)</Text>
+                <Text style={styles.stepTitle}>Select Preferred Language</Text>
+                
+                <View style={styles.langGrid}>
+                  {SUPPORTED_LANGUAGES_META.map((lang) => {
+                    const isActive = activeLanguageCode === lang.code;
+                    return (
+                      <TouchableOpacity
+                        key={lang.code}
+                        style={[styles.langChip, isActive && styles.langChipActive]}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          setActiveLanguageCode(lang.code);
+                          setUserLanguage(lang.name);
+                          speak(`Language selected: ${lang.name}`);
+                        }}
+                        accessibilityLabel={`Select language ${lang.name}`}
+                      >
+                        <Text style={{ fontSize: 16 }}>{lang.flag}</Text>
+                        <Text style={[styles.langText, isActive && styles.langTextActive]}>{lang.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* STEP 2: USER NAME */}
+            {step === 2 && (
+              <View style={styles.stepCard}>
+                <Text style={styles.stepTag}>STEP 2 OF 6 • USER PROFILE</Text>
+                <Text style={styles.stepTitle}>What is your name?</Text>
+                <Text style={styles.stepDesc}>Speak your full name into the microphone or type below.</Text>
+                
+                <View style={styles.inputBox}>
+                  <User size={20} color="#0284C7" />
+                  <TextInput
+                    style={styles.textInput}
+                    value={inputName}
+                    onChangeText={setInputName}
+                    placeholder="Enter your name..."
+                    placeholderTextColor="#64748B"
+                  />
+                </View>
+              </View>
+            )}
+
+            {/* STEP 3: USER PHONE */}
+            {step === 3 && (
+              <View style={styles.stepCard}>
+                <Text style={styles.stepTag}>STEP 3 OF 6 • CONTACT INFO</Text>
+                <Text style={styles.stepTitle}>Your Phone Number</Text>
+                <Text style={styles.stepDesc}>Used for emergency SMS alerts and family caregiver connection.</Text>
+
+                <View style={styles.inputBox}>
+                  <Phone size={20} color="#0284C7" />
+                  <TextInput
+                    style={styles.textInput}
+                    value={inputPhone}
+                    onChangeText={setInputPhone}
+                    keyboardType="phone-pad"
+                    placeholder="Enter phone number..."
+                    placeholderTextColor="#64748B"
+                  />
+                </View>
+              </View>
+            )}
+
+            {/* STEP 4: EMERGENCY CONTACT */}
+            {step === 4 && (
+              <View style={styles.stepCard}>
+                <Text style={styles.stepTag}>STEP 4 OF 6 • EMERGENCY CONTACT</Text>
+                <Text style={styles.stepTitle}>Primary Contact Confirmed</Text>
+
+                {emergencyContacts.map((c) => (
+                  <View key={c.id} style={styles.contactItem}>
+                    <ShieldAlert size={20} color="#E11D48" />
+                    <View style={styles.contactTextGroup}>
+                      <Text style={styles.contactName}>{c.name} ({c.relation})</Text>
+                      <Text style={styles.contactPhone}>{c.phone}</Text>
+                    </View>
+                    <Check size={20} color="#0284C7" />
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* STEP 5: MEDICINE SCANNER SETUP */}
+            {step === 5 && (
+              <View style={styles.stepCard}>
+                <Text style={styles.stepTag}>STEP 5 OF 6 • MEDICINE TRACKER & DOSAGE</Text>
+                <Text style={styles.stepTitle}>Prescription Schedule</Text>
+
+                {medicines.map((m) => (
+                  <View key={m.id} style={styles.medItem}>
+                    <Pill size={20} color="#0284C7" />
+                    <View style={styles.contactTextGroup}>
+                      <Text style={styles.contactName}>{m.name}</Text>
+                      <Text style={styles.contactPhone}>{m.dosage} • {m.instructions}</Text>
+                    </View>
+                    <Check size={20} color="#0284C7" />
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* STEP 6: SETUP COMPLETE */}
+            {step === 6 && (
+              <View style={styles.stepCard}>
+                <Text style={styles.stepTag}>STEP 6 OF 6 • SETUP COMPLETE</Text>
+                <Text style={styles.stepTitle}>Ready for AI Vision Assist</Text>
+                <Text style={styles.stepSub}>
+                  All profile settings, emergency contacts, and language options are configured.
+                </Text>
+              </View>
+            )}
+
+            {/* DUAL ACTION BUTTON ROW: PREVIOUS & CONTINUE */}
+            <View style={styles.actionRow}>
+              {step > 1 && (
+                <TouchableOpacity
+                  style={styles.prevBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handlePrevStep();
+                  }}
+                  accessibilityLabel="Go back to previous setup step"
+                  accessibilityHint="Tap to return to the previous setup step"
+                >
+                  <ArrowLeft size={18} color="#0284C7" />
+                  <Text style={styles.prevBtnText}>BACK</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity 
+                style={[styles.actionBtn, step === 1 && { flex: 1 }]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleNextStep();
+                }}
+                accessibilityLabel="Advance setup step"
+              >
+                <Text style={styles.actionBtnText}>
+                  {step === 6 ? 'START AI ASSIST' : 'CONTINUE'}
+                </Text>
+                <ArrowRight size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  backdrop: {
+  fullScreenWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#64748B',
+    zIndex: 9999,
+  },
+  safeArea: {
     flex: 1,
     backgroundColor: '#64748B',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : 44,
+  },
+  scroll: {
+    flex: 1,
+    backgroundColor: '#64748B',
   },
   container: {
-    width: '100%',
-    maxWidth: 420,
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginTop: 10,
-    marginBottom: 20,
+    marginTop: 4,
+    marginBottom: 16,
   },
   brandTitle: {
     color: '#0F172A',
@@ -440,14 +459,15 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   micAnchorContainer: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   stepCard: {
     width: '100%',
+    maxWidth: 420,
     backgroundColor: '#CBD5E1',
     borderRadius: 24,
     padding: 20,
-    marginBottom: 24,
+    marginBottom: 20,
     borderWidth: 1.5,
     borderColor: '#475569',
     shadowColor: '#0284C7',
@@ -561,18 +581,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#94A3B8',
   },
-  medText: {
-    color: '#0F172A',
-    fontWeight: '800',
-    fontSize: 15,
-  },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
+    maxWidth: 420,
     gap: 12,
   },
   prevBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -580,10 +597,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#E2E8F0',
     borderWidth: 1.5,
     borderColor: '#0284C7',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderRadius: 20,
-    minHeight: 64,
+    minHeight: 56,
   },
   prevBtnText: {
     color: '#0284C7',
@@ -592,15 +609,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   actionBtn: {
+    flex: 1.5,
     backgroundColor: '#0284C7',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     borderRadius: 20,
-    width: '100%',
     gap: 10,
-    minHeight: 64,
+    minHeight: 56,
   },
   actionBtnText: {
     color: '#FFFFFF',
@@ -609,3 +627,4 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 });
+

@@ -1,12 +1,29 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
+const { spawn } = require('child_process');
 
 class IndicF5Service {
   constructor() {
     this.serverUrl = process.env.INDICF5_SERVER_URL || 'http://127.0.0.1:5002';
     this.refAudioPath = process.env.INDICF5_REF_AUDIO || path.join(__dirname, '../assets/indicf5_ref/ref_en.wav');
     this.refTextPath = process.env.INDICF5_REF_TEXT || path.join(__dirname, '../assets/indicf5_ref/ref_en.txt');
+    this.ensureServerRunning();
+  }
+
+  ensureServerRunning() {
+    this.checkStatus().then(status => {
+      if (!status.online) {
+        console.log('[IndicF5Service]: Spawning Python IndicF5 TTS microservice on port 5002...');
+        const venvPy = path.join(__dirname, '../indicf5_env/Scripts/python.exe');
+        const pythonBin = fs.existsSync(venvPy) ? venvPy : 'python';
+        const pyScript = path.join(__dirname, '../indicf5/indicf5_server.py');
+        try {
+          const pyProc = spawn(pythonBin, [pyScript], { stdio: 'ignore', detached: false });
+          pyProc.on('error', (err) => console.warn('[IndicF5Service] Python spawn note:', err.message));
+        } catch (e) {}
+      }
+    });
   }
 
   async checkStatus() {

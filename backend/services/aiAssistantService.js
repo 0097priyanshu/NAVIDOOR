@@ -42,7 +42,7 @@ class AIAssistantService {
     const { detectedObjects = [], activeMode = 'assist', location = 'Oak Lane' } = context;
 
     // 1. Check natural language UI control intents
-    const intent = this.extractNaturalIntent(query);
+    const intent = this.extractNaturalIntent(query, language);
 
     // If intent has a direct UI control command AND a suggested feedback answer
     if (intent && intent.suggestedAnswer && intent.action !== 'generalQA') {
@@ -106,7 +106,11 @@ Rules:
         body: JSON.stringify({
           model,
           messages,
-          stream: false
+          stream: false,
+          options: {
+            num_predict: 60,
+            temperature: 0.3
+          }
         })
       });
 
@@ -157,14 +161,58 @@ Rules:
       .trim();
   }
 
-  extractNaturalIntent(query) {
+  extractNaturalIntent(query, language = 'en') {
     const raw = query.trim();
-    const q = raw.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
+    let q = raw.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
 
-    if (q.includes('language section') || q.includes('open language') || q.includes('language settings') || q.includes('open profile') || q.includes('profile section') || q.includes('open settings') || q.includes('open setup') || q.includes('भाषा विभाग') || q.includes('सेक्शन खोलो')) {
+    // Phonetic STT normalization for Whisper Devanagari / Indic transcriptions
+    q = q
+      .replace(/नाजिगेत|नाविगेट|नाव्हिगेट|नेविगेत|नेभिगेट|नेविगेसन|नेभिगेसन/g, 'नेविगेट')
+      .replace(/सेक्षिन|सेक्सन|सेकसन|सॅक्शन|सैक्शन|सेकशन/g, 'सेक्शन')
+      .replace(/अपन|ऑपन|अपण/g, 'ओपन')
+      .replace(/लोकेसन|लोकेसिन|लोकेषन/g, 'लोकेशन')
+      .replace(/इमरजेन्सी|इमर्जेन्सी|इमरजन्सी|इमरजन्सि/g, 'इमरजेंसी')
+      .replace(/मेडिकिल|मेडिका/g, 'मेडिकल')
+      .replace(/सेटिंस/g, 'सेटिंग्स')
+      .replace(/रिडींग|रीडीन्ग/g, 'रीडिंग')
+      .replace(/मेडिसीन/g, 'मेडिसिन')
+      .replace(/ट्रांसपोट|ट्रान्सपोट/g, 'ट्रांसपोर्ट')
+      .replace(/फेमिली/g, 'फैमिली')
+      .replace(/हिसट्री/g, 'हिस्ट्री')
+      .replace(/लैंग्वेस|लँग्वेस/g, 'लैंग्वेज')
+      .replace(/प्रोफइल/g, 'प्रोफाइल');
+
+    // 0. Natural polite greetings in target language
+    if (q === 'namaskar' || q === 'namaste' || q === 'hello' || q === 'hi' || q === 'hey' || q === 'नमस्कार' || q === 'नमस्ते' || q.includes('namaskar') || q.includes('namaste')) {
+      const greetingMap = {
+        mr: 'नमस्कार! मी नवीडोअर एआय असिस्टंट आहे. मी तुम्हाला कशी मदत करू शकतो?',
+        hi: 'नमस्ते! मैं नवीडोर एआई असिस्टेंट हूँ। मैं आपकी क्या मदद कर सकता हूँ?',
+        en: 'Hello! I am NAVIDOOR AI Assistant. How can I help you today?',
+        gu: 'નમસ્તે! હું નવીડોર એઆઈ આસિસ્ટન્ટ છું. હું તમને કેવી રીતે મદદ કરી શકું?',
+        pa: 'ਨਮਸਤੇ! ਮੈਂ ਨਵੀਡੋਰ ਏਆਈ ਸਹਾਇਕ ਹਾਂ। ਮੈਂ ਤੁਹਾਡੀ ਕੀ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ?',
+        bn: 'নমস্কার! আমি নেভিডোর এআই অ্যাসিস্ট্যান্ট। আমি আপনাকে কীভাবে সাহায্য করতে পারি?',
+        ta: 'வணக்கம்! நான் நேவிடோர் AI உதவி உதவியாளர். உங்களுக்கு நான் எவ்வாறு உதவ முடியும்?',
+        te: 'నమస్కారం! నేను నేవిడోర్ AI అసిస్టెంట్. నేను మీకు ఎలా సహాయం చేయగలను?',
+        kn: 'ನಮಸ್ಕಾರ! ನಾನು ನೇವಿಡೋರ್ AI ಸಹಾಯಕ. ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?',
+        ml: 'നമസ്കാരം! ഞാൻ നേവിഡോർ എഐ അസിസ്റ്റന്റാണ്. ഞാൻ നിങ്ങളെ എങ്ങനെ സഹായിക്കും?'
+      };
+      return {
+        action: 'generalGreeting',
+        suggestedAnswer: greetingMap[language] || greetingMap.en
+      };
+    }
+
+    if (q.startsWith('close') || q === 'back' || q.includes('go back') || q.includes('dismiss')) {
+      return {
+        action: 'closeModal',
+        suggestedAnswer: 'Closing screen.'
+      };
+    }
+
+    if (q.includes('open profile') || q.includes('profile section') || q.includes('my profile') || q.includes('user profile')) {
       return {
         action: 'openProfileModal',
-        suggestedAnswer: 'Opening Language and Profile settings.'
+        suggestedAnswer: 'Opening User Profile and Medical ID.'
       };
     }
 
@@ -199,25 +247,118 @@ Rules:
       }
     }
 
-    if (q.includes('read') || q.includes('document') || q.includes('sign') || q.includes('पढ़') || q.includes('वाच')) {
+    if (
+      q.includes('location') || q.includes('where am i') || q.includes('my location') || q.includes('gps') || q.includes('map') ||
+      q.includes('लोकेशन') || q.includes('लोकेसन') || q.includes('स्थान') || q.includes('जगह') || q.includes('ठिकाण') ||
+      q.includes('સ્થળ') || q.includes('સ્થાન') || q.includes('இடம்') || q.includes('இருப்பிடம்') || q.includes('స్థానం') ||
+      q.includes('లొకేషన్') || q.includes('ಸ್ಥಳ') || q.includes('ಲೋಕೇಶನ್') || q.includes('സ്ഥലം') || q.includes('ലൊക്കേഷൻ') ||
+      q.includes('লোকেশন') || q.includes('ਲੋਕੇਸ਼ਨ')
+    ) {
+      return { action: 'switchMode', targetMode: 'location', suggestedAnswer: 'Switched to Location panel.' };
+    }
+
+    if (
+      q.includes('emergency') || q.includes('sos contacts') || q.includes('contacts') || q.includes('urgent') ||
+      q.includes('इमरजेंसी') || q.includes('इमर्जन्सी') || q.includes('आपातकालीन') || q.includes('आपत्कालीन') || q.includes('संपर्क') ||
+      q.includes('ઇમરજન્સી') || q.includes('આપાતકાલીન') || q.includes('அவசரம்') || q.includes('தொடர்புகள்') || q.includes('அత్యవసర') ||
+      q.includes('సంప్రదింపులు') || q.includes('ತುರ್ತು') || q.includes('അടിയന്തിരം') || q.includes('জরুরী') || q.includes('ਐਮਰਜੈਂਸੀ')
+    ) {
+      return { action: 'switchMode', targetMode: 'emergency', suggestedAnswer: 'Switched to Emergency Contacts panel.' };
+    }
+
+    if (
+      q.includes('medical') || q.includes('health') || q.includes('medical record') || q.includes('health info') || q.includes('medical id') ||
+      q.includes('मेडिकल') || q.includes('स्वास्थ्य') || q.includes('वैद्यकीय') || q.includes('आरोग्य') || q.includes('सेहत') || q.includes('चिकित्सा') ||
+      q.includes('મેડિકલ') || q.includes('સ્વાસ્થ્ય') || q.includes('மருத்துவ') || q.includes('ஆரோக்கியம்') || q.includes('మెడికల్') ||
+      q.includes('ఆరోగ్యం') || q.includes('ವೈದ್ಯಕೀಯ') || q.includes('ಆರೋಗ್ಯ') || q.includes('മെഡിക്കൽ') || q.includes('মেডিকেল')
+    ) {
+      return { action: 'switchMode', targetMode: 'medical', suggestedAnswer: 'Switched to Medical Info panel.' };
+    }
+
+    if (
+      q.includes('language') || q.includes('languages') || q.includes('speech language') ||
+      q.includes('लैंग्वेज') || q.includes('लँग्वेज') || q.includes('भाषा') || q.includes('भाषाएं') ||
+      q.includes('ભાષા') || q.includes('લેંગ્વેજ') || q.includes('மொழி') || q.includes('லாங்குவேஜ்') ||
+      q.includes('భాష') || q.includes('లాంగ్వేజ్') || q.includes('ಭಾಷೆ') || q.includes('ಲ್ಯಾಂಗ್ವೇಜ್') ||
+      q.includes('ഭാഷ') || q.includes('ലാംഗ്വേജ്') || q.includes('বাংলা ভাষা') || q.includes('ਭਾਸ਼ਾ')
+    ) {
+      return { action: 'switchMode', targetMode: 'languages', suggestedAnswer: 'Switched to Languages panel.' };
+    }
+
+    if (
+      q.includes('setting') || q.includes('settings') || q.includes('accessibility') || q.includes('preferences') || q.includes('options') ||
+      q.includes('सेटिंग') || q.includes('सेटिंग्स') || q.includes('सेटिंग्झ') ||
+      q.includes('સેટિંગ્સ') || q.includes('સેટિંગ') || q.includes('அமைப்புகள்') || q.includes('செட்டிங்ஸ்') ||
+      q.includes('సెట్టింగ్‌లు') || q.includes('సెట్టింగ్స్') || q.includes('ಸೆಟ್ಟಿಂಗ್‌ಗಳು') || q.includes('ಸೆಟ್ಟಿಂಗ್ಸ್') ||
+      q.includes('സെറ്റിംഗ്സ്') || q.includes('সেটিংস') || q.includes('ਸੈਟਿੰਗਾਂ')
+    ) {
+      return { action: 'switchMode', targetMode: 'settings', suggestedAnswer: 'Switched to Settings panel.' };
+    }
+
+    if (
+      q.includes('read') || q.includes('reading') || q.includes('document') || q.includes('signboard') || q.includes('ocr') || q.includes('scanner') ||
+      q.includes('रीडिंग') || q.includes('रीडींग') || q.includes('पढ़ें') || q.includes('पढो') || q.includes('पढ़ना') || q.includes('वाचा') || q.includes('वाचन') || q.includes('कागदपत्र') ||
+      q.includes('રીડિંગ') || q.includes('વાંચવું') || q.includes('વાંચો') || q.includes('வாசிப்பு') || q.includes('படிக்க') ||
+      q.includes('చదువు') || q.includes('ఓದು') || q.includes('വായിക്കുക') || q.includes('পড়ুন') || q.includes('ਪੜ੍ਹੋ')
+    ) {
       return { action: 'switchMode', targetMode: 'read', suggestedAnswer: 'Switched to Read mode for document and text scanning.' };
     }
-    if (q.includes('medicine') || q.includes('pill') || q.includes('prescription') || q.includes('दवा') || q.includes('औषध')) {
+
+    if (
+      q.includes('medicine') || q.includes('medication') || q.includes('pill') || q.includes('prescription') || q.includes('dose') ||
+      q.includes('मेडिसिन') || q.includes('दवा') || q.includes('दवाइयां') || q.includes('दवाई') || q.includes('गोली') || q.includes('औषध') || q.includes('औषधे') || q.includes('गोळ्या') ||
+      q.includes('મેડિસિન') || q.includes('દવા') || q.includes('દવાઓ') || q.includes('ગોળીઓ') || q.includes('மருந்து') || q.includes('மாத்திரை') ||
+      q.includes('మందులు') || q.includes('మాత్రలు') || q.includes('ಔಷಧ') || q.includes('ಮಾತ್ರೆ') || q.includes('മരുന്ന്') || q.includes('ওষুধ') || q.includes('ਦਵਾਈ')
+    ) {
       return { action: 'switchMode', targetMode: 'medicine', suggestedAnswer: 'Switched to Medicine mode for pill identification and dosage schedules.' };
     }
-    if (q.includes('transport') || q.includes('bus') || q.includes('transit') || q.includes('बस')) {
+
+    if (
+      q.includes('transport') || q.includes('transit') || q.includes('bus') || q.includes('shuttle') || q.includes('vehicle') ||
+      q.includes('ट्रांसपोर्ट') || q.includes('ट्रान्सपोर्ट') || q.includes('बस') || q.includes('वाहन') || q.includes('गाड़ी') || q.includes('वाहतूक') || q.includes('वाहने') ||
+      q.includes('ટ્રાન્સપોર્ટ') || q.includes('બસ') || q.includes('વાહન') || q.includes('போக்குவரத்து') || q.includes('பேருந்து') ||
+      q.includes('రవాణా') || q.includes('బస్సు') || q.includes('ಸಾರಿಗೆ') || q.includes('ಬಸ್') || q.includes('ഗതാഗതം') || q.includes('ബസ്') || q.includes('পরিবহন') || q.includes('ਟਰਾਂਸਪੋਰਟ')
+    ) {
       return { action: 'switchMode', targetMode: 'transport', suggestedAnswer: 'Switched to Transport mode for transit assistance.' };
     }
-    if (q.includes('navigate') || q.includes('guide') || q.includes('path') || q.includes('walk') || q.includes('मार्ग') || q.includes('रस्ता')) {
+
+    if (
+      q.includes('navigate') || q.includes('navigation') || q.includes('guide') || q.includes('path') || q.includes('walk') || q.includes('route') ||
+      q.includes('नेविगेट') || q.includes('नेविगेशन') || q.includes('नेव्हिगेशन') || q.includes('नेव्हिगेट') || q.includes('मार्ग') || q.includes('रास्ता') || q.includes('रस्ता') || q.includes('दिशा') ||
+      q.includes('નેવિગેશન') || q.includes('નેવિગેટ') || q.includes('રસ્તો') || q.includes('માર્ગ') || q.includes('வழி') || q.includes('பாதை') ||
+      q.includes('నేవిగేషన్') || q.includes('మార్గం') || q.includes('దారి') || q.includes('ನೇವಿಗೇಷನ್') || q.includes('ದಾರಿ') || q.includes('നാവിഗേഷൻ') || q.includes('വഴി') || q.includes('নেভিগেশন')
+    ) {
       return { action: 'switchMode', targetMode: 'navigate', suggestedAnswer: 'Switched to Navigation mode for live obstacle avoidance.' };
     }
-    if (q.includes('family') || q.includes('stream') || q.includes('caregiver') || q.includes('परिवार') || q.includes('कुटुंब')) {
+
+    if (
+      q.includes('family') || q.includes('caregiver') || q.includes('companion') || q.includes('family companion') ||
+      q.includes('फैमिली') || q.includes('फॅमिली') || q.includes('परिवार') || q.includes('कुटुंब') || q.includes('आपले लोक') ||
+      q.includes('ફેમિલી') || q.includes('પરિવાર') || q.includes('કુટુંબ') || q.includes('குடும்பம்') || q.includes('குழு') ||
+      q.includes('కుటుంబం') || q.includes('ఫ్యామిలీ') || q.includes('ಕುಟುಂಬ') || q.includes('കുടുംബം') || q.includes('পরিবার') || q.includes('ਪਰਿਵਾਰ')
+    ) {
       return { action: 'switchMode', targetMode: 'family', suggestedAnswer: 'Switched to Family companion mode.' };
     }
-    if (q.includes('history') || q.includes('log') || q.includes('past') || q.includes('इतिहास')) {
+
+    if (
+      q.includes('history') || q.includes('log') || q.includes('past') || q.includes('recent') || q.includes('activity') ||
+      q.includes('हिस्ट्री') || q.includes('इतिहास') || q.includes('पुराना') || q.includes('लॉग') || q.includes('नोंदी') ||
+      q.includes('હિસ્ટ્રી') || q.includes('ઇતિહાસ') || q.includes('வரலாறு') || q.includes('ஹிஸ்டரி') ||
+      q.includes('చరిత్ర') || q.includes('హిస్టరీ') || q.includes('ಇತಿಹಾಸ') || q.includes('ചരിത്രം') || q.includes('ইতিহাস') || q.includes('ਇਤਿਹਾਸ')
+    ) {
       return { action: 'switchMode', targetMode: 'history', suggestedAnswer: 'Switched to History log mode.' };
     }
-    if (q.includes('change section') || q.includes('switch section') || q.includes('next section') || q.includes('change mode') || q.includes('switch mode')) {
+
+    if (
+      q.includes('change section') || q.includes('switch section') || q.includes('next section') || q.includes('open section') ||
+      q.includes('change mode') || q.includes('switch mode') || q.includes('next mode') || q.includes('open mode') ||
+      q.includes('section change') || q.includes('mode change') || q.includes('cycle section') ||
+      q.includes('सेक्शन खोलो') || q.includes('विभाग खोलो') || q.includes('सेक्शन उघडा') || q.includes('विभाग उघडा') ||
+      q.includes('सेक्शन बदल') || q.includes('विभाग बदल') || q.includes('अगला सेक्शन') || q.includes('पुढील सेक्शन') ||
+      q.includes('पुढचा मोड') || q.includes('अगला मोड') || q.includes('सेक्शन चालू') || q.includes('विभाग चालू') ||
+      q.includes('ઓપન સેક્શન') || q.includes('સેક્શન ખોલો') || q.includes('સેક્શન બદલો') || q.includes('વિભાગ ખોલો') ||
+      q.includes('ओपन सेक्शन') || q.includes('सेक्शन ओपन')
+    ) {
       return { action: 'cycleNextMode', suggestedAnswer: 'Switched to next section.' };
     }
 

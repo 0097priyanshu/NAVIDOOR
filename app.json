@@ -4,10 +4,8 @@
     "slug": "navidoor",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#0F172A"
     },
@@ -20,7 +18,6 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F172A"
       },
       "permissions": [
@@ -28,7 +25,8 @@
         "RECORD_AUDIO",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
-      ]
+      ],
+      "package": "com.anonymous.navidoor"
     },
     "web": {
       "bundler": "metro"
@@ -38,6 +36,12 @@
         "expo-camera",
         {
           "cameraPermission": "Allow NAVIDOOR to access your camera for real-time spatial navigation and vision AI."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow NAVIDOOR to access your microphone for voice assistant navigation commands."
         }
       ]
     ]

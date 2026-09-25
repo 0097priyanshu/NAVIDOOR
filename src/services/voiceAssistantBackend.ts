@@ -7,24 +7,26 @@ const LOCAL_COMPUTER_IP = '192.168.0.105';
 const getCandidateBackendUrls = (): string[] => {
   const list: string[] = [];
 
-  if (Platform.OS === 'web') {
-    list.push('http://localhost:5001');
-    list.push(`http://${LOCAL_COMPUTER_IP}:5001`);
-    return list;
-  }
-
-  const hostUri = Constants.expoConfig?.hostUri || (Constants.manifest as any)?.debuggerHost;
-  if (hostUri) {
-    const rawHost = hostUri.split(':')[0];
-    const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(rawHost);
-    if (isIp) {
-      list.push(`http://${rawHost}:5001`);
+  if (Platform.OS !== 'web') {
+    // 1. Mobile Physical Device / Expo Go: prioritize hostUri dev machine IP first
+    const hostUri = Constants.expoConfig?.hostUri || (Constants.manifest as any)?.debuggerHost;
+    if (hostUri) {
+      const rawHost = hostUri.split(':')[0];
+      const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(rawHost);
+      if (isIp && rawHost !== '127.0.0.1' && rawHost !== 'localhost') {
+        list.push(`http://${rawHost}:5001`);
+      }
     }
+    list.push(`http://${LOCAL_COMPUTER_IP}:5001`);
+    list.push('http://10.0.2.2:5001');
+    list.push('http://localhost:5001');
+    list.push('http://127.0.0.1:5001');
+  } else {
+    // 2. Web Browser: prioritize localhost first
+    list.push('http://localhost:5001');
+    list.push('http://127.0.0.1:5001');
+    list.push(`http://${LOCAL_COMPUTER_IP}:5001`);
   }
-
-  list.push(`http://${LOCAL_COMPUTER_IP}:5001`);
-  list.push('http://localhost:5001');
-  list.push('http://10.0.2.2:5001');
 
   return Array.from(new Set(list));
 };
@@ -38,13 +40,19 @@ export async function discoverBackendUrl(): Promise<string> {
       const res = await fetchWithTimeout(`${url}/api/health`, {}, 2500);
       if (res.ok) {
         activeBackendUrl = url;
-        console.log('[VoiceAssistantBackend] Reachable Backend URL verified:', activeBackendUrl);
+        console.log('[VoiceAssistantBackend] Verified reachable Backend URL:', activeBackendUrl);
         return activeBackendUrl;
       }
     } catch (e) {}
   }
-  console.warn('[VoiceAssistantBackend] Healthcheck offline for candidates, fallback to:', candidates[0]);
-  return candidates[0];
+
+  const defaultFallback = Platform.OS === 'web' 
+    ? candidates[0] 
+    : (candidates.find(u => !u.includes('localhost') && !u.includes('127.0.0.1')) || candidates[0]);
+  
+  activeBackendUrl = defaultFallback;
+  console.log('[VoiceAssistantBackend] Backend URL selected:', activeBackendUrl);
+  return activeBackendUrl;
 }
 
 discoverBackendUrl();
@@ -52,8 +60,8 @@ discoverBackendUrl();
 export const BACKEND_URL = activeBackendUrl;
 export const getBackendUrl = () => activeBackendUrl;
 
-// Hermes-compatible fetch helper with timeout
-const fetchWithTimeout = async (url: string, options: any = {}, timeoutMs = 15000): Promise<Response> => {
+// Hermes-compatible fetch helper with 60s timeout for LLM inference
+const fetchWithTimeout = async (url: string, options: any = {}, timeoutMs = 60000): Promise<Response> => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -126,7 +134,7 @@ export async function queryAIAssistant(query: string, language: SupportedLanguag
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, language, context })
-    }, 25000);
+    }, 60000);
     
     if (!res.ok) {
       const errorText = await res.text();
@@ -152,6 +160,28 @@ export async function queryAIAssistant(query: string, language: SupportedLanguag
 
 export const requestAIChat = queryAIAssistant;
 
+const uploadFormDataXHR = (url: string, formData: FormData, timeoutMs = 20000): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.timeout = timeoutMs;
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch (e) {
+          resolve({ transcription: xhr.responseText });
+        }
+      } else {
+        reject(new Error(`Server returned HTTP ${xhr.status}: ${xhr.responseText}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error uploading audio file'));
+    xhr.ontimeout = () => reject(new Error('Audio upload request timed out'));
+    xhr.send(formData as any);
+  });
+};
+
 export async function requestWhisperSTT(audioBlob: Blob | null, languageCode: SupportedLanguageCode = 'en', sourceUri: string = 'device_mic'): Promise<string | null> {
   try {
     const baseUrl = await discoverBackendUrl();
@@ -159,7 +189,7 @@ export async function requestWhisperSTT(audioBlob: Blob | null, languageCode: Su
     formData.append('language', languageCode);
     formData.append('sourceUri', sourceUri);
 
-    if (Platform.OS !== 'web' && sourceUri && (sourceUri.startsWith('file://') || sourceUri.startsWith('/'))) {
+    if (Platform.OS !== 'web' && sourceUri && sourceUri !== 'device_mic' && sourceUri !== 'mic_recording') {
       const filename = sourceUri.split('/').pop() || 'real_microphone_recording.m4a';
       const ext = filename.includes('.') ? filename.split('.').pop() : 'm4a';
       const mimeType = ext === 'wav' ? 'audio/wav' : (ext === 'mp4' || ext === 'm4a') ? 'audio/m4a' : 'audio/3gpp';
@@ -180,20 +210,11 @@ export async function requestWhisperSTT(audioBlob: Blob | null, languageCode: Su
 
     console.log(`[VoiceAssistantBackend] Transmitting audio to ${baseUrl}/api/stt...`);
 
-    const res = await fetchWithTimeout(`${baseUrl}/api/stt`, {
-      method: 'POST',
-      body: formData
-    }, 20000);
-    
-    if (!res.ok) {
-      console.warn('[VoiceAssistantBackend] /api/stt response status:', res.status);
-      return null;
-    }
-    const data = await res.json();
+    const data = await uploadFormDataXHR(`${baseUrl}/api/stt`, formData, 20000);
     console.log('[VoiceAssistantBackend] /api/stt transcription success:', data.transcription);
     return data.transcription || null;
   } catch (err) {
-    console.warn('[VoiceAssistantBackend] requestWhisperSTT fetch error:', err);
+    console.warn('[VoiceAssistantBackend] requestWhisperSTT error:', err);
     return null;
   }
 }

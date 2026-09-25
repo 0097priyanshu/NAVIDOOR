@@ -11,7 +11,7 @@ export const FamilyCompanionModal: React.FC = () => {
   if (!isFamilyCompanionOpen) return null;
 
   return (
-    <Modal visible={isFamilyCompanionOpen} transparent animationType="slide">
+    <Modal visible={isFamilyCompanionOpen} transparent statusBarTranslucent animationType="slide">
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
           {/* Header */}
