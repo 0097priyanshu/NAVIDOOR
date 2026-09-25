@@ -163,17 +163,35 @@ export const RotatingAIModeWheel: React.FC = () => {
     if (voiceState === 'listening') {
       setVoiceState('thinking');
       useNavidoorStore.setState({ lastAnnouncement: '⚙️ Processing your speech...' });
-      const { blob, uri, liveTranscript } = await voiceRecordingService.stopRecording();
+      
+      const result = await voiceRecordingService.stopRecording();
+      console.log('[Voice] Recording result:', {
+        uri: result.uri,
+        blobSize: result.blob?.size ?? 0,
+        liveTranscript: result.liveTranscript,
+      });
 
-      let textToProcess = liveTranscript ? liveTranscript.trim() : '';
-      if (!textToProcess && (blob || uri)) {
-        const text = await requestWhisperSTT(blob, activeLanguageCode, uri || 'mic_recording');
+      let textToProcess = result.liveTranscript ? result.liveTranscript.trim() : '';
+
+      if (!textToProcess && (result.blob || result.uri)) {
+        console.log('[Voice] Sending recorded audio to Whisper:', {
+          sourceUri: result.uri,
+          hasBlob: !!result.blob,
+        });
+
+        const text = await requestWhisperSTT(
+          result.blob,
+          activeLanguageCode,
+          result.uri || 'device_mic'
+        );
         if (text) textToProcess = text.trim();
       }
 
       if (textToProcess) {
+        console.log(`[Voice] Recognized speech: "${textToProcess}". Processing...`);
         await processVoiceInput(textToProcess);
       } else {
+        console.log('[Voice] No speech text recognized.');
         setVoiceState('idle');
         speak('I did not catch that. Tap the mic button to try speaking again.');
       }
@@ -181,9 +199,11 @@ export const RotatingAIModeWheel: React.FC = () => {
       stopVoice();
       setVoiceState('listening');
       useNavidoorStore.setState({ lastAnnouncement: '🎤 Listening... Speak now.' });
+      console.log('[RotatingAIModeWheel] Starting voice recording...');
       
       await voiceRecordingService.startRecording(activeLanguageCode, async (autoText) => {
         if (autoText && autoText.trim()) {
+          console.log(`[RotatingAIModeWheel] Live auto-transcript received: "${autoText.trim()}"`);
           setVoiceState('thinking');
           await processVoiceInput(autoText.trim());
         }
@@ -363,7 +383,8 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
   bottomCurvedDock: {
-    width: SCREEN_WIDTH - 14,
+    width: '96%',
+    maxWidth: 600,
     height: 92,
     borderTopLeftRadius: 38,
     borderTopRightRadius: 38,

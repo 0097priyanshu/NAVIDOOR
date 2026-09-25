@@ -10,6 +10,11 @@ class DynamicTranslationService {
   async translateText(text, targetLang = 'en') {
     if (!text || targetLang === 'en') return text;
 
+    // Return as-is if text already contains native Indic script (Devanagari, Bengali, Tamil, Telugu, etc.)
+    if (/[\u0900-\u0DFF\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F]/.test(text)) {
+      return text;
+    }
+
     const cacheKey = `${targetLang}:${text}`;
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey);

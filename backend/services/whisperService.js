@@ -30,11 +30,11 @@ class WhisperService {
   convertTo16kMonoWav(inputPath, outputPath) {
     try {
       if (ffmpegPath && fs.existsSync(ffmpegPath)) {
-        // Apply HighPass (80Hz) + LowPass (7500Hz) noise filtering & Volume Boost (1.8x) for clean microphone audio
-        const cmd = `"${ffmpegPath}" -y -i "${inputPath}" -af "highpass=f=80, lowpass=f=7500, volume=1.8" -ar 16000 -ac 1 -c:a pcm_s16le "${outputPath}"`;
+        // Boost microphone audio volume 2.2x and resample to 16kHz 16-bit Mono WAV
+        const cmd = `"${ffmpegPath}" -y -i "${inputPath}" -af "volume=2.2" -ar 16000 -ac 1 -c:a pcm_s16le "${outputPath}"`;
         execSync(cmd, { stdio: 'ignore' });
         const outSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
-        console.log(`[WhisperService]: FFmpeg resampled & filtered "${path.basename(inputPath)}" -> "${path.basename(outputPath)}" (${outSize} bytes)`);
+        console.log(`[WhisperService]: FFmpeg resampled "${path.basename(inputPath)}" -> "${path.basename(outputPath)}" (${outSize} bytes)`);
         return outputPath;
       }
     } catch (e) {
@@ -43,32 +43,28 @@ class WhisperService {
     return inputPath;
   }
 
-  async transcribeAudio(audioFilePath, languageCode = 'auto') {
+  async transcribeAudio(audioFilePath, languageCode = 'en') {
     const langMeta = getLanguageMeta(languageCode);
+    const whisperLang = (langMeta && langMeta.whisperLang) ? langMeta.whisperLang : (languageCode || 'en');
 
     if (!audioFilePath || !fs.existsSync(audioFilePath)) {
       return { text: '', language: languageCode, confidence: 0, engine: 'whisper.cpp' };
     }
 
-    // Convert M4A/AAC/WAV/WEBM to 16kHz 16-bit Mono PCM WAV (real_microphone_16k.wav) with audio noise filtering
+    // Convert M4A/AAC/WAV/WEBM to 16kHz 16-bit Mono PCM WAV (real_microphone_16k.wav)
     const real16kWavPath = path.join(__dirname, '../temp/real_microphone_16k.wav');
     const wav16kPath = this.convertTo16kMonoWav(audioFilePath, real16kWavPath);
     const activeModel = this.getModelPath();
 
     if (fs.existsSync(this.binPath) && fs.existsSync(activeModel)) {
       return new Promise((resolve) => {
-        const whisperLang = 'auto';
-        // High accuracy beam search (-bs 5 -bo 5), 8 computation threads (-t 8), no timestamps (-nt), domain prompt
-        const cmd = `"${this.binPath}" -m "${activeModel}" -l ${whisperLang} -t 8 -bs 5 -bo 5 -nt --prompt "NAVIDOOR voice navigation assistant." -f "${wav16kPath}"`;
+        // Fast greedy STT execution with 'auto' detection for non-English speech to capture code-switched English words cleanly
+        const targetLangArg = (languageCode && languageCode !== 'en') ? 'auto' : (whisperLang || 'auto');
+        const cmd = `"${this.binPath}" -m "${activeModel}" -l ${targetLangArg} -t 8 -nt -f "${wav16kPath}"`;
         
         const startTime = Date.now();
         exec(cmd, (error, stdout, stderr) => {
           const durationMs = Date.now() - startTime;
-
-          if (error && !stdout) {
-            console.error('[Whisper.cpp] Inference error:', error, stderr);
-            return resolve({ text: '', language: languageCode, confidence: 0, engine: 'whisper.cpp', real16kWavPath });
-          }
 
           const rawOutput = stdout || '';
           let cleanedText = rawOutput
@@ -76,14 +72,34 @@ class WhisperService {
             .map(line => line.trim())
             .filter(line => line.length > 0 && !line.startsWith('whisper_') && !line.startsWith('system_info') && !line.startsWith('main:'))
             .join(' ')
+            .replace(/\[\d{2}:\d{2}:\d{2}\.\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}\.\d{3}\]/g, '')
+            .replace(/\[(BLANK_AUDIO|SILENCE|MUSIC|NOISE|LAUGHTER|COUGH)\]/gi, '')
+            .replace(/\((blank audio|silence|music|noise|laughter|cough)\)/gi, '')
             .trim();
+
+          // Quick fallback pass with explicit language code if auto detection produced no text
+          if (!cleanedText || cleanedText.length < 2) {
+            const fallbackCmd = `"${this.binPath}" -m "${activeModel}" -l ${whisperLang || 'auto'} -t 8 -nt -f "${wav16kPath}"`;
+            try {
+              const fallbackOutput = execSync(fallbackCmd, { encoding: 'utf-8' }) || '';
+              cleanedText = fallbackOutput
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0 && !line.startsWith('whisper_') && !line.startsWith('system_info') && !line.startsWith('main:'))
+                .join(' ')
+                .replace(/\[\d{2}:\d{2}:\d{2}\.\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}\.\d{3}\]/g, '')
+                .replace(/\[(BLANK_AUDIO|SILENCE|MUSIC|NOISE|LAUGHTER|COUGH)\]/gi, '')
+                .replace(/\((blank audio|silence|music|noise|laughter|cough)\)/gi, '')
+                .trim();
+            } catch (fbErr) {}
+          }
 
           const modelName = path.basename(activeModel);
           console.log(`[Whisper.cpp STT (${modelName})]: Transcribed Text: "${cleanedText}" (${durationMs}ms)`);
 
           resolve({
             text: cleanedText,
-            language: languageCode || 'auto',
+            language: languageCode || 'en',
             confidence: cleanedText ? 0.96 : 0,
             inferenceTimeMs: durationMs,
             real16kWavPath,

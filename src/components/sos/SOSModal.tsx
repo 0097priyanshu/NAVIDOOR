@@ -37,7 +37,7 @@ export const SOSModal: React.FC = () => {
   if (!isSosModalOpen) return null;
 
   return (
-    <Modal visible={isSosModalOpen} transparent animationType="slide">
+    <Modal visible={isSosModalOpen} transparent statusBarTranslucent animationType="slide">
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
           {/* Header */}
