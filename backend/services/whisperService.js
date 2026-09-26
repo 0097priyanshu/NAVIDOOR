@@ -30,11 +30,12 @@ class WhisperService {
   convertTo16kMonoWav(inputPath, outputPath) {
     try {
       if (ffmpegPath && fs.existsSync(ffmpegPath)) {
-        // Boost microphone audio volume 2.2x and resample to 16kHz 16-bit Mono WAV
-        const cmd = `"${ffmpegPath}" -y -i "${inputPath}" -af "volume=2.2" -ar 16000 -ac 1 -c:a pcm_s16le "${outputPath}"`;
+        // High-Pass Filter (120Hz) cuts low traffic rumble/wind. Low-Pass Filter (3800Hz) cuts crowd noise. Boost voice 2.5x.
+        const audioFilter = "highpass=f=120,lowpass=f=3800,volume=2.5";
+        const cmd = `"${ffmpegPath}" -y -i "${inputPath}" -af "${audioFilter}" -ar 16000 -ac 1 -c:a pcm_s16le "${outputPath}"`;
         execSync(cmd, { stdio: 'ignore' });
         const outSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
-        console.log(`[WhisperService]: FFmpeg resampled "${path.basename(inputPath)}" -> "${path.basename(outputPath)}" (${outSize} bytes)`);
+        console.log(`[WhisperService]: FFmpeg Noise-Filtered Resample "${path.basename(inputPath)}" -> "${path.basename(outputPath)}" (${outSize} bytes)`);
         return outputPath;
       }
     } catch (e) {
@@ -73,8 +74,8 @@ class WhisperService {
             .filter(line => line.length > 0 && !line.startsWith('whisper_') && !line.startsWith('system_info') && !line.startsWith('main:'))
             .join(' ')
             .replace(/\[\d{2}:\d{2}:\d{2}\.\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}\.\d{3}\]/g, '')
-            .replace(/\[(BLANK_AUDIO|SILENCE|MUSIC|NOISE|LAUGHTER|COUGH)\]/gi, '')
-            .replace(/\((blank audio|silence|music|noise|laughter|cough)\)/gi, '')
+            .replace(/\[(BLANK_AUDIO|SILENCE|MUSIC|NOISE|TRAFFIC|HORN|CROWD|CHATTER|LAUGHTER|COUGH)\]/gi, '')
+            .replace(/\((blank audio|silence|music|noise|traffic|horn|crowd|chatter|laughter|cough)\)/gi, '')
             .trim();
 
           // Quick fallback pass with explicit language code if auto detection produced no text

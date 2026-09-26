@@ -96,7 +96,14 @@ export class VoiceRecordingService {
     if (Platform.OS === 'web' && typeof window !== 'undefined' && navigator && navigator.mediaDevices) {
       try {
         if (!this.activeStream || !this.activeStream.active) {
-          this.activeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          this.activeStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              channelCount: 1,
+            }
+          });
         }
         console.log('MIC PERMISSION: GRANTED (Web MediaDevices)');
         return true;
@@ -197,7 +204,14 @@ export class VoiceRecordingService {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       try {
         if (!this.activeStream || !this.activeStream.active) {
-          this.activeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          this.activeStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              channelCount: 1,
+            }
+          });
         }
 
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;

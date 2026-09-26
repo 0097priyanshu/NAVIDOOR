@@ -188,36 +188,46 @@ export const VoiceOnboardingModal: React.FC = () => {
   };
 
   const speakPromptForStep = (currentStep: number, langChoice = userLanguage) => {
+    const isMr = activeLanguageCode === 'mr';
+    const isHi = activeLanguageCode === 'hi';
+    const isGu = activeLanguageCode === 'gu';
+
     switch (currentStep) {
       case 1:
-        speak(
-          `Welcome to NAVIDOOR AI Vision Assist. Let's set up your profile. Step 1: Select your preferred offline voice language from 10 supported options. Tap your choice.`
-        );
+        if (isMr) speak('नवीडोअर एआय व्हिजन असिस्टंटमध्ये आपले स्वागत आहे. चला तुमचे प्रोफाईल सेट करूया. टप्पा १: तुमची भाषा निवडा.');
+        else if (isHi) speak('नेविडोर एआई विज़न असिस्टेंट में आपका स्वागत है। आइए आपका प्रोफाइल सेट करें। चरण 1: अपनी पसंदीदा भाषा चुनें।');
+        else if (isGu) speak('નવીડોર એઆઈ આસિસ્ટન્ટમાં આપનું સ્વાગત છે. ચાલો તમારી પ્રોફાઇલ સેટ કરીએ. પગલું 1: તમારી ભાષા પસંદ કરો.');
+        else speak(`Welcome to NAVIDOOR AI Vision Assist. Let's set up your profile. Step 1: Select your preferred voice language.`);
         break;
       case 2:
-        speak(
-          `Language set to ${langChoice}. Step 2: What is your name? Current name set to ${inputName}. Tap anywhere to confirm.`
-        );
+        if (isMr) speak(`टप्पा २: तुमचे नाव काय आहे? तुमचे नाव बोला किंवा टाइप करा.`);
+        else if (isHi) speak(`चरण 2: आपका नाम क्या है? अपना नाम बोलें या नीचे टाइप करें।`);
+        else if (isGu) speak(`પગલું 2: તમારું નામ શું છે? તમારું નામ બોલો અથવા નીચે ટાઇપ કરો.`);
+        else speak(`Step 2: What is your name? Current name set to ${inputName}.`);
         break;
       case 3:
-        speak(
-          `Hello ${inputName}. Step 3: Enter your personal phone number for emergency SMS notifications. Current number is ${inputPhone}. Tap anywhere to confirm.`
-        );
+        if (isMr) speak(`नमस्कार ${inputName}. टप्पा ३: आणीबाणीच्या संदेशांसाठी तुमचा फोन नंबर प्रविष्ट करा.`);
+        else if (isHi) speak(`नमस्ते ${inputName}। चरण 3: आपातकालीन अलर्ट के लिए अपना फोन नंबर दर्ज करें।`);
+        else if (isGu) speak(`નમસ્તે ${inputName}. પગલું 3: ઈમરજન્સી એલર્ટ માટે તમારો ફોન નંબર દાખલ કરો.`);
+        else speak(`Hello ${inputName}. Step 3: Enter your personal phone number for emergency notifications.`);
         break;
       case 4:
-        speak(
-          `Phone number saved. Step 4: Confirm your primary emergency contact. Set to Sunita Sharma, Daughter, phone number +91 98765-43210. Tap anywhere to confirm.`
-        );
+        if (isMr) speak(`टप्पा ४: तुमचा प्राथमिक आणीबाणी संपर्क निश्चित करा.`);
+        else if (isHi) speak(`चरण 4: अपने प्राथमिक आपातकालीन संपर्क की पुष्टि करें।`);
+        else if (isGu) speak(`પગલું 4: તમારા પ્રાથમિક ઈમરજન્સી સંપર્કની પુષ્ટિ કરો.`);
+        else speak(`Step 4: Confirm your primary emergency contact.`);
         break;
       case 5:
-        speak(
-          `Emergency contact confirmed. Step 5: Medicine tracker setup. Currently loaded medicine is Lisinopril 10mg. Tap anywhere to save prescription schedule.`
-        );
+        if (isMr) speak(`टप्पा ५: औषध ट्रॅकर सेटअप. औषधांचे वेळापत्रक जतन करा.`);
+        else if (isHi) speak(`चरण 5: दवा ट्रैकर सेटअप। दवा की समयसारिणी की पुष्टि करें।`);
+        else if (isGu) speak(`પગલું 5: દવા ટ્રેકર સેટઅપ. દવાની સમયપત્રકની પુષ્ટિ કરો.`);
+        else speak(`Step 5: Medicine tracker setup. Confirm prescription schedule.`);
         break;
       case 6:
-        speak(
-          `Setup complete! All profile details saved for ${inputName}. NAVIDOOR AI Vision Assist is now active with live camera and voice guidance.`
-        );
+        if (isMr) speak(`सेटअप पूर्ण झाला आहे! नवीडोअर एआय व्हिजन असिस्टंट आता चालू झाला आहे.`);
+        else if (isHi) speak(`सेटअप पूरा हो गया है! नेविडोर एआई विज़न असिस्टेंट अब सक्रिय है।`);
+        else if (isGu) speak(`સેટઅપ પૂર્ણ થયું! નવીડોર એઆઈ વિઝન આસિસ્ટન્ટ હવે સક્રિય છે.`);
+        else speak(`Setup complete! NAVIDOOR AI Vision Assist is now active.`);
         break;
     }
   };
