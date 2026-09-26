@@ -91,6 +91,7 @@ interface NavidoorState {
   medicines: MedicineInfo[];
   detectedMedicine: MedicineInfo | null;
   confirmMedicineTaken: (medicineId: string) => void;
+  deleteMedicine: (medicineId: string) => void;
 
   isProfileModalOpen: boolean;
   setIsProfileModalOpen: (open: boolean) => void;
@@ -186,9 +187,9 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     const activeLang = get().activeLanguageCode;
     let finalSpeechText = text;
     
-    // Auto-translate pure English strings to active language (skip if already localized)
-    const isPureEnglish = /^[a-zA-Z0-9\s.,!?'"-]+$/.test(text.trim());
-    if (activeLang !== 'en' && isPureEnglish) {
+    // Auto-translate any text containing English words to active language before TTS readout
+    const hasEnglishWords = /[a-zA-Z]/.test(text.trim());
+    if (activeLang !== 'en' && hasEnglishWords) {
       finalSpeechText = await requestTranslation(text, activeLang);
     }
 
@@ -213,9 +214,13 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     const parsed = voiceCommandProcessor.parseCommand(input);
 
     if (parsed.isCommand) {
+      const activeLang = get().activeLanguageCode;
+      const t = getTranslation(activeLang);
+
       if (parsed.action === 'openProfileModal') {
         get().setIsProfileModalOpen(true);
-        get().speak(parsed.feedbackPrompt || 'Opening Language and Profile settings.');
+        const msg = activeLang === 'mr' ? 'प्रोफाईल आणि भाषा सेटिंग्ज उघडत आहे.' : (activeLang === 'hi' ? 'प्रोफाइल और भाषा सेटिंग्स खोली जा रही हैं।' : 'Opening Profile and Language settings.');
+        get().speak(msg);
       } else if (parsed.action === 'logoutUser') {
         get().setIsProfileModalOpen(false);
         get().setFamilyUser(null);
@@ -224,25 +229,29 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
         get().setFamilyConnectionStatus('idle');
         get().setUserRole('undecided');
         get().setIsFirstTimeUser(false);
-        get().speak(parsed.feedbackPrompt || 'Logged out. Returning to role selection screen.');
+        const msg = activeLang === 'mr' ? 'लॉग आउट झाले. सेटअप पुन्हा सुरू करत आहे.' : (activeLang === 'hi' ? 'लॉग आउट हो गए। सेटअप फिर से शुरू हो रहा है।' : 'Logged out. Returning to role selection screen.');
+        get().speak(msg);
       } else if (parsed.action === 'closeModal') {
         get().setIsProfileModalOpen(false);
         get().setSosModalOpen(false);
         get().setFamilyCompanionOpen(false);
-        get().speak('Closing screen.');
+        const msg = activeLang === 'mr' ? 'स्क्रीन बंद करत आहे.' : (activeLang === 'hi' ? 'स्क्रीन बंद की जा रही है।' : 'Closing screen.');
+        get().speak(msg);
       } else if (parsed.action === 'updateUserName' && parsed.valueString) {
         get().setUserName(parsed.valueString);
-        get().speak(`Name updated to ${parsed.valueString}.`);
+        const msg = activeLang === 'mr' ? `नाव ${parsed.valueString} अद्यतनित केले.` : (activeLang === 'hi' ? `नाम ${parsed.valueString} अपडेट किया गया।` : `Name updated to ${parsed.valueString}.`);
+        get().speak(msg);
       } else if (parsed.action === 'updateUserPhone' && parsed.valueString) {
         get().setUserPhone(parsed.valueString);
-        get().speak(`Phone number updated to ${parsed.valueString}.`);
+        const msg = activeLang === 'mr' ? `फोन नंबर ${parsed.valueString} जतन केला.` : (activeLang === 'hi' ? `फोन नंबर ${parsed.valueString} सहेजा गया।` : `Phone number updated to ${parsed.valueString}.`);
+        get().speak(msg);
       } else if (parsed.action === 'switchLanguage' && parsed.targetLanguage) {
         get().setActiveLanguageCode(parsed.targetLanguage);
         if (parsed.targetLanguageName) {
           get().setUserLanguage(parsed.targetLanguageName);
         }
-        const confirmMsg = parsed.feedbackPrompt || `Language changed to ${parsed.targetLanguageName || parsed.targetLanguage}.`;
-        get().speak(confirmMsg);
+        const langTrans = getTranslation(parsed.targetLanguage);
+        get().speak(langTrans.languageChanged);
       } else if (parsed.action === 'switchMode' && parsed.targetMode) {
         get().setActiveMode(parsed.targetMode);
       } else if (parsed.action === 'cycleNextMode') {
@@ -259,24 +268,43 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
         };
         const currentMeds = get().medicines || [];
         set({ medicines: [newMed, ...currentMeds] });
-        get().setActiveMode('medicine');
-        get().speak(`Added new medicine: ${parsed.valueString}. Switched to Medicine mode.`);
+        get().setActiveMode('medical');
+        const msg = activeLang === 'mr' ? `नवीन औषध ${parsed.valueString} जोडले.` : (activeLang === 'hi' ? `नई दवा ${parsed.valueString} जोड़ी गई।` : `Added new medicine: ${parsed.valueString}.`);
+        get().speak(msg);
+      } else if (parsed.action === 'deleteMedicine') {
+        const meds = get().medicines || [];
+        let target = meds[0];
+        if (parsed.valueString) {
+          const match = meds.find(m => m.name.toLowerCase().includes(parsed.valueString!.toLowerCase()));
+          if (match) target = match;
+        }
+        if (target) {
+          get().deleteMedicine(target.id);
+          get().setActiveMode('medical');
+        } else {
+          const msg = activeLang === 'mr' ? 'काढण्यासाठी कोणतेही औषध सापडले नाही.' : (activeLang === 'hi' ? 'हटाने के लिए कोई दवा नहीं मिली।' : 'No matching medicine found to delete.');
+          get().speak(msg);
+        }
       } else if (parsed.action === 'confirmMedicine') {
         const meds = get().medicines;
         if (meds && meds.length > 0) {
           get().confirmMedicineTaken(meds[0].id);
         } else {
-          get().speak('No scheduled medicines to confirm.');
+          const msg = activeLang === 'mr' ? 'कोणतेही औषध निश्चित करण्यासाठी नाही.' : (activeLang === 'hi' ? 'पुष्टि करने के लिए कोई दवा नहीं है।' : 'No scheduled medicines to confirm.');
+          get().speak(msg);
         }
       } else if (parsed.action === 'updateTheme' && parsed.targetTheme) {
         get().setThemeMode(parsed.targetTheme);
-        get().speak(`Theme updated to ${parsed.targetTheme} mode.`);
+        const msg = activeLang === 'mr' ? 'थीम मोड बदलला.' : (activeLang === 'hi' ? 'थीम बदल दी गई है।' : `Theme updated to ${parsed.targetTheme} mode.`);
+        get().speak(msg);
       } else if (parsed.action === 'updateSpeechRate' && parsed.rateValue) {
         get().setSpeechRate(parsed.rateValue);
-        get().speak(`Speech rate updated.`);
+        const msg = activeLang === 'mr' ? 'आवाजाची गती बदलली.' : (activeLang === 'hi' ? 'आवाज की गति बदल दी गई है।' : `Speech rate updated.`);
+        get().speak(msg);
       } else if (parsed.action === 'updateFontScale' && parsed.targetFontScale) {
         get().setFontScale(parsed.targetFontScale);
-        get().speak(`Text size set to ${parsed.targetFontScale}.`);
+        const msg = activeLang === 'mr' ? 'मजकुराचा आकार बदलला.' : (activeLang === 'hi' ? 'टेक्स्ट का आकार बदल दिया गया है।' : `Text size updated.`);
+        get().speak(msg);
       } else if (parsed.action === 'toggleTorch') {
         get().toggleTorch();
       } else if (parsed.action === 'toggleCameraFacing') {
@@ -288,9 +316,10 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
       } else if (parsed.action === 'voiceSearch') {
         const results = voiceSearchService.search(parsed.searchQuery || input, get().medicines);
         if (results.length > 0) {
-          get().speak(`Voice search result: ${results[0].title}. ${results[0].detail}`);
+          get().speak(`${results[0].title}. ${results[0].detail}`);
         } else {
-          get().speak(`No search results found for ${parsed.searchQuery || input}.`);
+          const msg = activeLang === 'mr' ? 'कोणतेही शोध निकाल सापडले नाहीत.' : (activeLang === 'hi' ? 'कोई खोज परिणाम नहीं मिले।' : `No search results found.`);
+          get().speak(msg);
         }
       }
       return;
@@ -347,7 +376,16 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
               prescribedFor: 'General Health'
             };
             set({ medicines: [newMed, ...(get().medicines || [])] });
-            get().setActiveMode('medicine');
+            get().setActiveMode('medical');
+          } else if (intent.subAction === 'delete') {
+            const meds = get().medicines || [];
+            let target = meds[0];
+            if (intent.medicationName) {
+              const match = meds.find(m => m.name.toLowerCase().includes(intent.medicationName.toLowerCase()));
+              if (match) target = match;
+            }
+            if (target) get().deleteMedicine(target.id);
+            get().setActiveMode('medical');
           } else if (intent.subAction === 'confirm') {
             const meds = get().medicines;
             if (meds && meds.length > 0) get().confirmMedicineTaken(meds[0].id);
@@ -574,6 +612,15 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
       ),
     }));
     speakAnnouncement('Dose confirmed and logged into your schedule.');
+  },
+  deleteMedicine: (medicineId) => {
+    const medToDelete = get().medicines.find((m) => m.id === medicineId);
+    set((state) => ({
+      medicines: state.medicines.filter((m) => m.id !== medicineId),
+    }));
+    if (medToDelete) {
+      speakAnnouncement(`Deleted ${medToDelete.name} from your medications list.`);
+    }
   },
 
   isProfileModalOpen: false,

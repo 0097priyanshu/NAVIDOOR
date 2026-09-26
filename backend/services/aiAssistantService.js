@@ -17,10 +17,11 @@ class AIAssistantService {
         const data = await res.json();
         const models = data.models || [];
         if (models.length > 0) {
-          // Prioritize general-purpose conversational models first (llama3.2, mistral, gemma, phi), avoiding -coder models if general models exist
-          const generalModel = models.find(m => 
+          // Prioritize llama3.2 general conversational model first, then non-coder models
+          const llamaModel = models.find(m => m.name.toLowerCase().includes('llama'));
+          const generalModel = llamaModel || models.find(m => 
             !m.name.toLowerCase().includes('coder') && 
-            (m.name.toLowerCase().includes('llama') || m.name.toLowerCase().includes('mistral') || m.name.toLowerCase().includes('gemma') || m.name.toLowerCase().includes('phi') || m.name.toLowerCase().includes('qwen'))
+            (m.name.toLowerCase().includes('mistral') || m.name.toLowerCase().includes('gemma') || m.name.toLowerCase().includes('phi') || m.name.toLowerCase().includes('qwen'))
           );
           
           this.modelName = generalModel ? generalModel.name : models[0].name;
@@ -73,9 +74,9 @@ Your job is to answer the user's questions clearly, accurately, and concisely in
 
 Rules:
 1. Answer ANY general question across any domain (science, history, math, coding, jokes, general knowledge, directions, daily life advice).
-2. Respond DIRECTLY in ${targetLangName} (Language code: ${language}).
-3. Whether the user's input transcript is written in native script (e.g. Devanagari) or Romanized text (e.g. Marathi/Hinglish), understand their intent and answer in clear, natural ${targetLangName}.
-4. Keep answers concise (1-3 sentences maximum) suitable for voice synthesis readout unless the user explicitly requests more detail.
+2. Provide a clear, factual answer in 1-2 concise, complete sentences.
+3. ALWAYS write your response STRICTLY in clear, fluent English with complete sentences ending in terminal punctuation (. or !). Do NOT output Devanagari, Hindi, or non-English text directly; the translation engine will translate your complete English response into the user's target language.
+4. NEVER cut off mid-sentence or output incomplete thoughts.
 5. NEVER include markdown elements like code blocks, backticks, asterisks, hash tags, or bullet points in your output text.
 6. When asked about what is in front of the user or environmental surroundings:
    ${visionContextText ? `CAMERA PERCEPTION DATA: ${visionContextText}` : `CAMERA PERCEPTION DATA: NO OBJECTS DETECTED OR CAMERA FEED UNAVAILABLE.`}
@@ -89,14 +90,17 @@ Rules:
     }
     const history = this.sessionHistory.get(sessionId);
 
+    // Normalize query to English for Ollama prompt if needed to prevent token budget truncation
+    const englishQuery = await translationService.translateText(query.trim(), 'en');
+
     const messages = [
       { role: 'system', content: systemPrompt },
       ...history,
-      { role: 'user', content: query.trim() }
+      { role: 'user', content: englishQuery }
     ];
 
     console.log(`[AIAssistantService] Querying Local Ollama (${model}) [Lang: ${language}]...`);
-    console.log(`[AIAssistantService] Prompt query: "${query}"`);
+    console.log(`[AIAssistantService] Prompt query: "${query}" -> EN: "${englishQuery}"`);
 
     let rawAnswer = '';
     try {
@@ -108,7 +112,7 @@ Rules:
           messages,
           stream: false,
           options: {
-            num_predict: 60,
+            num_predict: 800,
             temperature: 0.3
           }
         })
@@ -127,14 +131,24 @@ Rules:
         throw new Error('Ollama returned empty message content');
       }
 
-      rawAnswer = this.cleanSpeechText(rawAnswer);
-      console.log(`[AIAssistantService] Ollama LLM Response: "${rawAnswer}"`);
-
-      history.push({ role: 'user', content: query.trim() });
-      history.push({ role: 'assistant', content: rawAnswer });
+      const rawEnglishAnswer = rawAnswer;
+      history.push({ role: 'user', content: englishQuery });
+      history.push({ role: 'assistant', content: rawEnglishAnswer });
       if (history.length > 10) {
         history.splice(0, history.length - 10);
       }
+
+      if (language && language !== 'en') {
+        try {
+          const nativeTranslated = await translationService.translateText(rawAnswer, language);
+          if (nativeTranslated && nativeTranslated.length > 3) {
+            rawAnswer = nativeTranslated;
+          }
+        } catch (tErr) {}
+      }
+      
+      rawAnswer = this.cleanSpeechText(rawAnswer);
+      console.log(`[AIAssistantService] Cleaned Complete Native Response (${language}): "${rawAnswer}"`);
     } catch (err) {
       console.error('[AIAssistantService] Ollama LLM Inference Error:', err.message);
       throw new Error(`Local LLM (Ollama) unavailable: ${err.message}`);
@@ -150,7 +164,7 @@ Rules:
 
   cleanSpeechText(text) {
     if (!text) return '';
-    return text
+    let cleaned = text
       .replace(/```[\s\S]*?```/g, '')
       .replace(/`([^`]+)`/g, '$1')
       .replace(/\*\*([^*]+)\*\*/g, '$1')
@@ -159,6 +173,27 @@ Rules:
       .replace(/[-*]\s+/g, '')
       .replace(/\s+/g, ' ')
       .trim();
+
+    if (cleaned.length > 25 && !/[.!?।॥]\s*$/.test(cleaned)) {
+      const lastPunctuationIndex = Math.max(
+        cleaned.lastIndexOf('.'),
+        cleaned.lastIndexOf('!'),
+        cleaned.lastIndexOf('?'),
+        cleaned.lastIndexOf('।'),
+        cleaned.lastIndexOf('॥')
+      );
+      if (lastPunctuationIndex > 10) {
+        cleaned = cleaned.substring(0, lastPunctuationIndex + 1).trim();
+      } else {
+        const lastSpace = cleaned.lastIndexOf(' ');
+        if (lastSpace > 10) {
+          cleaned = cleaned.substring(0, lastSpace).trim() + '.';
+        } else {
+          cleaned = cleaned + '.';
+        }
+      }
+    }
+    return cleaned;
   }
 
   extractNaturalIntent(query, language = 'en') {
@@ -202,6 +237,22 @@ Rules:
       };
     }
 
+    if (
+      q.includes('what is navidoor') || q.includes('who are you') || q.includes('about navidoor') ||
+      q.includes('नवीडोअर काय आहे') || q.includes('नवीडोर काय आहे') || q.includes('नेव्हिडोअर काय आहे') || q.includes('तू कोण आहेस') || q.includes('तुम्ही कोण आहात') ||
+      q.includes('नेविडोर क्या है') || q.includes('तुम कौन हो') || q.includes('नेविडोर क्या काम करता है')
+    ) {
+      const navidoorAboutMap = {
+        mr: 'नवीडोअर हे दृष्टिहीन वापरकर्त्यांसाठी एक प्रगत एआय व्हॉइस असिस्टंट ॲप आहे. ते व्हिजन, दिशा मार्गदर्शन, कागदपत्र वाचन आणि आणीबाणी मदतीमध्ये साहाय्य करते.',
+        hi: 'नेविडोर दृष्टिबाधित उपयोगकर्ताओं के लिए एक उन्नत एआई वॉयस असिस्टेंट ऐप है। यह विजन, नेविगेशन, दस्तावेज़ पढ़ने और आपातकालीन सहायता प्रदान करता है।',
+        en: 'NAVIDOOR is an advanced AI voice assistant app for visually impaired users. It provides live vision assist, spatial navigation, document reading, and emergency SOS.'
+      };
+      return {
+        action: 'aboutNavidoor',
+        suggestedAnswer: navidoorAboutMap[language] || navidoorAboutMap.en
+      };
+    }
+
     if (q.startsWith('close') || q === 'back' || q.includes('go back') || q.includes('dismiss')) {
       return {
         action: 'closeModal',
@@ -209,7 +260,13 @@ Rules:
       };
     }
 
-    if (q.includes('open profile') || q.includes('profile section') || q.includes('my profile') || q.includes('user profile')) {
+    if (
+      q.includes('profile') || q.includes('प्रोफाइल') || q.includes('प्रोफाईल') || q.includes('प्रोफ़ाइल') ||
+      q.includes('मेरी प्रोफाइल') || q.includes('माझी प्रोफाइल') || q.includes('माझी माहिती') || q.includes('माझे प्रोफाइल') ||
+      q.includes('પ્રોફાઇલ') || q.includes('சுயவிவரம்') || q.includes('ప్రొఫైல்') || q.includes('<ctrl42>ప్రొఫైల్') ||
+      q.includes('പ്രൊഫൈൽ') || q.includes('প্রোফাইল') || q.includes('ਪ੍ਰੋਫਾਈਲ') || q.includes('my account') || q.includes('user account') ||
+      q.includes('edit profile') || q.includes('open profile') || q.includes('update profile')
+    ) {
       return {
         action: 'openProfileModal',
         suggestedAnswer: 'Opening User Profile and Medical ID.'
@@ -245,6 +302,92 @@ Rules:
           suggestedAnswer: l.ans
         };
       }
+    }
+
+    // 1. UPDATE USER PROFILE (NAME & PHONE)
+    if (
+      q.includes('name is') || q.includes('change name') || q.includes('set name') || q.includes('update name') || q.includes('call me') ||
+      q.includes('मेरा नाम') || q.includes('नाम रखो') || q.includes('नाम बदलो') ||
+      q.includes('माझं नाव') || q.includes('माझे नाव') || q.includes('नाव ठेवा') || q.includes('नाव बदला') || q.includes('नाव सेट')
+    ) {
+      const extracted = raw
+        .replace(/.*(?:my name is|change name to|change name|set name to|set name|update name to|update name|call me|मेरा नाम|नाम रखो|नाम बदलो|माझं नाव|माझे नाव|नाव ठेवा|नाव बदला|नाव सेट करा)\s*/gi, '')
+        .replace(/(?:ठेवा|बदला|करा|आहे|होय)$/gi, '')
+        .trim();
+      const cleanName = extracted.replace(/[.,]/g, '').trim();
+      if (cleanName) {
+        const nameFormatted = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
+        return {
+          action: 'updateProfile',
+          updateField: 'userName',
+          updateValue: nameFormatted,
+          suggestedAnswer: `Name updated to ${nameFormatted}.`
+        };
+      }
+    }
+    if (
+      q.includes('phone number') || q.includes('my phone is') || q.includes('change phone') || q.includes('update phone') ||
+      q.includes('मेरा फोन') || q.includes('नंबर बदलो') || q.includes('माझा फोन') || q.includes('नंबर बदला')
+    ) {
+      const extracted = raw
+        .replace(/.*(?:phone number is|my phone is|change phone to|update phone to|phone|मेरा फोन|नंबर बदलो|माझा फोन|नंबर बदला)\s*/gi, '')
+        .replace(/(?:ठेवा|बदला|करा|आहे)$/gi, '')
+        .trim();
+      if (extracted) {
+        return {
+          action: 'updateProfile',
+          updateField: 'userPhone',
+          updateValue: extracted,
+          suggestedAnswer: `Phone number updated to ${extracted}.`
+        };
+      }
+    }
+
+    // 2. MANAGE MEDICATION (ADD & CONFIRM)
+    const isAddMedPhrase =
+      q.includes('add medicine') || q.includes('add medication') || q.includes('new medicine') || q.includes('add pill') ||
+      q.includes('दवा जोड़ो') || q.includes('नई दवा') || q.includes('गोली जोड़ो') ||
+      q.includes('औषध जोडा') || q.includes('नवीन औषध') || q.includes('गोळी जोडा') || q.includes('औषध ऍड') ||
+      (q.startsWith('add ') && (q.includes('mg') || q.includes('tablet') || q.includes('pill') || q.includes('capsule') || q.includes('syrup') || q.includes('paracetamol') || q.includes('crocin') || q.includes('aspirin') || q.includes('ibuprofen') || q.includes('disprin') || q.length > 4));
+
+    if (isAddMedPhrase) {
+      let medName = raw
+        .replace(/.*(?:add medicine|add medication|new medicine|add pill|add|दवा जोड़ो|नई दवा|गोली जोड़ो|औषध जोडा|नवीन औषध|गोळी जोडा|औषध ऍड करा)\s*/gi, '')
+        .replace(/(?:औषध जोडा|दवा जोड़ो|ऍड करा|जोडा)$/gi, '')
+        .trim();
+      if (!medName || medName.length < 2) {
+        medName = raw.replace(/(?:औषध जोडा|दवा जोड़ो|add medicine|add medication|new medicine|add)\s*/gi, '').trim();
+      }
+      return {
+        action: 'manageMedication',
+        subAction: 'add',
+        medicationName: medName || 'Daily Medication',
+        suggestedAnswer: `Added new medicine: ${medName || 'Daily Medication'}.`
+      };
+    }
+    const isDeleteMedPhrase =
+      q.includes('delete medicine') || q.includes('remove medicine') || q.includes('delete medication') || q.includes('remove medication') || q.includes('delete pill') || q.includes('remove pill') ||
+      q.includes('दवा हटाओ') || q.includes('दवा मिटाओ') || q.includes('गोली हटाओ') ||
+      q.includes('औषध काढा') || q.includes('औषध हटवा') || q.includes('गोळी काढा');
+
+    if (isDeleteMedPhrase) {
+      let medName = raw
+        .replace(/.*(?:delete medicine|remove medicine|delete medication|remove medication|delete pill|remove pill|दवा हटाओ|दवा मिटाओ|गोली हटाओ|औषध काढा|औषध हटवा|गोळी काढा)\s*/gi, '')
+        .trim();
+      return {
+        action: 'manageMedication',
+        subAction: 'delete',
+        medicationName: medName,
+        suggestedAnswer: `Deleted medication ${medName || ''}.`
+      };
+    }
+
+    if (q.includes('took my medicine') || q.includes('take medicine') || q.includes('confirm pill') || q.includes('medicine taken') || q.includes('दवा ले ली')) {
+      return {
+        action: 'manageMedication',
+        subAction: 'confirm',
+        suggestedAnswer: 'Confirmed pill dose taken.'
+      };
     }
 
     if (
@@ -360,48 +503,6 @@ Rules:
       q.includes('ओपन सेक्शन') || q.includes('सेक्शन ओपन')
     ) {
       return { action: 'cycleNextMode', suggestedAnswer: 'Switched to next section.' };
-    }
-
-    if (q.includes('name is') || q.includes('call me') || q.includes('change my name') || q.includes('set my name') || q.includes('मेरा नाम')) {
-      const extracted = raw.replace(/.*(?:name is|call me|change my name to|set my name to|मेरा नाम)\s*/gi, '').trim();
-      const cleanName = extracted.replace(/[.,]/g, '').trim();
-      if (cleanName) {
-        const nameFormatted = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
-        return {
-          action: 'updateProfile',
-          updateField: 'userName',
-          updateValue: nameFormatted,
-          suggestedAnswer: `Name updated to ${nameFormatted}.`
-        };
-      }
-    }
-    if (q.includes('phone number') || q.includes('my phone is') || q.includes('change phone') || q.includes('update phone')) {
-      const extracted = raw.replace(/.*(?:phone number is|my phone is|change phone to|update phone to|phone)\s*/gi, '').trim();
-      if (extracted) {
-        return {
-          action: 'updateProfile',
-          updateField: 'userPhone',
-          updateValue: extracted,
-          suggestedAnswer: `Phone number updated to ${extracted}.`
-        };
-      }
-    }
-
-    if (q.includes('add medicine') || q.includes('add medication') || q.includes('new medicine') || q.includes('दवा जोड़ो')) {
-      const medName = raw.replace(/.*(?:add medicine|add medication|new medicine|दवा जोड़ो)\s*/gi, '').trim();
-      return {
-        action: 'manageMedication',
-        subAction: 'add',
-        medicationName: medName || 'Daily Pill',
-        suggestedAnswer: `Added new medicine: ${medName || 'Daily Pill'}.`
-      };
-    }
-    if (q.includes('took my medicine') || q.includes('take medicine') || q.includes('confirm pill') || q.includes('medicine taken') || q.includes('दवा ले ली')) {
-      return {
-        action: 'manageMedication',
-        subAction: 'confirm',
-        suggestedAnswer: 'Confirmed pill dose taken.'
-      };
     }
 
     if (q.includes('dark mode') || q.includes('dark theme')) {

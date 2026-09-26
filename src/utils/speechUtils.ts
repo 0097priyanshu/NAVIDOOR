@@ -25,6 +25,9 @@ export const speakAnnouncement = async (
   const { rate = 1.0, pitch = 1.0, interrupt = true, languageCode = 'en' } = options;
   const targetLang = LANG_CODE_MAP[languageCode] || 'en-US';
 
+  // Normalize speech rate for iOS AVSpeechSynthesizer (0.5 is normal speed on iOS)
+  const effectiveRate = Platform.OS === 'ios' ? rate * 0.5 : rate;
+
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       if (interrupt && window.speechSynthesis.speaking) {
@@ -48,25 +51,39 @@ export const speakAnnouncement = async (
       window.speechSynthesis.speak(currentUtterance);
     }
   } else {
-    // Mobile Native (iOS / Android / Expo Go)
+    // Mobile Native (iOS & Android)
     if (interrupt) {
       Speech.stop();
     }
     
+    // Ensure iOS plays in silent mode without being muted by iOS physical silent switch
+    try {
+      const expoAv = require('expo-av');
+      if (expoAv?.Audio?.setAudioModeAsync) {
+        await expoAv.Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      }
+    } catch (e) {}
+
     try {
       const voices = await Speech.getAvailableVoicesAsync();
       const prefix = targetLang.split('-')[0].toLowerCase();
       const match = voices.find(v => v.language.toLowerCase().startsWith(prefix) || v.language.toLowerCase().includes(prefix));
 
       Speech.speak(text, {
-        rate,
+        rate: effectiveRate,
         pitch,
         language: targetLang,
         voice: match ? match.identifier : undefined,
       });
     } catch (e) {
       Speech.speak(text, {
-        rate,
+        rate: effectiveRate,
         pitch,
         language: targetLang,
       });

@@ -14,6 +14,7 @@ export interface CommandParseResult {
     | 'updateUserName' 
     | 'updateUserPhone'
     | 'addMedicine'
+    | 'deleteMedicine'
     | 'confirmMedicine'
     | 'updateTheme'
     | 'updateSpeechRate'
@@ -142,7 +143,8 @@ export class VoiceCommandProcessor {
       q.includes('profile') || q.includes('प्रोफाइल') || q.includes('प्रोफाईल') || q.includes('प्रोफ़ाइल') ||
       q.includes('मेरी प्रोफाइल') || q.includes('माझी प्रोफाइल') || q.includes('माझी माहिती') || q.includes('माझे प्रोफाइल') ||
       q.includes('પ્રોફાઇલ') || q.includes('சுயவிவரம்') || q.includes('ప్రొఫైల్') || q.includes('ಪ್ರೊಫೈಲ್') ||
-      q.includes('പ്രൊഫൈൽ') || q.includes('প্রোফাইল') || q.includes('ਪ੍ਰੋਫਾਈਲ') || q.includes('my account') || q.includes('user account')
+      q.includes('പ്രൊഫൈൽ') || q.includes('প্রোফাইল') || q.includes('ਪ੍ਰੋਫਾਈਲ') || q.includes('my account') || q.includes('user account') ||
+      q.includes('edit profile') || q.includes('open profile') || q.includes('update profile')
     ) {
       return {
         isCommand: true,
@@ -175,8 +177,15 @@ export class VoiceCommandProcessor {
     }
 
     // 5. EDIT USER NAME DYNAMICALLY
-    if (q.includes('my name is') || q.includes('change name to') || q.includes('set name to') || q.includes('update name to') || q.includes('मेरा नाम')) {
-      const extracted = raw.replace(/.*(?:my name is|change name to|set name to|update name to|मेरा नाम)\s*/gi, '').trim();
+    if (
+      q.includes('name is') || q.includes('change name') || q.includes('set name') || q.includes('update name') || q.includes('call me') ||
+      q.includes('मेरा नाम') || q.includes('नाम रखो') || q.includes('नाम बदलो') ||
+      q.includes('माझं नाव') || q.includes('माझे नाव') || q.includes('नाव ठेवा') || q.includes('नाव बदला') || q.includes('नाव सेट')
+    ) {
+      const extracted = raw
+        .replace(/.*(?:my name is|change name to|change name|set name to|set name|update name to|update name|call me|मेरा नाम|नाम रखो|नाम बदलो|माझं नाव|माझे नाव|नाव ठेवा|नाव बदला|नाव सेट करा)\s*/gi, '')
+        .replace(/(?:ठेवा|बदला|करा|आहे|होय)$/gi, '')
+        .trim();
       const cleanName = extracted.replace(/[.,]/g, '').trim();
       if (cleanName) {
         return {
@@ -188,8 +197,14 @@ export class VoiceCommandProcessor {
     }
 
     // 6. EDIT USER PHONE DYNAMICALLY
-    if (q.includes('phone number') || q.includes('my phone is') || q.includes('change phone') || q.includes('update phone')) {
-      const extracted = raw.replace(/.*(?:phone number is|my phone is|change phone to|update phone to|phone)\s*/gi, '').trim();
+    if (
+      q.includes('phone number') || q.includes('my phone is') || q.includes('change phone') || q.includes('update phone') ||
+      q.includes('मेरा फोन') || q.includes('नंबर बदलो') || q.includes('माझा फोन') || q.includes('नंबर बदला')
+    ) {
+      const extracted = raw
+        .replace(/.*(?:phone number is|my phone is|change phone to|update phone to|phone|मेरा फोन|नंबर बदलो|माझा फोन|नंबर बदला)\s*/gi, '')
+        .replace(/(?:ठेवा|बदला|करा|आहे)$/gi, '')
+        .trim();
       if (extracted) {
         return {
           isCommand: true,
@@ -200,8 +215,20 @@ export class VoiceCommandProcessor {
     }
 
     // 7. ADD MEDICATION DYNAMICALLY
-    if (q.includes('add medicine') || q.includes('add medication') || q.includes('new medicine') || q.includes('दवा जोड़ो') || q.includes('औषध जोडा')) {
-      const medName = raw.replace(/.*(?:add medicine|add medication|new medicine|दवा जोड़ो|औषध जोडा)\s*/gi, '').trim();
+    const isAddMedPhrase =
+      q.includes('add medicine') || q.includes('add medication') || q.includes('new medicine') || q.includes('add pill') ||
+      q.includes('दवा जोड़ो') || q.includes('नई दवा') || q.includes('गोली जोड़ो') ||
+      q.includes('औषध जोडा') || q.includes('नवीन औषध') || q.includes('गोळी जोडा') || q.includes('औषध ऍड') ||
+      (q.startsWith('add ') && (q.includes('mg') || q.includes('tablet') || q.includes('pill') || q.includes('capsule') || q.includes('syrup') || q.includes('paracetamol') || q.includes('crocin') || q.includes('aspirin') || q.includes('ibuprofen') || q.includes('disprin') || q.length > 4));
+
+    if (isAddMedPhrase) {
+      let medName = raw
+        .replace(/.*(?:add medicine|add medication|new medicine|add pill|add|दवा जोड़ो|नई दवा|गोली जोड़ो|औषध जोडा|नवीन औषध|गोळी जोडा|औषध ऍड करा)\s*/gi, '')
+        .replace(/(?:औषध जोडा|दवा जोड़ो|ऍड करा|जोडा)$/gi, '')
+        .trim();
+      if (!medName || medName.length < 2) {
+        medName = raw.replace(/(?:औषध जोडा|दवा जोड़ो|add medicine|add medication|new medicine|add)\s*/gi, '').trim();
+      }
       return {
         isCommand: true,
         action: 'addMedicine',
@@ -209,7 +236,24 @@ export class VoiceCommandProcessor {
       };
     }
 
-    // 8. CONFIRM MEDICATION TAKEN
+    // 8. DELETE MEDICATION
+    const isDeleteMedPhrase =
+      q.includes('delete medicine') || q.includes('remove medicine') || q.includes('delete medication') || q.includes('remove medication') || q.includes('delete pill') || q.includes('remove pill') ||
+      q.includes('दवा हटाओ') || q.includes('दवा मिटाओ') || q.includes('गोली हटाओ') ||
+      q.includes('औषध काढा') || q.includes('औषध हटवा') || q.includes('गोळी काढा');
+
+    if (isDeleteMedPhrase) {
+      let medName = raw
+        .replace(/.*(?:delete medicine|remove medicine|delete medication|remove medication|delete pill|remove pill|दवा हटाओ|दवा मिटाओ|गोली हटाओ|औषध काढा|औषध हटवा|गोळी काढा)\s*/gi, '')
+        .trim();
+      return {
+        isCommand: true,
+        action: 'deleteMedicine',
+        valueString: medName
+      };
+    }
+
+    // 9. CONFIRM MEDICATION TAKEN
     if (q.includes('took my medicine') || q.includes('take medicine') || q.includes('confirm pill') || q.includes('medicine taken') || q.includes('दवा ले ली')) {
       return {
         isCommand: true,

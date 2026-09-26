@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "esnext",
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "jsx": "react-native",
     "strict": true,
     "skipLibCheck": true,
@@ -15,5 +15,6 @@
     "backend/**",
     "navidoor_flutter",
     "navidoor_flutter/**"
-  ]
+  ],
+  "extends": "expo/tsconfig.base"
 }
