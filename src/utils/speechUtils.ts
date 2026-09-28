@@ -58,14 +58,10 @@ export const speakAnnouncement = async (
     
     // Ensure iOS plays in silent mode without being muted by iOS physical silent switch
     try {
-      const expoAv = require('expo-av');
-      if (expoAv?.Audio?.setAudioModeAsync) {
-        await expoAv.Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
+      const { setAudioModeAsync } = require('expo-audio');
+      if (setAudioModeAsync) {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
         });
       }
     } catch (e) {}

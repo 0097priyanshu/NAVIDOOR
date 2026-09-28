@@ -37,12 +37,6 @@
         {
           "cameraPermission": "Allow NAVIDOOR to access your camera for real-time spatial navigation and vision AI."
         }
-      ],
-      [
-        "expo-audio",
-        {
-          "microphonePermission": "Allow NAVIDOOR to access your microphone for voice assistant navigation commands."
-        }
       ]
     ]
   }

@@ -2,7 +2,7 @@ import { SupportedLanguageCode, VoiceBackendStatus, LanguageMeta } from '../type
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-const LOCAL_COMPUTER_IP = '192.168.0.105';
+const LOCAL_COMPUTER_IPS = ['10.134.91.97', '192.168.0.105'];
 
 const getCandidateBackendUrls = (): string[] => {
   const list: string[] = [];
@@ -17,7 +17,7 @@ const getCandidateBackendUrls = (): string[] => {
         list.push(`http://${rawHost}:5001`);
       }
     }
-    list.push(`http://${LOCAL_COMPUTER_IP}:5001`);
+    LOCAL_COMPUTER_IPS.forEach(ip => list.push(`http://${ip}:5001`));
     list.push('http://10.0.2.2:5001');
     list.push('http://localhost:5001');
     list.push('http://127.0.0.1:5001');
@@ -25,7 +25,7 @@ const getCandidateBackendUrls = (): string[] => {
     // 2. Web Browser: prioritize localhost first
     list.push('http://localhost:5001');
     list.push('http://127.0.0.1:5001');
-    list.push(`http://${LOCAL_COMPUTER_IP}:5001`);
+    LOCAL_COMPUTER_IPS.forEach(ip => list.push(`http://${ip}:5001`));
   }
 
   return Array.from(new Set(list));

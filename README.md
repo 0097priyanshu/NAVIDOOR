@@ -38,20 +38,14 @@ NAVIDOOR supports full Speech-to-Text (STT), LLM reasoning, translation, and neu
 
 ## 🛠 Tech Stack
 
-### Frontend Applications
-
-#### 1. Flutter Multi-Platform App (`navidoor_flutter/`) — Recommended Primary Client
-- **Framework**: Flutter 3.35+ / Dart 3.9+ (Web, Windows Desktop, Android, iOS, macOS)
-- **State Management**: `provider` (reactive state architecture)
-- **Icons & Visuals**: `flutter_lucide` (modern Lucide icons), `google_fonts` (Inter & Roboto)
-- **Audio & Speech**: `record` (16kHz mono WAV recording), `audioplayers` (IndicF5 audio playback), `flutter_tts` (offline fallback)
-- **Networking & Sockets**: `http` (REST), `socket_io_client` (real-time telemetry & emergency SOS)
-- **Location & Sensors**: `geolocator` (GPS coordinates, speed, heading), `shared_preferences`
-
-#### 2. React Native / Expo App (Legacy Client)
-- **Framework**: React Native 0.74.5 / Expo SDK 51
-- **Language**: TypeScript (~5.3.3)
+### Frontend Application (React Native / Expo)
+- **Framework**: React Native 0.86 / Expo SDK 57 (Android, iOS, Web)
+- **Language**: TypeScript 5.4+
 - **State Management**: Zustand (`useNavidoorStore`)
+- **Icons & Visuals**: `lucide-react-native`, `expo-linear-gradient`
+- **Camera & Audio**: `expo-camera`, `expo-av`, `expo-audio`, `expo-speech`
+- **Networking**: `socket.io-client` (real-time telemetry & emergency SOS)
+- **Sensors & Location**: `expo-location`, `expo-haptics`
 
 ### Backend & AI Engine (`backend/` — Runs on PC / Local LAN)
 - **Server**: Node.js v22+ + Express 4.x + Socket.IO 4.x (Port `5001`)
@@ -64,7 +58,7 @@ NAVIDOOR supports full Speech-to-Text (STT), LLM reasoning, translation, and neu
 
 ## 📦 Complete Dependency Installation Guide
 
-Run these steps once to install all dependencies for the entire project:
+Run these steps once to install all dependencies:
 
 ```bash
 # 1. Install Node.js backend & frontend packages
@@ -75,9 +69,6 @@ python -m pip install -r backend/indicf5/requirements.txt
 
 # 3. Download Whisper.cpp Windows CLI binaries and multilingual speech model
 node backend/scripts/setup_speech_pipeline.js
-
-# 4. Install Flutter packages
-cd navidoor_flutter && flutter pub get && cd ..
 ```
 
 ---
@@ -91,83 +82,31 @@ Open a terminal in the root directory:
 ```bash
 npm run server
 ```
-*(Backend runs on `http://localhost:5001`).*  
-*Ensure [Ollama](https://ollama.com) is running locally on `http://127.0.0.1:11434` with an installed model such as `qwen2.5-coder:7b` or `llama3`.*
+*(Backend runs on `http://0.0.0.0:5001` - LAN accessible).*  
+*(Optional: Ensure [Ollama](https://ollama.com) is running on `http://127.0.0.1:11434` with an installed model such as `qwen2.5-coder:7b` or `llama3`).*
 
 ---
 
-### Step 2: Run the Flutter Multi-Platform App
+### Step 2: Run on Mobile (Android / iOS via Expo Go)
 
-You can run the Flutter client on any target device:
-
-#### 🌐 A. Run on Web (Chrome / Edge / Laptop Browser)
-```bash
-# Using npm shortcut from root:
-npm run flutter:web
-
-# Or using Flutter CLI:
-cd navidoor_flutter
-flutter run -d chrome
-```
-
-#### 💻 B. Run as Native Windows Desktop App
-```bash
-# Using npm shortcut from root:
-npm run flutter:desktop
-
-# Or using Flutter CLI:
-cd navidoor_flutter
-flutter run -d windows
-```
-
-#### 📱 C. Run on Android Phone (Physical Device or Emulator)
-1. Connect your Android phone via USB with **USB Debugging enabled**, or start an Android Emulator.
-2. Verify connection: `flutter devices`
-3. Launch the app:
-```bash
-cd navidoor_flutter
-flutter run -d android
-```
-
-#### 🍏 D. Run on iOS Phone (iPhone or Simulator — macOS Required)
-1. Open simulator or connect iPhone: `open -a Simulator`
-2. Launch the app:
-```bash
-cd navidoor_flutter
-flutter run -d ios
-```
-
-#### 🍏 E. Run on macOS Desktop (macOS Required)
-```bash
-cd navidoor_flutter
-flutter run -d macos
-```
+1. Make sure your **Mobile Phone and Laptop are connected to the same Wi-Fi**.
+2. Install **Expo Go** on your device:
+   - **Android**: Install [Expo Go from Google Play](https://play.google.com/store/apps/details?id=host.exp.exponent)
+   - **iOS**: Install [Expo Go from App Store](https://apps.apple.com/app/expo-go/id982107779)
+3. In a second terminal, start the Expo development server:
+   ```bash
+   npm start
+   ```
+   *(Or `npx expo start --tunnel` if testing across different Wi-Fi networks / cellular).*
+4. Connect from your phone:
+   - **Android**: Open **Expo Go** and tap **"Scan QR code"**, then scan the QR code in the terminal.
+   - **iOS**: Open the native **Camera** app, point at the terminal QR code, and tap the prompt to open in Expo Go.
 
 ---
 
-### Step 3: Production Build Commands (Flutter)
-
-To generate production-ready binaries:
-
-| Platform | Command (Run inside `navidoor_flutter/`) | Output Location |
-|---|---|---|
-| **Web** | `flutter build web` | `navidoor_flutter/build/web/` |
-| **Windows Desktop** | `flutter build windows` | `navidoor_flutter/build/windows/x64/runner/Release/` |
-| **Android APK** | `flutter build apk --release` | `navidoor_flutter/build/app/outputs/flutter-apk/app-release.apk` |
-| **Android App Bundle** | `flutter build appbundle` | `navidoor_flutter/build/app/outputs/bundle/release/` |
-| **iOS** | `flutter build ios --release` | `navidoor_flutter/build/ios/iphoneos/` |
-
----
-
-### Step 4 (Optional): Run the Legacy React Native / Expo App
-
-The existing Expo client is preserved in parallel:
+### Step 3: Run on Web Browser (Laptop / Desktop)
 
 ```bash
-# Start Expo development server (Android, iOS, Web)
-npx expo start --tunnel
-
-# Run React Native Web version directly
 npm run web
 ```
 

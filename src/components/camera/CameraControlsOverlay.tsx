@@ -93,7 +93,11 @@ export const CameraControlsOverlay: React.FC = () => {
 
 const styles = StyleSheet.create({
   accessibleOverlayContainer: {
-    ...StyleSheet.absoluteFill,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     zIndex: 25,
     paddingHorizontal: 16,
     paddingTop: 72,
