@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Activity, Share2, Droplet, AlertTriangle, Pill, Check, ShieldAlert, UserPlus, Phone, X } from 'lucide-react-native';
+import { Activity, Share2, Droplet, AlertTriangle, Pill, Check, Trash2, Plus, ShieldAlert, UserPlus, Phone, X } from 'lucide-react-native';
 import { useNavidoorStore } from '../../../store/useNavidoorStore';
 
 const DUMMY_CONTACTS = [
@@ -14,9 +14,12 @@ const DUMMY_CONTACTS = [
 type FlowStep = 'idle' | 'choose_type' | 'choose_contact' | 'success';
 
 export const MedicalInfoPanel = () => {
-  const { speak, emergencyContacts } = useNavidoorStore();
+  const { speak, emergencyContacts, medicines, confirmMedicineTaken, deleteMedicine } = useNavidoorStore();
   const [step, setStep] = React.useState<FlowStep>('idle');
   const [selectedContactName, setSelectedContactName] = React.useState<string | null>(null);
+  
+  const [showAddForm, setShowAddForm] = React.useState(false);
+  const [newMedNameInput, setNewMedNameInput] = React.useState('');
 
   const startShareFlow = () => {
     speak('Who would you like to share your medical info with?');
@@ -59,16 +62,55 @@ export const MedicalInfoPanel = () => {
     speak('Sharing cancelled.');
   };
 
+  const handleConfirmTaken = (id: string, name: string) => {
+    confirmMedicineTaken(id);
+    speak(`Dose confirmed and logged for ${name}.`);
+    try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch (e) {}
+  };
+
+  const handleDeleteMedication = (id: string, name: string) => {
+    deleteMedicine(id);
+    try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); } catch (e) {}
+  };
+
+  const handleAddMedication = () => {
+    const name = newMedNameInput.trim();
+    if (!name) return;
+
+    const newMed = {
+      id: `med-${Date.now()}`,
+      name,
+      dosage: '1 Pill',
+      instructions: 'Take daily as prescribed',
+      remainingPills: 20,
+      nextScheduledTime: '8:00 AM Today',
+      prescribedFor: 'General Health'
+    };
+
+    useNavidoorStore.setState((state) => ({
+      medicines: [newMed, ...(state.medicines || [])]
+    }));
+
+    speak(`Added medication ${name}.`);
+    setNewMedNameInput('');
+    setShowAddForm(false);
+    try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch (e) {}
+  };
+
   return (
     <View style={styles.card}>
+      {/* Header */}
       <View style={styles.header}>
-        <Activity size={20} color="#0284C7" />
-        <Text style={styles.title}>MEDICAL ID & INFO</Text>
+        <View style={styles.headerTitleGroup}>
+          <Activity size={22} color="#0284C7" />
+          <Text style={styles.title}>EMERGENCY MEDICAL ID & INFO</Text>
+        </View>
       </View>
 
+      {/* Vitals & Allergies Box */}
       <View style={styles.infoBox}>
         <View style={styles.infoRow}>
-          <View style={styles.iconContainer}>
+          <View style={[styles.iconContainer, { backgroundColor: '#FFE4E6' }]}>
             <Droplet size={18} color="#E11D48" />
           </View>
           <View style={styles.textContainer}>
@@ -80,41 +122,119 @@ export const MedicalInfoPanel = () => {
         <View style={styles.divider} />
 
         <View style={styles.infoRow}>
-          <View style={styles.iconContainer}>
+          <View style={[styles.iconContainer, { backgroundColor: '#FEF3C7' }]}>
             <AlertTriangle size={18} color="#D97706" />
           </View>
           <View style={styles.textContainer}>
-            <Text style={styles.infoLabel}>Allergies</Text>
+            <Text style={styles.infoLabel}>Allergies & Sensitivities</Text>
             <Text style={styles.infoValue}>Penicillin, Peanuts</Text>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.infoRow}>
-          <View style={styles.iconContainer}>
-            <Pill size={18} color="#059669" />
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={styles.infoLabel}>Current Medications</Text>
-            <Text style={styles.infoValue}>Lisinopril 10mg (Daily)</Text>
           </View>
         </View>
       </View>
 
+      {/* Dynamic Current Medications Section */}
+      <View style={styles.medSectionCard}>
+        <View style={styles.medHeaderRow}>
+          <View style={styles.medHeaderLeft}>
+            <View style={[styles.iconContainer, { backgroundColor: '#D1FAE5' }]}>
+              <Pill size={18} color="#059669" />
+            </View>
+            <Text style={styles.sectionHeaderTitle}>
+              MEDICATIONS ({medicines ? medicines.length : 0})
+            </Text>
+          </View>
+          
+          {/* Add Medicine Toggle Button */}
+          <TouchableOpacity 
+            style={[styles.addMedHeaderBtn, showAddForm && styles.cancelAddBtn]} 
+            onPress={() => setShowAddForm(!showAddForm)}
+            accessibilityLabel="Add Medicine"
+          >
+            {showAddForm ? <X size={15} color="#64748B" /> : <Plus size={15} color="#FFFFFF" />}
+            <Text style={[styles.addMedHeaderBtnText, showAddForm && styles.cancelAddBtnText]}>
+              {showAddForm ? 'CANCEL' : 'ADD'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Add Medicine Form */}
+        {showAddForm && (
+          <View style={styles.addFormContainer}>
+            <TextInput
+              style={styles.addInput}
+              value={newMedNameInput}
+              onChangeText={setNewMedNameInput}
+              placeholder="Enter medicine (e.g. Paracetamol 10mg)"
+              placeholderTextColor="#94A3B8"
+              autoFocus
+            />
+            <TouchableOpacity style={styles.saveMedBtn} onPress={handleAddMedication}>
+              <Check size={16} color="#FFFFFF" />
+              <Text style={styles.saveMedBtnText}>SAVE</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* List of Medications with TAKEN and DELETE options */}
+        <View style={{ marginTop: 12 }}>
+          {medicines && medicines.length > 0 ? (
+            medicines.map((med) => (
+              <View key={med.id} style={styles.medicineItemCard}>
+                <View style={styles.medInfoLeft}>
+                  <Text style={styles.medNameText}>{med.name}</Text>
+                  <Text style={styles.medSubText}>
+                    {med.dosage || '1 Pill'} • {med.instructions || 'Daily'}
+                  </Text>
+                  <View style={styles.badgeRow}>
+                    <Text style={styles.medPillBadge}>{med.remainingPills ?? 20} pills left</Text>
+                  </View>
+                </View>
+                
+                {/* Action Buttons: TAKEN & DELETE */}
+                <View style={styles.actionBtnRow}>
+                  <TouchableOpacity
+                    style={styles.confirmDoseBtn}
+                    onPress={() => handleConfirmTaken(med.id, med.name)}
+                    accessibilityLabel={`Confirm dose for ${med.name}`}
+                  >
+                    <Check size={14} color="#FFFFFF" />
+                    <Text style={styles.confirmDoseText}>TAKEN</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.deleteMedBtn}
+                    onPress={() => handleDeleteMedication(med.id, med.name)}
+                    accessibilityLabel={`Delete ${med.name}`}
+                  >
+                    <Trash2 size={16} color="#E11D48" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyMedContainer}>
+              <Pill size={28} color="#94A3B8" />
+              <Text style={styles.noMedText}>No medications logged yet.</Text>
+              <Text style={styles.noMedSubText}>Tap "+ ADD" above or say "Add Paracetamol 10mg"</Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {/* Share Medical Report Button */}
       <TouchableOpacity 
         style={styles.shareBtn} 
         onPress={startShareFlow}
         accessibilityLabel="Share medical info"
       >
         <Share2 size={20} color="#FFFFFF" />
-        <Text style={styles.shareBtnText}>SHARE MEDICAL INFO</Text>
+        <Text style={styles.shareBtnText}>SHARE MEDICAL REPORT</Text>
       </TouchableOpacity>
 
+      {/* Share Modal Dialog */}
       <Modal visible={step !== 'idle'} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            
             {step === 'choose_type' && (
               <>
                 <Text style={styles.modalTitle}>SHARE WITH WHO?</Text>
@@ -186,7 +306,6 @@ export const MedicalInfoPanel = () => {
                 </Text>
               </>
             )}
-
           </View>
         </View>
       </Modal>
@@ -196,37 +315,42 @@ export const MedicalInfoPanel = () => {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF', // Opaque pure white card
     borderRadius: 24,
     padding: 18,
     borderWidth: 1.5,
-    borderColor: '#475569',
+    borderColor: '#E2E8F0',
     marginBottom: 16,
     shadowColor: '#0284C7',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 8,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  headerTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    marginBottom: 16,
   },
   title: {
     color: '#0284C7',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '900',
     letterSpacing: 1.2,
   },
   infoBox: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF', // Plain solid white box
     borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    marginBottom: 16,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    marginBottom: 14,
   },
   infoRow: {
     flexDirection: 'row',
@@ -237,7 +361,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#E2E8F0',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -246,8 +369,9 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     color: '#64748B',
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
     marginBottom: 2,
   },
   infoValue: {
@@ -258,7 +382,171 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: '#E2E8F0',
-    marginVertical: 12,
+    marginVertical: 10,
+  },
+  medSectionCard: {
+    backgroundColor: '#FFFFFF', // Plain solid white box
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    marginBottom: 14,
+  },
+  medHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  medHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sectionHeaderTitle: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+  },
+  addMedHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#0284C7',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+  },
+  cancelAddBtn: {
+    backgroundColor: '#E2E8F0',
+  },
+  addMedHeaderBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  cancelAddBtnText: {
+    color: '#475569',
+  },
+  addFormContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    backgroundColor: '#FFFFFF',
+    padding: 8,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#0284C7',
+  },
+  addInput: {
+    flex: 1,
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '600',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  saveMedBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#059669',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  saveMedBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  medicineItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  medInfoLeft: {
+    flex: 1,
+    marginRight: 8,
+  },
+  medNameText: {
+    color: '#0F172A',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  medSubText: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  badgeRow: {
+    marginTop: 6,
+  },
+  medPillBadge: {
+    color: '#059669',
+    fontSize: 11,
+    fontWeight: '700',
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  actionBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  confirmDoseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#059669',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  confirmDoseText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  deleteMedBtn: {
+    backgroundColor: '#FFE4E6',
+    padding: 8,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyMedContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    gap: 6,
+  },
+  noMedText: {
+    color: '#475569',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  noMedSubText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    textAlign: 'center',
   },
   shareBtn: {
     flexDirection: 'row',

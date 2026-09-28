@@ -12,7 +12,7 @@ export const DesignSystemModal: React.FC = () => {
   if (!isDesignSystemOpen) return null;
 
   return (
-    <Modal visible={isDesignSystemOpen} transparent animationType="fade">
+    <Modal visible={isDesignSystemOpen} transparent statusBarTranslucent animationType="fade">
       <View style={styles.modalBackdrop}>
         <View style={[styles.modalCard, { backgroundColor: '#090D16', borderColor: colors.accent }]}>
           {/* Header */}

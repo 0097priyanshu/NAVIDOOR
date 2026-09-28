@@ -45,6 +45,7 @@ export const CapturedPhotoPreviewModal: React.FC = () => {
     <Modal
       visible={Boolean(isCapturedPhotoModalOpen)}
       transparent
+      statusBarTranslucent
       animationType="slide"
       onRequestClose={handleClose}
     >

@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { StyleSheet, SafeAreaView, StatusBar, PanResponder, View } from 'react-native';
+import { StyleSheet, StatusBar, PanResponder, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useNavidoorStore } from './src/store/useNavidoorStore';
 import { CameraViewCanvas } from './src/components/camera/CameraViewCanvas';
 import { CameraHeader } from './src/components/header/CameraHeader';
@@ -46,53 +47,61 @@ export default function App() {
     })
   ).current;
 
-  // 1. Role Selection Screen (App Launch)
-  if (userRole === 'undecided') {
-    return <RoleSelectionScreen />;
-  }
-
-  // 2. Family Caregiver Mode Experience
-  if (userRole === 'family_member') {
-    if (!familyUser) {
-      return <FamilyAuthScreen />;
+  const renderContent = () => {
+    // 1. Role Selection Screen (App Launch)
+    if (userRole === 'undecided') {
+      return <RoleSelectionScreen />;
     }
-    return <FamilyModeContainer />;
-  }
 
-  // 3. Existing NAVIDOOR User Experience (role === 'navidoor_user')
+    // 2. Family Caregiver Mode Experience
+    if (userRole === 'family_member') {
+      if (!familyUser) {
+        return <FamilyAuthScreen />;
+      }
+      return <FamilyModeContainer />;
+    }
+
+    // 3. Existing NAVIDOOR User Experience (role === 'navidoor_user')
+    return (
+      <SafeAreaView 
+        style={styles.rootContainer}
+        {...panResponder.panHandlers}
+      >
+        <StatusBar barStyle="light-content" backgroundColor="#64748B" />
+
+        {/* 1. CONTINUOUS CAMERA CANVAS / SOLID SLATE GRAY UTILITY BACKDROP */}
+        <CameraViewCanvas />
+
+        {/* 2. TOP STATUS HEADER (Uber SOS Emergency & User Profile) */}
+        <CameraHeader />
+
+        {/* 3. DEDICATED FULL SECTION PANELS (Settings, History, Languages, Family) */}
+        <SectionViewPanel />
+
+        {/* 4. SIGNATURE ROTATING AI MODE WHEEL & FIXED CENTER MIC (Voice-First Audio Guidance) */}
+        <RotatingAIModeWheel />
+
+        {/* 5. SLOW FADING SECTION CHANGE TOAST NOTIFICATION POPUP */}
+        <SectionToastNotification />
+
+        {/* 6. FIRST-TIME VOICE ONBOARDING SETUP MODAL */}
+        <VoiceOnboardingModal />
+
+        {/* 7. EMERGENCY SOS & REMOTE FAMILY COMPANION MODALS */}
+        <SOSModal />
+        <FamilyCompanionModal />
+        <DesignSystemModal />
+
+        {/* Real-time family caregiver connection request approval popup */}
+        <FamilyRequestReceivedModal />
+      </SafeAreaView>
+    );
+  };
+
   return (
-    <SafeAreaView 
-      style={styles.rootContainer}
-      {...panResponder.panHandlers}
-    >
-      <StatusBar barStyle="light-content" backgroundColor="#64748B" />
-
-      {/* 1. CONTINUOUS CAMERA CANVAS / SOLID SLATE GRAY UTILITY BACKDROP */}
-      <CameraViewCanvas />
-
-      {/* 2. TOP STATUS HEADER (Uber SOS Emergency & User Profile) */}
-      <CameraHeader />
-
-      {/* 3. DEDICATED FULL SECTION PANELS (Settings, History, Languages, Family) */}
-      <SectionViewPanel />
-
-      {/* 4. SIGNATURE ROTATING AI MODE WHEEL & FIXED CENTER MIC (Voice-First Audio Guidance) */}
-      <RotatingAIModeWheel />
-
-      {/* 5. SLOW FADING SECTION CHANGE TOAST NOTIFICATION POPUP */}
-      <SectionToastNotification />
-
-      {/* 6. FIRST-TIME VOICE ONBOARDING SETUP MODAL */}
-      <VoiceOnboardingModal />
-
-      {/* 7. EMERGENCY SOS & REMOTE FAMILY COMPANION MODALS */}
-      <SOSModal />
-      <FamilyCompanionModal />
-      <DesignSystemModal />
-
-      {/* Real-time family caregiver connection request approval popup */}
-      <FamilyRequestReceivedModal />
-    </SafeAreaView>
+    <SafeAreaProvider>
+      {renderContent()}
+    </SafeAreaProvider>
   );
 }
 

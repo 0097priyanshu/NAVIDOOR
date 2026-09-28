@@ -84,7 +84,7 @@ export const UserProfileModal: React.FC<{ visible: boolean; onClose: () => void 
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType="slide" onRequestClose={handleClose}>
       <View style={styles.backdrop}>
         
         {/* HIGH-VISIBILITY INTERACTIVE VOICE MICROPHONE FAB */}

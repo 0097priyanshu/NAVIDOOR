@@ -37,7 +37,7 @@ export const FamilyRequestReceivedModal: React.FC = () => {
           speak(`${req.familyName} wants to connect with you as a ${req.relationship}. Tap the left half of the screen to accept, or the right half to reject.`);
         }
       } catch (err) {
-        console.warn('Failed to fetch pending requests:', err);
+        // Silently handle backend fetch offline/error
       }
     };
     checkPending();
@@ -98,7 +98,7 @@ export const FamilyRequestReceivedModal: React.FC = () => {
   };
 
   return (
-    <Modal visible={!!pendingRequest} transparent animationType="fade">
+    <Modal visible={!!pendingRequest} transparent statusBarTranslucent animationType="fade">
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <View style={styles.header}>

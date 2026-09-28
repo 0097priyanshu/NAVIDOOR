@@ -1,7 +1,6 @@
 import * as Speech from 'expo-speech';
 import { Platform } from 'react-native';
 import { SupportedLanguageCode } from '../types';
-import { requestIndicF5TTS } from '../services/voiceAssistantBackend';
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let currentAudioElement: HTMLAudioElement | null = null;
@@ -24,29 +23,10 @@ export const speakAnnouncement = async (
   options: { rate?: number; pitch?: number; interrupt?: boolean; languageCode?: SupportedLanguageCode } = {}
 ) => {
   const { rate = 1.0, pitch = 1.0, interrupt = true, languageCode = 'en' } = options;
-
-  // 1. On Web: Try AI4Bharat IndicF5 backend synthesis first
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    try {
-      const audioBuffer = await requestIndicF5TTS(text, languageCode);
-      if (audioBuffer && audioBuffer.byteLength > 100) {
-        if (interrupt && currentAudioElement) {
-          currentAudioElement.pause();
-        }
-        const blob = new Blob([audioBuffer], { type: 'audio/wav' });
-        const url = URL.createObjectURL(blob);
-        currentAudioElement = new Audio(url);
-        currentAudioElement.playbackRate = rate;
-        await currentAudioElement.play().catch(e => console.warn('[IndicF5 Playback Note]:', e));
-        return;
-      }
-    } catch (_) {
-      // Backend offline or loading — fall through to Web Speech API
-    }
-  }
-
-  // 2. Standard Web & Native Speech Synthesis Fallback
   const targetLang = LANG_CODE_MAP[languageCode] || 'en-US';
+
+  // Normalize speech rate for iOS AVSpeechSynthesizer (0.5 is normal speed on iOS)
+  const effectiveRate = Platform.OS === 'ios' ? rate * 0.5 : rate;
 
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -59,18 +39,55 @@ export const speakAnnouncement = async (
       currentUtterance.pitch = pitch;
       currentUtterance.lang = targetLang;
 
+      const voices = window.speechSynthesis.getVoices();
+      if (voices && voices.length > 0) {
+        const prefix = targetLang.split('-')[0].toLowerCase();
+        const match = voices.find(v => v.lang.toLowerCase().startsWith(prefix) || v.lang.toLowerCase().includes(prefix));
+        if (match) {
+          currentUtterance.voice = match;
+        }
+      }
+
       window.speechSynthesis.speak(currentUtterance);
     }
   } else {
-    // Mobile Native (iOS / Android / Expo Go)
+    // Mobile Native (iOS & Android)
     if (interrupt) {
       Speech.stop();
     }
-    Speech.speak(text, {
-      rate: rate,
-      pitch: pitch,
-      language: targetLang,
-    });
+    
+    // Ensure iOS plays in silent mode without being muted by iOS physical silent switch
+    try {
+      const expoAv = require('expo-av');
+      if (expoAv?.Audio?.setAudioModeAsync) {
+        await expoAv.Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      }
+    } catch (e) {}
+
+    try {
+      const voices = await Speech.getAvailableVoicesAsync();
+      const prefix = targetLang.split('-')[0].toLowerCase();
+      const match = voices.find(v => v.language.toLowerCase().startsWith(prefix) || v.language.toLowerCase().includes(prefix));
+
+      Speech.speak(text, {
+        rate: effectiveRate,
+        pitch,
+        language: targetLang,
+        voice: match ? match.identifier : undefined,
+      });
+    } catch (e) {
+      Speech.speak(text, {
+        rate: effectiveRate,
+        pitch,
+        language: targetLang,
+      });
+    }
   }
 };
 

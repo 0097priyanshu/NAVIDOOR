@@ -2,13 +2,14 @@ import React, { useState, useRef } from 'react';
 import { 
   View, 
   StyleSheet, 
-  SafeAreaView, 
+ 
   TouchableOpacity, 
   Text, 
   Dimensions, 
   PanResponder, 
   Animated 
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { FamilyHomeTab } from './FamilyHomeTab';
 import { FamilyLocationTab } from './FamilyLocationTab';

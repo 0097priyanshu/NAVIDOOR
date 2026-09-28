@@ -14,6 +14,8 @@ import { MedicalInfoPanel } from './panels/MedicalInfoPanel';
 export const SectionViewPanel: React.FC = () => {
   const { activeMode } = useNavidoorStore();
 
+  // 'medicine' mode keeps camera open for prescription scanning.
+  // 'medical' mode shows the Medical Info panel (Blood Group, Allergies, Medications Add/Delete).
   const isPanelMode = ['settings', 'languages', 'history', 'family', 'location', 'emergency', 'medical'].includes(activeMode);
 
   const panResponder = React.useRef(
