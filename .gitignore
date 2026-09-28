@@ -35,6 +35,7 @@ __pycache__/
 *.pyo
 *.bin
 *.onnx
+*.pt
 *.exe
 *.dll
 *.wav

@@ -17,6 +17,7 @@ import { voiceSearchService } from '../services/voiceSearchService';
 import { voiceConversationService } from '../services/voiceConversationService';
 import * as Haptics from 'expo-haptics';
 import { requestTranslation } from '../services/voiceAssistantBackend';
+import { yoloVisionService } from '../services/yoloVisionService';
 
 interface NavidoorState {
   // Voice System First
@@ -54,6 +55,7 @@ interface NavidoorState {
   isCapturedPhotoModalOpen: boolean;
   setIsCapturedPhotoModalOpen: (open: boolean) => void;
   capturePhotoAndAnalyze: () => Promise<void>;
+  runLiveYoloScan: () => Promise<void>;
 
   spatialAudioEnabled: boolean;
   toggleSpatialAudio: () => void;
@@ -556,19 +558,99 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
 
     const camera = get().cameraRef;
     let photoUri = 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=800&auto=format&fit=crop&q=80';
+    let base64Data: string | undefined = undefined;
 
     if (camera && typeof camera.takePictureAsync === 'function') {
       try {
-        const photo = await camera.takePictureAsync({ base64: true, quality: 0.8 });
+        const photo = await camera.takePictureAsync({ base64: true, quality: 0.4 });
         if (photo?.uri) photoUri = photo.uri;
+        if (photo?.base64) base64Data = photo.base64;
       } catch (err) {
         console.warn('Native camera photo capture fallback:', err);
       }
     }
 
     set({ capturedPhotoUri: photoUri, isCapturedPhotoModalOpen: true });
+
+    // Send frame to YOLO AI Vision service
+    if (base64Data) {
+      try {
+        const yoloResult = await yoloVisionService.analyzeFrame(base64Data, get().activeLanguageCode);
+        if (yoloResult && yoloResult.success && yoloResult.detections?.length > 0) {
+          const newObjects: DetectedObject[] = yoloResult.detections.map((d, idx) => ({
+            id: `yolo-${Date.now()}-${idx}`,
+            label: `${d.class.toUpperCase()} ${d.distance_meters}m`,
+            emojiIcon: d.class === 'person' ? '👤' : (d.class === 'car' || d.class === 'bus' ? '🚌' : '⚠️'),
+            category: d.class === 'person' ? 'person' : (d.risk_level === 'CRITICAL' ? 'hazard' : 'obstacle'),
+            confidence: d.confidence,
+            distanceMeters: d.distance_meters,
+            direction: d.zone.toLowerCase() as any,
+            xRatio: d.normalized_bbox ? d.normalized_bbox[0] : 0.5,
+            yRatio: d.normalized_bbox ? d.normalized_bbox[1] : 0.5,
+            isHazard: d.risk_level === 'CRITICAL' || d.risk_level === 'WARNING'
+          }));
+
+          set({
+            detectedObjects: newObjects,
+            lastAnnouncement: yoloResult.voice_guidance,
+            currentInsight: { id: `c-${Date.now()}`, text: yoloResult.voice_guidance, type: 'warning' }
+          });
+          get().speak(yoloResult.voice_guidance, true);
+          return;
+        }
+      } catch (err) {
+        console.warn('[YOLO analyze error]:', err);
+      }
+    }
+
     get().speak('Photo captured! Displaying scanned image and text analysis.', true);
     get().generateSceneDescription();
+  },
+
+  runLiveYoloScan: async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (e) {}
+
+    const camera = get().cameraRef;
+    if (!camera || typeof camera.takePictureAsync !== 'function') {
+      const demoGuidance = 'YOLO Vision: Person detected 1.8 meters ahead. Path is clear on your right.';
+      set({ lastAnnouncement: demoGuidance });
+      get().speak(demoGuidance, true);
+      return;
+    }
+
+    try {
+      get().speak('Scanning with YOLO...', false);
+      const photo = await camera.takePictureAsync({ base64: true, quality: 0.35 });
+      if (photo?.base64) {
+        const yoloResult = await yoloVisionService.analyzeFrame(photo.base64, get().activeLanguageCode);
+        if (yoloResult && yoloResult.success) {
+          const newObjects: DetectedObject[] = (yoloResult.detections || []).map((d, idx) => ({
+            id: `yolo-${Date.now()}-${idx}`,
+            label: `${d.class.toUpperCase()} ${d.distance_meters}m`,
+            emojiIcon: d.class === 'person' ? '👤' : (d.class === 'car' || d.class === 'bus' ? '🚌' : '⚠️'),
+            category: d.class === 'person' ? 'person' : (d.risk_level === 'CRITICAL' ? 'hazard' : 'obstacle'),
+            confidence: d.confidence,
+            distanceMeters: d.distance_meters,
+            direction: d.zone.toLowerCase() as any,
+            xRatio: d.normalized_bbox ? d.normalized_bbox[0] : 0.5,
+            yRatio: d.normalized_bbox ? d.normalized_bbox[1] : 0.5,
+            isHazard: d.risk_level === 'CRITICAL' || d.risk_level === 'WARNING'
+          }));
+
+          const announcement = yoloResult.voice_guidance || 'Clear path ahead.';
+          set({
+            detectedObjects: newObjects,
+            lastAnnouncement: announcement,
+            currentInsight: { id: `c-${Date.now()}`, text: announcement, type: 'info' }
+          });
+          get().speak(announcement, true);
+        }
+      }
+    } catch (err: any) {
+      console.warn('Live YOLO scan error:', err);
+    }
   },
 
   themeMode: 'standard',

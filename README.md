@@ -38,77 +38,89 @@ NAVIDOOR supports full Speech-to-Text (STT), LLM reasoning, translation, and neu
 
 ## 🛠 Tech Stack
 
-### Frontend Application (React Native / Expo)
+### 📁 Three-Tier Modular Architecture
+
+```
+NAVIDOOR/
+├── frontend/    # React Native / Expo mobile client (Android, iOS, Web)
+├── backend/     # Node.js Express, Socket.IO, STT, and TTS orchestrator
+└── yolo/        # Python YOLOv11/v8 AI Vision, Distance Estimation & Hazard Engine
+```
+
+### 1. Frontend Application (`frontend/` — React Native / Expo)
 - **Framework**: React Native 0.86 / Expo SDK 57 (Android, iOS, Web)
 - **Language**: TypeScript 5.4+
 - **State Management**: Zustand (`useNavidoorStore`)
 - **Icons & Visuals**: `lucide-react-native`, `expo-linear-gradient`
-- **Camera & Audio**: `expo-camera`, `expo-av`, `expo-audio`, `expo-speech`
-- **Networking**: `socket.io-client` (real-time telemetry & emergency SOS)
-- **Sensors & Location**: `expo-location`, `expo-haptics`
+- **Camera & Audio**: `expo-camera`, `expo-audio`, `expo-speech`
+- **Vision Integration**: `yoloVisionService.ts` for real-time bounding box rendering and spatial alerts
 
-### Backend & AI Engine (`backend/` — Runs on PC / Local LAN)
-- **Server**: Node.js v22+ + Express 4.x + Socket.IO 4.x (Port `5001`)
+### 2. Backend & Speech Orchestrator (`backend/` — Port 5001)
+- **Server**: Node.js v22+ + Express 4.x + Socket.IO 4.x
 - **Speech-to-Text (STT)**: `Whisper.cpp` native binary (`main.exe`) + `ffmpeg-static` 16kHz resampler
 - **AI Reasoning Engine**: Local Ollama Open-Source LLM (`qwen2.5-coder:7b` / `llama3`)
 - **Neural Speech Synthesis**: `AI4Bharat IndicF5` PyTorch / Python microservice (`indicf5_server.py` on port `5002`)
-- **File Uploads & CORS**: `multer` (audio buffer uploads), `cors`
+- **Vision Bridge**: `yoloClientService.js` connecting Express to the Python YOLO microservice
+
+### 3. YOLO AI Vision Service (`yolo/` — Port 5003)
+- **Engine**: Ultralytics YOLOv11 / YOLOv8 + OpenCV
+- **Distance Estimation**: Pinhole camera focal geometry ($D = \frac{H_{\text{real}} \cdot f}{h_{\text{bbox}}}$) with vertical ground-plane adjustment
+- **Collision Risk**: Categorizes obstacles into `CRITICAL` (<1.2m), `WARNING` (1.2m–2.5m), and `INFO`
+- **Corridor Analysis**: Divides field of view into `LEFT`, `CENTER`, and `RIGHT` corridors to suggest safe walking trajectories
+- **Multilingual Spoken Guidance**: English, Hindi (हिंदी), and Marathi (मराठी)
 
 ---
 
 ## 📦 Complete Dependency Installation Guide
 
-Run these steps once to install all dependencies:
-
 ```bash
-# 1. Install Node.js backend & frontend packages
+# 1. Install Node.js dependencies
 npm install
 
-# 2. Install Python microservice packages (PyTorch, Transformers, F5-TTS, Flask)
+# 2. Install YOLO AI Vision packages
+python -m pip install -r yolo/requirements.txt
+
+# 3. Install Python Speech microservice packages (IndicF5)
 python -m pip install -r backend/indicf5/requirements.txt
 
-# 3. Download Whisper.cpp Windows CLI binaries and multilingual speech model
+# 4. Download Whisper.cpp Windows CLI binaries and multilingual speech model
 node backend/scripts/setup_speech_pipeline.js
 ```
 
 ---
 
-## 🚀 How to Run the Project
+## 🚀 How to Run the Three Services
 
-### Step 1: Start the Backend Server (Express + Socket.IO + Whisper.cpp + IndicF5)
+You can run each service individually or using root npm shortcuts:
 
-Open a terminal in the root directory:
-
+### Step 1: Start the YOLO AI Vision Server (Port 5003)
 ```bash
-npm run server
+npm run yolo
+# Or directly:
+python yolo/yolo_server.py
 ```
-*(Backend runs on `http://0.0.0.0:5001` - LAN accessible).*  
-*(Optional: Ensure [Ollama](https://ollama.com) is running on `http://127.0.0.1:11434` with an installed model such as `qwen2.5-coder:7b` or `llama3`).*
+*(Verify test suite anytime with `npm run test:yolo`).*
 
 ---
 
-### Step 2: Run on Mobile (Android / iOS via Expo Go)
-
-1. Make sure your **Mobile Phone and Laptop are connected to the same Wi-Fi**.
-2. Install **Expo Go** on your device:
-   - **Android**: Install [Expo Go from Google Play](https://play.google.com/store/apps/details?id=host.exp.exponent)
-   - **iOS**: Install [Expo Go from App Store](https://apps.apple.com/app/expo-go/id982107779)
-3. In a second terminal, start the Expo development server:
-   ```bash
-   npm start
-   ```
-   *(Or `npx expo start --tunnel` if testing across different Wi-Fi networks / cellular).*
-4. Connect from your phone:
-   - **Android**: Open **Expo Go** and tap **"Scan QR code"**, then scan the QR code in the terminal.
-   - **iOS**: Open the native **Camera** app, point at the terminal QR code, and tap the prompt to open in Expo Go.
+### Step 2: Start the Backend Server (Port 5001)
+```bash
+npm run backend
+# Or directly:
+node backend/index.js
+```
+*(Backend runs on `http://0.0.0.0:5001` - LAN accessible).*
 
 ---
 
-### Step 3: Run on Web Browser (Laptop / Desktop)
-
+### Step 3: Run the Frontend Mobile App (Expo Go)
 ```bash
-npm run web
+npm run tunnel
+# Or directly from frontend folder:
+cd frontend && npm run tunnel
 ```
+1. Scan the displayed QR code with your phone (**Expo Go** on Android or default **Camera** app on iPhone).
+2. The app will bundle and run live with real-time YOLO vision overlays and voice assistance.
 
 ---
 

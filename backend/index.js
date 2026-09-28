@@ -12,6 +12,7 @@ const indicf5Service = require('./services/indicf5Service');
 const translationService = require('./services/translationService');
 const aiAssistantService = require('./services/aiAssistantService');
 const { setupSocketIO } = require('./services/socketService');
+const yoloClientService = require('./services/yoloClientService');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -33,7 +34,8 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Setup HTTP + Socket.IO Server
 const server = http.createServer(app);
@@ -49,14 +51,57 @@ setupSocketIO(io);
 // 1. Health check endpoint
 app.get('/api/health', async (req, res) => {
   const indicf5Status = await indicf5Service.checkStatus();
+  const yoloStatus = await yoloClientService.checkHealth();
   res.json({
     status: 'online',
     system: 'NAVIDOOR Backend Engine',
     whisperEngine: 'whisper.cpp-native',
     indicf5Engine: indicf5Status.engine,
     indicf5Online: indicf5Status.online,
-    indicf5Device: indicf5Status.device || 'CPU'
+    indicf5Device: indicf5Status.device || 'CPU',
+    yoloOnline: yoloStatus.online,
+    yoloEngine: yoloStatus.engine || 'offline'
   });
+});
+
+// 1.1 Vision AI & YOLO Detection endpoints
+app.post('/api/vision/detect', async (req, res) => {
+  try {
+    const { image, language = 'en' } = req.body;
+    if (!image) {
+      return res.status(400).json({ success: false, error: 'Image base64 payload is required.' });
+    }
+    const result = await yoloClientService.detectFrame(image, language);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/vision/detect-bus', async (req, res) => {
+  try {
+    const { image, language = 'en' } = req.body;
+    if (!image) {
+      return res.status(400).json({ success: false, error: 'Image base64 payload is required.' });
+    }
+    const result = await yoloClientService.detectBus(image, language);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/vision/detect-medicine', async (req, res) => {
+  try {
+    const { image, language = 'en' } = req.body;
+    if (!image) {
+      return res.status(400).json({ success: false, error: 'Image base64 payload is required.' });
+    }
+    const result = await yoloClientService.detectMedicine(image, language);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // 2. Language metadata endpoint

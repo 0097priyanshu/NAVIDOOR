@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { Zap, ZapOff, RefreshCw, Volume2 } from 'lucide-react-native';
+import { Zap, ZapOff, RefreshCw, Volume2, Camera } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 export const CameraControlsOverlay: React.FC = () => {
@@ -86,6 +86,23 @@ export const CameraControlsOverlay: React.FC = () => {
           <Volume2 size={19} color="#FFFFFF" />
           <Text style={styles.utilityPillText}>REPEAT</Text>
         </TouchableOpacity>
+
+        {/* 4. YOLO AI Vision Scan Button */}
+        <TouchableOpacity
+          style={[styles.utilityPill, styles.utilityPillYolo]}
+          onPress={() => {
+            try {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            } catch (e) {}
+            useNavidoorStore.getState().runLiveYoloScan();
+          }}
+          accessibilityLabel="Run YOLO AI Vision Scan"
+          accessibilityHint="Scans the camera view for obstacles and announces distances"
+          accessibilityRole="button"
+        >
+          <Camera size={19} color="#FFFFFF" />
+          <Text style={styles.utilityPillTextYolo}>YOLO SCAN</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -127,6 +144,11 @@ const styles = StyleSheet.create({
   utilityPillActiveTorch: {
     backgroundColor: '#F59E0B',
   },
+  utilityPillYolo: {
+    backgroundColor: '#10B981',
+    borderWidth: 1.5,
+    borderColor: '#34D399',
+  },
   utilityPillText: {
     color: '#FFFFFF',
     fontSize: 11.5,
@@ -135,5 +157,11 @@ const styles = StyleSheet.create({
   },
   utilityPillTextTorch: {
     color: '#FFFFFF',
+  },
+  utilityPillTextYolo: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
 });
