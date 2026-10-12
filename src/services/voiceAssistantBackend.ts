@@ -2,31 +2,31 @@ import { SupportedLanguageCode, VoiceBackendStatus, LanguageMeta } from '../type
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-const LOCAL_COMPUTER_IP = '192.168.0.105';
-
 const getCandidateBackendUrls = (): string[] => {
   const list: string[] = [];
 
-  if (Platform.OS !== 'web') {
-    // 1. Mobile Physical Device / Expo Go: prioritize hostUri dev machine IP first
-    const hostUri = Constants.expoConfig?.hostUri || (Constants.manifest as any)?.debuggerHost;
-    if (hostUri) {
-      const rawHost = hostUri.split(':')[0];
-      const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(rawHost);
-      if (isIp && rawHost !== '127.0.0.1' && rawHost !== 'localhost') {
-        list.push(`http://${rawHost}:5001`);
-      }
+  // 1. Mobile Physical Device / Expo Go / Standalone: prioritize Metro host IP dynamically
+  const hostUri = Constants.expoConfig?.hostUri || (Constants.manifest as any)?.debuggerHost;
+  if (hostUri) {
+    const rawHost = hostUri.split(':')[0];
+    const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(rawHost);
+    if (isIp && rawHost !== '127.0.0.1' && rawHost !== 'localhost') {
+      list.push(`http://${rawHost}:5001`);
     }
-    list.push(`http://${LOCAL_COMPUTER_IP}:5001`);
-    list.push('http://10.0.2.2:5001');
-    list.push('http://localhost:5001');
-    list.push('http://127.0.0.1:5001');
-  } else {
-    // 2. Web Browser: prioritize localhost first
-    list.push('http://localhost:5001');
-    list.push('http://127.0.0.1:5001');
-    list.push(`http://${LOCAL_COMPUTER_IP}:5001`);
   }
+
+  // 2. Web Browser: dynamically read current active server hostname
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location && window.location.hostname) {
+    const webHost = window.location.hostname;
+    if (webHost && webHost !== 'localhost' && webHost !== '127.0.0.1') {
+      list.push(`http://${webHost}:5001`);
+    }
+  }
+
+  // 3. Platform & OS Loopback Fallbacks
+  list.push('http://localhost:5001');
+  list.push('http://127.0.0.1:5001');
+  list.push('http://10.0.2.2:5001'); // Android Emulator loopback to host PC
 
   return Array.from(new Set(list));
 };

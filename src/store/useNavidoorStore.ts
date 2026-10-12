@@ -50,6 +50,9 @@ interface NavidoorState {
 
   cameraRef: any;
   setCameraRef: (ref: any) => void;
+  singleScanHandler: (() => void) | null;
+  setSingleScanHandler: (fn: (() => void) | null) => void;
+  triggerYoloScan: () => void;
   capturedPhotoUri: string | null;
   isCapturedPhotoModalOpen: boolean;
   setIsCapturedPhotoModalOpen: (open: boolean) => void;
@@ -124,41 +127,7 @@ interface NavidoorState {
   setActiveSosAlert: (alert: any | null) => void;
 }
 
-const INITIAL_OBJECTS: DetectedObject[] = [
-  {
-    id: 'obj-1',
-    label: 'Chair',
-    emojiIcon: '🪑',
-    category: 'furniture',
-    confidence: 0.95,
-    distanceMeters: 1.2,
-    direction: 'center',
-    xRatio: 0.32,
-    yRatio: 0.42,
-  },
-  {
-    id: 'obj-2',
-    label: 'Door',
-    emojiIcon: '🚪',
-    category: 'door',
-    confidence: 0.98,
-    distanceMeters: 2.8,
-    direction: 'right',
-    xRatio: 0.65,
-    yRatio: 0.28,
-  },
-  {
-    id: 'obj-3',
-    label: 'Person',
-    emojiIcon: '🚶',
-    category: 'person',
-    confidence: 0.92,
-    distanceMeters: 5.4,
-    direction: 'left',
-    xRatio: 0.12,
-    yRatio: 0.35,
-  },
-];
+const INITIAL_OBJECTS: DetectedObject[] = [];
 
 const INITIAL_MEDICINES: MedicineInfo[] = [
   {
@@ -184,23 +153,29 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   speechRate: 1.0,
   setSpeechRate: (rate) => set({ speechRate: rate }),
   speak: async (text, interrupt = true) => {
+    if (!text || !text.trim()) return;
     const activeLang = get().activeLanguageCode;
-    let finalSpeechText = text;
+    let finalSpeechText = text.trim();
+    
+    console.log(`[VOICE] TTS started: ${new Date().toISOString()} | Text: "${finalSpeechText}"`);
     
     // Auto-translate any text containing English words to active language before TTS readout
-    const hasEnglishWords = /[a-zA-Z]/.test(text.trim());
+    const hasEnglishWords = /[a-zA-Z]/.test(finalSpeechText);
     if (activeLang !== 'en' && hasEnglishWords) {
-      finalSpeechText = await requestTranslation(text, activeLang);
+      try {
+        finalSpeechText = await requestTranslation(finalSpeechText, activeLang);
+      } catch (e) {}
     }
 
     set({ lastAnnouncement: finalSpeechText, voiceState: 'speaking' });
+    console.log(`[VOICE] Audio playback started: ${new Date().toISOString()}`);
     speakAnnouncement(finalSpeechText, { rate: get().speechRate, interrupt, languageCode: activeLang });
     
     setTimeout(() => {
       if (get().voiceState === 'speaking') {
         set({ voiceState: 'idle' });
       }
-    }, Math.max(2500, finalSpeechText.length * 60));
+    }, Math.max(2000, finalSpeechText.length * 55));
   },
   stopVoice: () => {
     stopSpeech();
@@ -208,10 +183,30 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   },
 
   processVoiceInput: async (input: string) => {
-    if (!input || !input.trim()) return;
+    const cleanInput = (input || '').trim();
+    const activeLang = get().activeLanguageCode;
+
+    if (!cleanInput || cleanInput.length < 2) {
+      console.log(`[VOICE] Empty/Invalid STT transcription received.`);
+      set({ voiceState: 'idle' });
+      const repeatMap: Record<string, string> = {
+        en: "I didn't catch that. Please repeat.",
+        hi: 'मैं समझ नहीं पाया। कृपया फिर से बोलें।',
+        mr: 'मला समजले नाही. कृपया पुन्हा बोला.',
+        gu: 'હું સમજી શક્યો નથી. કૃપા કરીને ફરી બોલો.',
+        pa: 'ਮੈਂ ਸਮਝ ਨਹੀਂ ਸਕਿਆ। ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਬੋਲੋ।',
+        bn: 'আমি বুঝতে পারিনি। দয়া করে আবার বলুন।',
+        ta: 'எனக்கு புரியவில்லை. தயவுசெய்து மீண்டும் சொல்லவும்.',
+        te: 'నాకు అర్ధం కాలేదు. దయచేసి మళ్ళీ చెప్పండి.',
+        kn: 'ನನಗೆ ಅರ್ಥವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಹೇಳಿ.',
+        ml: 'എനിക്ക് മനസ്സിലായില്ല. ദയവായി വീണ്ടും പറയുക.',
+      };
+      get().speak(repeatMap[activeLang] || repeatMap.en);
+      return;
+    }
 
     set({ voiceState: 'thinking' });
-    const parsed = voiceCommandProcessor.parseCommand(input);
+    const parsed = voiceCommandProcessor.parseCommand(cleanInput);
 
     if (parsed.isCommand) {
       const activeLang = get().activeLanguageCode;
@@ -549,6 +544,12 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
 
   cameraRef: null as any,
   setCameraRef: (ref: any) => set({ cameraRef: ref }),
+  singleScanHandler: null as ((() => void) | null),
+  setSingleScanHandler: (fn: (() => void) | null) => set({ singleScanHandler: fn }),
+  triggerYoloScan: () => {
+    const fn = get().singleScanHandler;
+    if (fn) fn();
+  },
   capturePhotoAndAnalyze: async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -559,7 +560,7 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
 
     if (camera && typeof camera.takePictureAsync === 'function') {
       try {
-        const photo = await camera.takePictureAsync({ base64: true, quality: 0.8 });
+        const photo = await camera.takePictureAsync({ base64: true, quality: 0.8, shutterSound: false });
         if (photo?.uri) photoUri = photo.uri;
       } catch (err) {
         console.warn('Native camera photo capture fallback:', err);

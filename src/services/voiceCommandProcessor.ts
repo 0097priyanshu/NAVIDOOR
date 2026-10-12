@@ -103,6 +103,22 @@ const LANGUAGE_KEYWORD_MAP: Array<{
   }
 ];
 
+export function isValidUserTranscription(text: string): boolean {
+  if (!text || typeof text !== 'string') return false;
+  const clean = text.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
+  if (clean.length < 2) return false;
+
+  const hallucinatedNoise = [
+    'thank you', 'thanks for watching', 'subtitles by', 'amara.org', 
+    'mbc', 'subscribe', 'you', 'bye', 'blank_audio', 'silence', 'music',
+    'noise', 'traffic', 'laughter', 'chatter'
+  ];
+  if (hallucinatedNoise.some(noise => clean === noise)) {
+    return false;
+  }
+  return true;
+}
+
 export class VoiceCommandProcessor {
   parseCommand(query: string): CommandParseResult {
     const raw = query.trim();
@@ -124,6 +140,19 @@ export class VoiceCommandProcessor {
       .replace(/हिसट्री/g, 'हिस्ट्री')
       .replace(/लैंग्वेस|लँग्वेस/g, 'लैंग्वेज')
       .replace(/प्रोफइल/g, 'प्रोफाइल');
+
+    // 0. STOP / HALT ASSISTANT SPEECH IMMEDIATELY
+    if (
+      q === 'stop' || q === 'halt' || q === 'shut up' || q === 'quiet' || q === 'pause' ||
+      q.includes('रुकें') || q.includes('रुको') || q.includes('थांबा') || q.includes('थोभो') ||
+      q.includes('நில்') || q.includes('ఆగండి') || q.includes('ನಿಲ್ಲಿ') || q.includes('നിൽക്കുക')
+    ) {
+      return {
+        isCommand: true,
+        action: 'closeModal',
+        feedbackPrompt: ''
+      };
+    }
 
     // 1. CLOSE MODAL / GO BACK / DISMISS
     if (
@@ -284,12 +313,12 @@ export class VoiceCommandProcessor {
       return { isCommand: true, action: 'updateFontScale', targetFontScale: 'normal' };
     }
 
-    // 10. DYNAMIC SECTION / MODE OPEN COMMANDS (Multilingual support for English, Hindi, Marathi, Gujarati, Punjabi, Bengali, Tamil, Telugu, Kannada, Malayalam & Hinglish/Marathlish)
+    // 10. DYNAMIC SECTION / MODE OPEN COMMANDS
     if (
       q.includes('location') || q.includes('where am i') || q.includes('my location') || q.includes('gps') || q.includes('map') ||
       q.includes('लोकेशन') || q.includes('लोकेसन') || q.includes('स्थान') || q.includes('जगह') || q.includes('ठिकाण') ||
       q.includes('સ્થળ') || q.includes('સ્થાન') || q.includes('இடம்') || q.includes('இருப்பிடம்') || q.includes('స్థానం') ||
-      q.includes('లొకేషన్') || q.includes('ಸ್ಥಳ') || q.includes('ಲೋಕೇಶನ್') || q.includes('സ്ഥലം') || q.includes('ലൊക്കേഷൻ') ||
+      q.includes('లొకేషన్') || q.includes('<ctrl42>') || q.includes('ಲೋಕೇಶನ್') || q.includes('സ്ഥലം') || q.includes('ലൊക്കേഷൻ') ||
       q.includes('লোকেশন') || q.includes('ਲੋਕੇਸ਼ਨ')
     ) {
       return { isCommand: true, action: 'switchMode', targetMode: 'location' };

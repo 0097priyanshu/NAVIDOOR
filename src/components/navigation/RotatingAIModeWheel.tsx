@@ -155,30 +155,30 @@ export const RotatingAIModeWheel: React.FC = () => {
     rotateWheelToMode(WHEEL_ITEMS[index].id);
   };
 
+  const isMicProcessingLockRef = useRef(false);
+
   const handleMicPress = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (e) {}
 
+    // Prevent duplicate overlapping operations
+    if (isMicProcessingLockRef.current) return;
+
+    // Barge-in Interruption: If TTS is currently speaking, immediately halt speech
+    if (voiceState === 'speaking') {
+      stopVoice();
+    }
+
     if (voiceState === 'listening') {
+      isMicProcessingLockRef.current = true;
       setVoiceState('thinking');
-      useNavidoorStore.setState({ lastAnnouncement: '⚙️ Processing your speech...' });
+      useNavidoorStore.setState({ lastAnnouncement: '⚙️ Processing speech...' });
       
       const result = await voiceRecordingService.stopRecording();
-      console.log('[Voice] Recording result:', {
-        uri: result.uri,
-        blobSize: result.blob?.size ?? 0,
-        liveTranscript: result.liveTranscript,
-      });
-
       let textToProcess = result.liveTranscript ? result.liveTranscript.trim() : '';
 
       if (!textToProcess && (result.blob || result.uri)) {
-        console.log('[Voice] Sending recorded audio to Whisper:', {
-          sourceUri: result.uri,
-          hasBlob: !!result.blob,
-        });
-
         const text = await requestWhisperSTT(
           result.blob,
           activeLanguageCode,
@@ -187,25 +187,24 @@ export const RotatingAIModeWheel: React.FC = () => {
         if (text) textToProcess = text.trim();
       }
 
-      if (textToProcess) {
-        console.log(`[Voice] Recognized speech: "${textToProcess}". Processing...`);
+      try {
         await processVoiceInput(textToProcess);
-      } else {
-        console.log('[Voice] No speech text recognized.');
-        setVoiceState('idle');
-        speak('I did not catch that. Tap the mic button to try speaking again.');
+      } finally {
+        isMicProcessingLockRef.current = false;
       }
     } else {
       stopVoice();
       setVoiceState('listening');
       useNavidoorStore.setState({ lastAnnouncement: '🎤 Listening... Speak now.' });
-      console.log('[RotatingAIModeWheel] Starting voice recording...');
       
       await voiceRecordingService.startRecording(activeLanguageCode, async (autoText) => {
-        if (autoText && autoText.trim()) {
-          console.log(`[RotatingAIModeWheel] Live auto-transcript received: "${autoText.trim()}"`);
-          setVoiceState('thinking');
-          await processVoiceInput(autoText.trim());
+        if (isMicProcessingLockRef.current) return;
+        isMicProcessingLockRef.current = true;
+        setVoiceState('thinking');
+        try {
+          await processVoiceInput(autoText ? autoText.trim() : '');
+        } finally {
+          isMicProcessingLockRef.current = false;
         }
       });
     }
@@ -231,13 +230,10 @@ export const RotatingAIModeWheel: React.FC = () => {
 
   return (
     <View style={styles.wheelRootContainer} pointerEvents="box-none">
-      {/* 1. DUAL / SINGLE PRIMARY ACTION DOCK - CLEAN ELECTRIC CYAN BUTTONS */}
+      {/* 1. PRIMARY ACTION DOCK - CLEAN MIC FAB */}
       {!isProfileModalOpen && (
         <View 
-          style={[
-            styles.dualActionDockContainer,
-            !isVisionMode && { justifyContent: 'center' }
-          ]} 
+          style={[styles.dualActionDockContainer, { justifyContent: 'center' }]} 
           pointerEvents="box-none"
         >
           {/* Voice Assistant Mic FAB */}
@@ -249,25 +245,6 @@ export const RotatingAIModeWheel: React.FC = () => {
               size={68}
             />
           </View>
-
-          {/* Click Picture Shutter FAB - ONLY VISIBLE IN VISION/CAMERA MODES */}
-          {isVisionMode && (
-            <View style={styles.actionItemCol}>
-              <TouchableOpacity
-                style={styles.shutterFabUberTheme}
-                onPress={handlePhotoSnapPress}
-                activeOpacity={0.85}
-                accessibilityLabel="Click Picture to Read or Scan"
-                accessibilityHint="Takes a photo snapshot and reads text or describes surroundings out loud"
-                accessibilityRole="button"
-              >
-                <Camera size={28} color="#FFFFFF" />
-              </TouchableOpacity>
-              
-              {/* CLEAN PURE WHITE TEXT LABEL BELOW BUTTON */}
-              <Text style={styles.shutterLabelSubtext}>SNAP PHOTO</Text>
-            </View>
-          )}
         </View>
       )}
 

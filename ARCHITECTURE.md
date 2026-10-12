@@ -3,108 +3,112 @@
 ## What Is This App?
 
 **NAVIDOOR** is an Indian, offline-first AI accessibility assistant and dual-portal ecosystem designed for visually impaired users and their family caregivers.
-It runs as a React Native (Expo) mobile application with two distinct role experiences:
-1. **NAVIDOOR User Mode**: AI vision assist, camera OCR/object detection (YOLOv11), general-purpose local LLM voice assistant, and 9 navigation modes.
+It runs as a cross-platform mobile application (React Native / Expo with a parallel Flutter client) offering two distinct role experiences:
+1. **NAVIDOOR User Mode**: AI vision assist, live camera hazard detection (**YOLOv11**), local LLM voice assistant with bilingual code-switching, and 12 navigation modes.
 2. **Family Companion Portal**: Dedicated visual dashboard for caregivers with real-time location monitoring, active journey tracking, emergency SOS alerts, and pairing management.
 
-It communicates with a local Node.js backend server running on your PC over your LAN (Wi-Fi), integrated with a local Ollama LLM runtime and AI4Bharat IndicF5 neural TTS microservice.
+It communicates with local microservices running on your PC over LAN (Wi-Fi):
+- Node.js Express server on port `5001`
+- AI4Bharat IndicF5 neural TTS microservice on port `5002`
+- YOLOv11 Computer Vision server on port `5003`
+- Local Ollama LLM runtime on port `11434`
 
 ---
 
 ## Repository Structure
 
-```
+```text
 NAVIDOOR/
 ├── App.tsx                  ← Root entry point (Dual-role routing: RoleSelectionScreen | FamilyModeContainer | Main User App)
 ├── index.js                 ← Registers App with Expo
-├── index.html               ← Web entry HTML (for npx expo start --web)
-├── app.json                 ← Expo config (permissions, splash, icon)
+├── index.html               ← Web entry HTML
+├── app.json                 ← Expo config (camera/audio permissions, splash, icon)
 ├── babel.config.js          ← Babel transpiler config
 ├── tsconfig.json            ← TypeScript config
-├── package.json             ← All dependencies
+├── package.json             ← Node dependencies
+├── yolo11n.pt               ← Official Ultralytics YOLOv11 nano model weights
 │
 ├── src/                     ← All React Native frontend code
-│   ├── components/          ← All UI components
-│   │   ├── camera/          ← Camera view, photo capture, AI overlay (YOLOv11)
-│   │   ├── header/          ← Top status bar (SOS button, profile)
-│   │   ├── navigation/      ← Rotating AI Mode Wheel (bottom nav)
+│   ├── components/          ← UI component hierarchy
+│   │   ├── camera/          ← Camera view canvas, photo capture, YOLOv11 bounding boxes overlay
+│   │   ├── header/          ← Top status bar (SOS button, profile avatar)
+│   │   ├── navigation/      ← Rotating AI Mode Wheel (bottom 12-mode nav)
 │   │   ├── overlays/        ← Modular section panels & toast notifications
 │   │   │   └── panels/      ← Standalone overlay panels (Emergency, Location, Medical, Settings, etc.)
 │   │   ├── onboarding/      ← Role selection screen & voice setup flow
 │   │   ├── sos/             ← Emergency SOS modal & location broadcast
 │   │   ├── family/          ← Family Companion Portal (Container, Home, Location, Activity, Alerts, Profile tabs)
-│   │   ├── designSystem/    ← Dev-only design system preview modal
+│   │   ├── designSystem/    ← Design system preview modal
 │   │   ├── profile/         ← User profile / medical ID modal
-│   │   └── common/          ← Shared components (mic button)
-│   ├── store/               ← Global state management (Zustand store for user & family states)
-│   ├── services/            ← Backend API clients + voice processing + socket client
-│   ├── theme/               ← Design system tokens, colors, typography
+│   │   └── common/          ← Shared components (UnifiedMicButton with animated aura)
+│   ├── store/               ← Global state management (Zustand store: useNavidoorStore)
+│   ├── services/            ← Backend API clients + voice recording service + socket client
+│   ├── theme/               ← Design system tokens, colors, high-contrast themes
 │   ├── types/               ← TypeScript type definitions
-│   └── utils/               ← Speech utils, translations, helpers
+│   └── utils/               ← Speech utilities, translations, sound effects
 │
-└── backend/                 ← Node.js Express server (runs on PC / LAN)
-    ├── index.js             ← Main Express server + STT/TTS/Chat REST APIs + Socket.IO server
-    ├── bin/
-    │   └── main.exe         ← Whisper.cpp compiled binary (STT)
-    ├── models/
-    │   └── whisper/
-    │       └── ggml-base.bin           ← Whisper multilingual model (147MB)
-    ├── config/
-    │   └── languages.js     ← 10 Indian language configs (en, hi, mr, gu, pa, bn, ta, te, kn, ml)
-    ├── indicf5/
-    │   └── indicf5_server.py           ← AI4Bharat IndicF5 Python Neural TTS microservice (port 5002)
-    └── services/
-        ├── whisperService.js     ← Whisper.cpp STT engine wrapper (-t 8 -bs 5 -bo 5 -l auto)
-        ├── indicf5Service.js     ← AI4Bharat IndicF5 TTS engine client wrapper
-        ├── aiAssistantService.js ← Local Ollama LLM Reasoning Engine (qwen2.5-coder:7b / llama3)
-        ├── socketService.js      ← Socket.IO real-time event hub
-        └── translationService.js ← Regional Indian language translation engine
+├── backend/                 ← Node.js Express server (runs on PC / LAN)
+│   ├── index.js             ← Main Express server + STT/TTS/Chat REST APIs + Socket.IO server
+│   ├── bin/                 ← Whisper.cpp compiled binaries (main.exe, server.exe, whisper.dll)
+│   ├── models/whisper/      ← ggml-base.bin (141MB) & ggml-small.bin (487MB)
+│   ├── config/languages.js  ← 10 Indian language configs (en, hi, mr, gu, pa, bn, ta, te, kn, ml)
+│   ├── indicf5/             ← AI4Bharat IndicF5 Python Neural TTS microservice (port 5002)
+│   └── services/
+│       ├── whisperService.js     ← Whisper.cpp STT wrapper (clean 16kHz resampling, code-switching, script validation)
+│       ├── aiAssistantService.js ← Local Ollama LLM Reasoning Engine (direct native prompting & clarification safety)
+│       ├── indicf5Service.js     ← AI4Bharat IndicF5 TTS engine client wrapper
+│       ├── socketService.js      ← Socket.IO real-time event hub
+│       └── translationService.js ← Regional Indian language translation engine
+│
+└── yolo/                    ← Python YOLOv11 Computer Vision Service (Port 5003)
+    ├── yolo_server.py       ← FastAPI / Flask server with /detect, /detect/bus, /detect/medicine
+    ├── test_yolo.py         ← Automated detection & distance estimation test suite
+    ├── requirements.txt     ← Python dependencies (ultralytics, torch, opencv-python, flask)
+    └── core/
+        ├── distance_estimator.py ← Pinhole 3D distance & corridor clearance analyzer
+        └── indian_labels.py      ← Indian contextual class mappings & multilingual prompts
 ```
 
 ---
 
-## Tech Stack
+## Tech Stack Overview
 
 ### Frontend (React Native / Expo)
 
 | Technology | Version | Purpose |
-|---|---|---|
+| :--- | :--- | :--- |
 | **React Native** | 0.74.5 | Cross-platform mobile framework |
-| **Expo** | latest | Dev tooling, camera, speech, haptics APIs |
-| **TypeScript** | ~5.3.3 | Type safety across all frontend code |
-| **Zustand** | ^4.5.2 | Global state management (replaces Redux) |
-| **expo-camera** | ~15.0.16 | Real-time camera access & photo capture |
-| **expo-speech** | ~12.0.2 | Device TTS fallback for Web & Native |
-| **expo-haptics** | ~13.0.1 | Vibration feedback on mode swipes & button interactions |
-| **expo-location** | ~17.0.1 | GPS for navigation mode & emergency SOS broadcast |
-| **expo-av** | ~14.0.7 | Audio recording for Whisper STT |
-| **expo-linear-gradient** | ~13.0.2 | UI gradient effects |
-| **lucide-react-native** | ^0.395.0 | Complete icon system (Shield, MapPin, Activity, etc.) |
-| **socket.io-client** | ^4.8.3 | Real-time family stream & SOS event listener |
+| **Expo** | SDK 51 | Dev tooling, camera, audio, haptics, location APIs |
+| **TypeScript** | ~5.3.3 | Type safety across entire codebase |
+| **Zustand** | ^4.5.2 | Lightweight reactive state management (`useNavidoorStore`) |
+| **expo-camera** | ~15.0.16 | Real-time continuous camera feed & high-res photo capture |
+| **expo-speech** | ~12.0.2 | Instant offline device TTS fallback |
+| **expo-haptics** | ~13.0.1 | Tactile vibration feedback on mode swipes & mic tap |
+| **expo-location** | ~17.0.1 | High-precision GPS for live navigation & SOS broadcast |
+| **expo-av** / **expo-audio** | SDK 51 | Audio recording with native metering (`isMeteringEnabled: true`) |
+| **socket.io-client** | ^4.8.3 | Real-time caregiver live stream & SOS event listener |
 
-### Backend & AI Engine (Node.js Express + Python Microservices — runs on PC / LAN)
+### Backend & AI Microservices (PC / LAN)
 
-| Technology | Version / Model | Purpose |
-|---|---|---|
-| **Node.js + Express** | ^4.22.2 | Main HTTP API server & Family REST Endpoints |
-| **Whisper.cpp** | Native binary (`ggml-base.bin`) | Offline multilingual Speech-to-Text (STT) |
-| **Local Ollama LLM** | `qwen2.5-coder:7b` / `llama3` | General-purpose AI reasoning & vision context Q&A engine |
-| **AI4Bharat IndicF5** | PyTorch / Python microservice | Neural Text-to-Speech (TTS) for 10 regional Indian languages |
-| **ffmpeg-static** | ^5.3.0 | Resamples microphone recordings → 16kHz Mono PCM WAV for Whisper |
-| **Socket.IO** | ^4.8.3 | Real-time family remote assist & pairing socket gateway |
-| **multer** | ^1.4.5 | Handles audio file uploads from the app |
-| **cors** | ^2.8.6 | Allows mobile app to call backend over LAN |
+| Service | Port | Technology | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Backend Gateway** | `5001` | Node.js v22+ Express + Socket.IO | Main API gateway, family pairing, socket hub |
+| **Speech-to-Text** | `5001` (internal) | `Whisper.cpp` (`main.exe`) | Offline multilingual STT with code-switching |
+| **AI Vision Engine** | `5003` | Python 3.10+ + Ultralytics YOLOv11 | Real-time hazard detection & 3D distance estimation |
+| **Neural TTS** | `5002` | Python + AI4Bharat IndicF5 PyTorch | Neural voice synthesis for 10 Indian languages |
+| **Local LLM Engine** | `11434` | Ollama (`llama3.2` / `qwen2.5-coder`) | Conversational reasoning & vision context Q&A |
 
 ---
 
 ## Architecture & Data Flow
 
 ### 1. Dual-Role Routing (App Startup)
-```
-App launch (App.tsx)
+
+```text
+App Launch (App.tsx)
 ├── Checks userRole in Zustand store
 ├── Case 'undecided': Renders <RoleSelectionScreen />
-│     ├── NAVIDOOR User Card -> Sets userRole = 'navidoor_user', opens setup onboarding
+│     ├── NAVIDOOR User Card -> Sets userRole = 'navidoor_user', opens voice onboarding
 │     └── Family Member Card -> Sets userRole = 'family_member', opens caregiver portal
 ├── Case 'family_member':
 │     ├── If not logged in -> Renders <FamilyAuthScreen />
@@ -112,114 +116,121 @@ App launch (App.tsx)
 └── Case 'navidoor_user': Renders main AI Accessibility workspace (<CameraViewCanvas />, <RotatingAIModeWheel />, <SectionViewPanel />)
 ```
 
-### 2. General-Purpose Voice AI & Reasoning Pipeline
-```
-                  ┌───────────────┐
-                  │  Microphone   │
-                  └───────┬───────┘
-                          ↓
-                  ┌───────────────┐
-                  │  Whisper.cpp  │ (Offline STT: -t 8 -bs 5 -bo 5 -l auto)
-                  └───────┬───────┘
-                          ↓
-                      Transcript
-                          ↓
-                  ┌───────────────┐
-                  │ Node /api/chat│
-                  │ Local Ollama  │ (qwen2.5-coder:7b / llama3)
-                  └───────┬───────┘
-                          ↓
-                     Real Answer
-                          ↓
-                  ┌───────────────┐
-                  │  IndicF5 TTS  │ (Neural Speech Synthesis for 10 Indian Languages)
-                  └───────┬───────┘
-                          ↓
-                       Speaker
+### 2. End-to-End Voice Assistant Pipeline
+
+```text
+               ┌────────────────────────────────────────────────────────┐
+               │           User Speaks into Microphone                  │
+               └──────────────────────────┬─────────────────────────────┘
+                                          │
+                                          ▼
+               ┌────────────────────────────────────────────────────────┐
+               │   Mobile Native VAD & Audio Capture                    │
+               │   - Audio metering active (isMeteringEnabled: true)    │
+               │   - Sensitivity: > -42 dB                              │
+               │   - Min window: 2.0s | Post-speech silence: 2.2s       │
+               │   - Safety timeout: 10.0s                              │
+               └──────────────────────────┬─────────────────────────────┘
+                                          │ Local .m4a file
+                                          ▼
+               ┌────────────────────────────────────────────────────────┐
+               │   Clean 16kHz PCM WAV Resampling (FFmpeg)              │
+               │   - No destructive highpass/lowpass filters            │
+               │   - Full 0-8000Hz frequency bandwidth preserved        │
+               │   - Pre-inference validation (sampleRate, RMS, peak)   │
+               └──────────────────────────┬─────────────────────────────┘
+                                          │ 16kHz Mono WAV
+                                          ▼
+               ┌────────────────────────────────────────────────────────┐
+               │   Whisper.cpp Multilingual STT Engine                  │
+               │   - ggml-base.bin single-pass greedy decoding (~400ms) │
+               │   - Code-switching context primed via --prompt         │
+               │   - isSuspiciousScript catches Russian/Arabic gibberish│
+               │   - Automatic 1-pass retry if suspicious               │
+               └──────────────────────────┬─────────────────────────────┘
+                                          │ Clean Transcription (e.g. "माझा phone कुठे आहे?")
+                                          ▼
+               ┌────────────────────────────────────────────────────────┐
+               │   Pre-LLM Validation & Intent Normalization            │
+               │   - isUnusableGarbage checks for noise/nonsense        │
+               │   - Direct voice audibility match ("आवाज ऐकू येत आहे?") │
+               │   - Direct UI control commands (switch mode, settings) │
+               └──────────────────────────┬─────────────────────────────┘
+                                          │ Valid User Query
+                                          ▼
+               ┌────────────────────────────────────────────────────────┐
+               │   Direct Native Local LLM (Ollama Llama 3.2)          │
+               │   - Sent DIRECTLY in native script (no English mangle) │
+               │   - Dedicated Accessibility System Prompt              │
+               │   - Max 1 short sentence (15 words max, zero fluff)    │
+               │   - Clarification safety check fallback                │
+               └──────────────────────────┬─────────────────────────────┘
+                                          │ Direct Native Response
+                                          ▼
+               ┌────────────────────────────────────────────────────────┐
+               │   Speech Playback (AI4Bharat IndicF5 / Device TTS)     │
+               └────────────────────────────────────────────────────────┘
 ```
 
-### 3. Camera Perception & Vision Question Pipeline
-```
-Camera Feed
-   ↓
-YOLOv11 Object Detection
-   ↓
-real detectedObjects (class, confidence, distance, position)
-   ↓
-context payload
-   ↓
-Node /api/chat
-   ↓
-Local Ollama LLM (System Prompt integrates visual context without hallucinating)
-   ↓
-Context-Aware Spoken Answer
-   ↓
-AI4Bharat IndicF5 TTS
-```
+### 3. YOLOv11 Computer Vision & Hazard Avoidance Pipeline
 
-### 4. Modular Panel Overlays Architecture (`src/components/overlays/panels/`)
-```
-<SectionViewPanel />
-├── Renders modular panel overlay based on activeMode:
-│     ├── 'emergency' -> <EmergencyPanel />
-│     ├── 'medicine' -> <MedicalInfoPanel />
-│     ├── 'navigate' / 'assist' -> <LocationPanel />
-│     ├── 'settings' -> <SettingsPanel />
-│     ├── 'languages' -> <LanguagesPanel />
-│     ├── 'history' -> <HistoryPanel />
-│     └── 'family' -> <FamilyPanel />
-```
-
-### 5. Emergency SOS & Family Remote Assist
-```
-User triggers Emergency SOS (Voice or Header SOS button)
-→ SOSModal opens with countdown & alert sound
-→ Obtains GPS coordinates via expo-location
-→ Transmits SOS alert payload via Socket.IO gateway (`family:sosAlert`)
-→ Family Companion Portal receives instant alert and location details
+```text
+Continuous Camera Frame (CameraViewCanvas)
+   │
+   ▼ POST /detect (Base64 JPEG)
+Python YOLOv11 Vision Server (Port 5003)
+   │
+   ├── Ultralytics YOLOv11 Inference (yolo11n.pt ~28ms)
+   │
+   ├── Pinhole Geometry 3D Distance Calculation:
+   │   Distance = (H_real * focal_length) / h_bbox
+   │   - CRITICAL: < 1.2m
+   │   - WARNING: 1.2m - 2.5m
+   │   - INFO: 2.5m - 5.0m
+   │
+   ├── 3-Corridor Clearance Analysis:
+   │   - LEFT, CENTER, RIGHT corridor evaluation
+   │   - Recommends path deviations ("Obstacle ahead. Step right.")
+   │
+   ▼ Return JSON Detections + Safe Path + Spoken Hints
+Render Dynamic Bounding Boxes + Tactile Haptic Alert + Spoken Guidance
 ```
 
 ---
 
-## Backend API Endpoints
+## Backend REST & WebSocket Endpoints
 
-| Method | Route | What it does |
-|---|---|---|
-| GET | `/api/health` | Backend & IndicF5 health check |
-| GET | `/api/languages` | Returns list of 10 supported Indian languages |
-| POST | `/api/stt` | Whisper.cpp: audio file → 16kHz WAV → transcribed text |
-| POST | `/api/chat` | Local Ollama LLM: user query + context → real AI answer |
-| POST | `/api/tts` | AI4Bharat IndicF5: text + language → synthesized WAV buffer |
-| POST | `/api/translate` | Regional language translation service |
-| POST | `/api/family/login` | Family companion caregiver authentication |
-| POST | `/api/family/register` | Family companion caregiver account signup |
-| POST | `/api/family/connect` | Connection request submit & pairing handling |
-| POST | `/api/family/connection-status` | Connection state & paired users overview |
-| GET | `/api/family/dashboard-data` | Caregiver dashboard data payload |
-| GET | `/api/user/pending-requests` | User pending caregiver connection requests |
-| POST | `/api/user/approve-connection` | User consent approval / rejection |
-| WS | Socket.IO Gateway | Real-time location streams, SOS alerts, and pairing events |
+| Method | Route | Service | Description |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/health` | Backend (5001) | Health check for Backend, IndicF5, and Ollama |
+| GET | `/api/languages` | Backend (5001) | Returns metadata for 10 regional Indian languages |
+| POST | `/api/stt` | Whisper.cpp | Audio file upload → clean 16kHz WAV → code-switched text |
+| POST | `/api/chat` | Ollama LLM | User query + live camera context → concise spoken response |
+| POST | `/api/tts` | IndicF5 (5002) | Text + language code → synthesized neural WAV audio |
+| POST | `/api/translate` | Backend (5001) | Regional language translation service |
+| POST | `/detect` | YOLOv11 (5003) | Frame → YOLOv11 detections + 3D distance + safe corridor |
+| POST | `/detect/bus` | YOLOv11 (5003) | Detects arriving buses and boarding door coordinates |
+| POST | `/detect/medicine` | YOLOv11 (5003) | Detects medicine bottles, pill strips, and labels |
+| POST | `/api/family/login` | Backend (5001) | Caregiver companion portal authentication |
+| POST | `/api/family/register` | Backend (5001) | Caregiver companion registration |
+| POST | `/api/family/connect` | Backend (5001) | Submit pairing request to user by phone number |
+| GET | `/api/family/dashboard-data` | Backend (5001) | Caregiver dashboard metrics (battery, journey, location) |
+| WS | Socket.IO Gateway | Backend (5001) | Real-time GPS location streaming, SOS alerts, pairing events |
 
 ---
 
 ## Key Files Reference
 
-| File | What it does |
-|---|---|
-| `App.tsx` | Root layout + dual-role routing (`userRole`) + full-screen swipe handler |
-| `src/store/useNavidoorStore.ts` | Global Zustand state: mode, voice, camera, user role, family caregiver state |
-| `src/components/onboarding/RoleSelectionScreen.tsx` | App launch role selection screen (Navidoor User vs Family Companion) |
-| `src/components/family/FamilyModeContainer.tsx` | Caregiver Portal shell with semi-circle rotating wheel navbar & swipe gestures |
-| `src/components/family/FamilyHomeTab.tsx` | Caregiver main overview dashboard (Monitored user card, location, journey, battery) |
-| `src/components/family/FamilyLocationTab.tsx` | Real-time location map canvas with Indian street mapping |
-| `src/components/family/FamilyAuthScreen.tsx` | Caregiver login & account registration screen |
-| `src/components/overlays/SectionViewPanel.tsx` | Root section view panel container |
-| `src/components/overlays/panels/` | Modular overlay panels (Emergency, Location, Medical, Settings, Languages, etc.) |
-| `src/services/voiceAssistantBackend.ts` | Backend HTTP API client + LAN auto-discovery |
-| `src/services/voiceRecordingService.ts` | Mic permission, Web PCM sample recorder & native audio capture |
-| `src/services/socketClient.ts` | Socket.IO real-time client wrapper |
-| `backend/index.js` | Express server with STT/TTS/Chat routes, family REST APIs, and Socket.IO gateway |
-| `backend/services/whisperService.js` | Whisper.cpp native STT execution engine |
-| `backend/services/aiAssistantService.js` | Local Ollama LLM Reasoning Engine (`qwen2.5-coder:7b` / `llama3`) |
-| `backend/services/indicf5Service.js` | AI4Bharat IndicF5 Neural TTS microservice client |
-| `backend/indicf5/indicf5_server.py` | Python Flask microservice serving AI4Bharat IndicF5 PyTorch TTS |
+| File | Purpose |
+| :--- | :--- |
+| `App.tsx` | Root entry point, role-based routing, screen-level gesture handler |
+| `src/store/useNavidoorStore.ts` | Central Zustand store managing navigation modes, voice state, detections, and user profile |
+| `src/services/voiceRecordingService.ts` | Mobile VAD audio metering (-42 dB, 2.2s silence threshold, 2.0s min window, 10s max window) |
+| `src/services/voiceAssistantBackend.ts` | HTTP API client with dynamic LAN auto-discovery via Expo `hostUri` |
+| `src/components/camera/CameraViewCanvas.tsx` | Continuous camera stream with live YOLOv11 bounding boxes and distance tags |
+| `src/components/navigation/RotatingAIModeWheel.tsx` | Curved 12-mode navigation wheel dock with haptic rotation |
+| `backend/index.js` | Express server + Socket.IO hub connecting STT, Chat, TTS, and Family services |
+| `backend/services/whisperService.js` | Whisper.cpp wrapper with clean 16kHz resampling, `--prompt` code-switching, and script validation |
+| `backend/services/aiAssistantService.js` | Direct native LLM reasoning engine with programmatic validation & clarification safety check |
+| `yolo/yolo_server.py` | Python YOLOv11 server with pinhole distance estimation and corridor guidance |
+| `yolo/core/distance_estimator.py` | 3D pinhole distance calculator and left/center/right safe corridor analyzer |
