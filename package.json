@@ -8,7 +8,8 @@
     "web": "expo start --web",
     "build:web": "expo export -p web",
     "lint": "tsc --noEmit --skipLibCheck",
-    "server": "node backend/index.js"
+    "server": "node backend/index.js",
+    "yolo": "py yolo/yolo_server.py"
   },
   "dependencies": {
     "@expo/html-elements": "^0.9.0",

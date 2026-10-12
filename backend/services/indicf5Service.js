@@ -15,8 +15,11 @@ class IndicF5Service {
     this.checkStatus().then(status => {
       if (!status.online) {
         console.log('[IndicF5Service]: Spawning Python IndicF5 TTS microservice on port 5002...');
-        const venvPy = path.join(__dirname, '../indicf5_env/Scripts/python.exe');
-        const pythonBin = fs.existsSync(venvPy) ? venvPy : 'python';
+        const isWin = process.platform === 'win32';
+        const venvPyWin = path.join(__dirname, '../indicf5_env/Scripts/python.exe');
+        const venvPyNix = path.join(__dirname, '../indicf5_env/bin/python');
+        const venvPy = isWin ? venvPyWin : venvPyNix;
+        const pythonBin = fs.existsSync(venvPy) ? venvPy : (isWin ? 'python' : 'python3');
         const pyScript = path.join(__dirname, '../indicf5/indicf5_server.py');
         try {
           const pyProc = spawn(pythonBin, [pyScript], { stdio: 'ignore', detached: false });
