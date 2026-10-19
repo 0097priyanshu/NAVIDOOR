@@ -13,7 +13,6 @@ const translationService = require('./services/translationService');
 const aiAssistantService = require('./services/aiAssistantService');
 const yoloClientService = require('./services/yoloClientService');
 const { setupSocketIO } = require('./services/socketService');
-const yoloClientService = require('./services/yoloClientService');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
