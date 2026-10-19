@@ -13,6 +13,7 @@
     "android": "npm --prefix frontend run android",
     "ios": "npm --prefix frontend run ios",
     "web": "npm --prefix frontend run web",
+    "build:web": "npm --prefix frontend run build:web",
     "lint": "npm --prefix frontend run lint"
   },
   "dependencies": {

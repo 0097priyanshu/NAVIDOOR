@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { Zap, ZapOff, RefreshCw, Volume2, Camera } from 'lucide-react-native';
+import { Zap, ZapOff, RefreshCw, Volume2, Camera, Eye } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 export const CameraControlsOverlay: React.FC = () => {
@@ -13,10 +13,19 @@ export const CameraControlsOverlay: React.FC = () => {
     activeMode, 
     speak,
     lastAnnouncement,
+    triggerYoloScan,
   } = useNavidoorStore();
 
   const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(activeMode);
   if (!isVisionMode) return null;
+
+  const handleScanPress = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (e) {}
+    speak('Scanning surroundings...', true);
+    triggerYoloScan();
+  };
 
   const handleTorchPress = () => {
     try {
@@ -47,7 +56,19 @@ export const CameraControlsOverlay: React.FC = () => {
     <View style={styles.accessibleOverlayContainer} pointerEvents="box-none">
       {/* UBER CYAN MONOCHROME TOP UTILITY ACTION BAR */}
       <View style={styles.topUtilityBar} pointerEvents="box-none">
-        {/* 1. Flashlight Light Mode Toggle */}
+        {/* 1. Manual AI Vision Scan Button */}
+        <TouchableOpacity
+          style={[styles.utilityPill, styles.scanPill]}
+          onPress={handleScanPress}
+          accessibilityLabel="Scan surroundings for objects and obstacles"
+          accessibilityHint="Scans the camera view and speaks detected objects out loud"
+          accessibilityRole="button"
+        >
+          <Eye size={18} color="#FFFFFF" />
+          <Text style={styles.utilityPillText}>SCAN</Text>
+        </TouchableOpacity>
+
+        {/* 2. Flashlight Light Mode Toggle */}
         <TouchableOpacity
           style={[styles.utilityPill, torchOn && styles.utilityPillActiveTorch]}
           onPress={handleTorchPress}
@@ -57,11 +78,11 @@ export const CameraControlsOverlay: React.FC = () => {
         >
           {torchOn ? <Zap size={18} color="#F59E0B" /> : <ZapOff size={18} color="#FFFFFF" />}
           <Text style={[styles.utilityPillText, torchOn && styles.utilityPillTextTorch]}>
-            {torchOn ? 'LIGHT ON' : 'LIGHT OFF'}
+            {torchOn ? 'LIGHT' : 'LIGHT'}
           </Text>
         </TouchableOpacity>
 
-        {/* 2. Rear / Front Camera Facing Toggle */}
+        {/* 3. Rear / Front Camera Facing Toggle */}
         <TouchableOpacity
           style={styles.utilityPill}
           onPress={handleCameraFlipPress}
@@ -70,12 +91,10 @@ export const CameraControlsOverlay: React.FC = () => {
           accessibilityRole="button"
         >
           <RefreshCw size={18} color="#FFFFFF" />
-          <Text style={styles.utilityPillText}>
-            {cameraFacing === 'back' ? 'REAR CAM' : 'FRONT CAM'}
-          </Text>
+          <Text style={styles.utilityPillText}>FLIP</Text>
         </TouchableOpacity>
 
-        {/* 3. Repeat Speech / Read Out Loud */}
+        {/* 4. Repeat Speech / Read Out Loud */}
         <TouchableOpacity
           style={styles.utilityPill}
           onPress={handleRepeatSpeechPress}
@@ -143,6 +162,9 @@ const styles = StyleSheet.create({
   },
   utilityPillActiveTorch: {
     backgroundColor: '#F59E0B',
+  },
+  scanPill: {
+    backgroundColor: '#0D9488',
   },
   utilityPillYolo: {
     backgroundColor: '#10B981',

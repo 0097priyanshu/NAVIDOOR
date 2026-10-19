@@ -14,6 +14,13 @@ from flask_cors import CORS
 from PIL import Image
 import numpy as np
 
+# Ensure Windows terminal prints UTF-8 Devanagari characters cleanly
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 # Ensure yolo package is in python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core.detector import YOLODetector
@@ -24,7 +31,7 @@ CORS(app)
 PORT = int(os.environ.get("YOLO_PORT", 5003))
 
 # Initialize YOLO Detector
-detector = YOLODetector(model_name="yolov8n.pt", confidence_threshold=0.35)
+detector = YOLODetector(model_name="yolo11n.pt", confidence_threshold=0.45)
 
 @app.route("/health", methods=["GET"])
 def health_check():
@@ -60,7 +67,8 @@ def detect_objects():
 
             image_bytes = base64.b64decode(raw_b64)
             pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-            image_np = np.array(pil_img)
+            # Convert RGB (PIL) -> BGR (OpenCV/Ultralytics) to fix inverted Red/Blue channel false person misclassifications
+            image_np = np.array(pil_img)[:, :, ::-1]
         elif request.files:
             file_key = "image" if "image" in request.files else ("file" if "file" in request.files else None)
             if not file_key:
@@ -69,7 +77,7 @@ def detect_objects():
             file = request.files[file_key]
             language = request.form.get("language", "en")
             pil_img = Image.open(file.stream).convert("RGB")
-            image_np = np.array(pil_img)
+            image_np = np.array(pil_img)[:, :, ::-1]
         else:
             return jsonify({"success": False, "error": "Unsupported request format. Send JSON or multipart."}), 400
 

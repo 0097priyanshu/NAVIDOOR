@@ -11,6 +11,7 @@ const whisperService = require('./services/whisperService');
 const indicf5Service = require('./services/indicf5Service');
 const translationService = require('./services/translationService');
 const aiAssistantService = require('./services/aiAssistantService');
+const yoloClientService = require('./services/yoloClientService');
 const { setupSocketIO } = require('./services/socketService');
 const yoloClientService = require('./services/yoloClientService');
 
@@ -64,8 +65,13 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
-// 1.1 Vision AI & YOLO Detection endpoints
-app.post('/api/vision/detect', async (req, res) => {
+// 1.1 Vision AI & YOLO Detection endpoints (Supports both /api/vision and /api/yolo paths)
+app.get('/api/yolo/health', async (req, res) => {
+  const status = await yoloClientService.checkHealth();
+  res.json(status);
+});
+
+app.post(['/api/vision/detect', '/api/yolo/detect'], async (req, res) => {
   try {
     const { image, language = 'en' } = req.body;
     if (!image) {
@@ -78,7 +84,7 @@ app.post('/api/vision/detect', async (req, res) => {
   }
 });
 
-app.post('/api/vision/detect-bus', async (req, res) => {
+app.post(['/api/vision/detect-bus', '/api/yolo/bus'], async (req, res) => {
   try {
     const { image, language = 'en' } = req.body;
     if (!image) {

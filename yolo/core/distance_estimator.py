@@ -37,9 +37,10 @@ class DistanceEstimator:
         # Pinhole distance formula: D = (real_height * focal_length) / box_height
         raw_distance = (real_height * effective_focal) / box_height
 
-        # Ground plane perspective adjustment (objects near bottom of frame are physically closer)
+        # Ground plane perspective adjustment (only for floor hazards / walking obstacles near feet)
+        GROUND_HAZARDS = {'pothole', 'manhole', 'water_puddle', 'stairs', 'person', 'dog', 'cow', 'cat', 'pole'}
         bottom_ratio = y2 / float(frame_height)
-        if bottom_ratio > 0.85:
+        if bottom_ratio > 0.85 and class_name.lower() in GROUND_HAZARDS:
             # Near feet of the user
             raw_distance = min(raw_distance, (1.0 - bottom_ratio) * 6.0 + 0.6)
 

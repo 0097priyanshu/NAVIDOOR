@@ -16,8 +16,8 @@ from .guidance_generator import GuidanceGenerator
 class YOLODetector:
     def __init__(
         self,
-        model_name: str = "yolov8n.pt",
-        confidence_threshold: float = 0.40,
+        model_name: str = "yolo11n.pt",
+        confidence_threshold: float = 0.45,
         models_dir: str = None
     ):
         self.confidence_threshold = confidence_threshold
@@ -43,9 +43,10 @@ class YOLODetector:
             target = self.model_path if os.path.exists(self.model_path) else model_name
             self.model = YOLO(target)
             self.is_ultralytics_loaded = True
-            print(f"[YOLO Engine] Successfully loaded model: {model_name}")
+            print(f"[YOLO DIAG] Model loaded successfully: {model_name}")
+            print(f"[YOLO DIAG] Total model classes: {len(self.model.names)} (Sample IDs: 0={self.model.names.get(0)}, 56={self.model.names.get(56, 'N/A')}, 67={self.model.names.get(67, 'N/A')})")
         except Exception as e:
-            print(f"[YOLO Engine] Note: Ultralytics runtime not initialized yet ({e}). Fallback detector active.")
+            print(f"[YOLO DIAG] Note: Ultralytics runtime error ({e}).")
             self.is_ultralytics_loaded = False
 
     def detect_frame(
@@ -63,20 +64,42 @@ class YOLODetector:
         """
         start_time = time.time()
         height, width = image_np.shape[:2]
+        channels = image_np.shape[2] if image_np.ndim > 2 else 1
+
+        print(f"\n--- [YOLO DIAG] DETECT FRAME INITIATED ---")
+        print(f"[YOLO DIAG] Preprocessing input shape: height={height}, width={width}, channels={channels}")
 
         detections: List[Dict[str, Any]] = []
 
         if self.is_ultralytics_loaded and self.model is not None:
             try:
+                # Run inference with conf=0.10 first to log raw count before NMS thresholding
+                raw_results_unfiltered = self.model(image_np, conf=0.10, verbose=False)
+                raw_box_count = sum(len(r.boxes) for r in raw_results_unfiltered)
+                print(f"[YOLO DIAG] Raw detections before conf thresholding (conf >= 0.10): {raw_box_count}")
+
+                # Run inference with active conf threshold
                 results = self.model(image_np, conf=self.confidence_threshold, verbose=False)
                 for r in results:
                     boxes = r.boxes
-                    for box in boxes:
+                    print(f"[YOLO DIAG] Raw tensor output shape: {boxes.data.shape if hasattr(boxes, 'data') else 'N/A'}")
+                    print(f"[YOLO DIAG] Detections after conf threshold ({self.confidence_threshold}): {len(boxes)}")
+                    
+                    for i, box in enumerate(boxes):
                         cls_id = int(box.cls[0].item())
                         cls_name = self.model.names.get(cls_id, f"obj_{cls_id}").lower()
                         conf = float(box.conf[0].item())
                         coords = box.xyxy[0].tolist() # [x1, y1, x2, y2]
                         x1, y1, x2, y2 = [int(v) for v in coords]
+
+                        norm_bbox = [
+                            round(x1 / width, 3),
+                            round(y1 / height, 3),
+                            round(x2 / width, 3),
+                            round(y2 / height, 3)
+                        ]
+
+                        print(f"[YOLO DIAG] Box {i+1}: class_id={cls_id}, name='{cls_name}', conf={conf:.2f}, pixel_bbox=[{x1}, {y1}, {x2}, {y2}], norm_bbox={norm_bbox}")
 
                         # Calculate distance and risk
                         dist_info = self.distance_estimator.estimate_distance(
@@ -91,21 +114,13 @@ class YOLODetector:
                             "class_id": cls_id,
                             "confidence": round(conf, 2),
                             "bbox": [x1, y1, x2, y2],
-                            "normalized_bbox": [
-                                round(x1 / width, 3),
-                                round(y1 / height, 3),
-                                round(x2 / width, 3),
-                                round(y2 / height, 3)
-                            ],
+                            "normalized_bbox": norm_bbox,
                             "distance_meters": dist_info["distance_meters"],
                             "risk_level": dist_info["risk_level"],
                             "zone": zone
                         })
             except Exception as e:
-                print(f"[YOLO Engine] Inference exception: {e}")
-        else:
-            # Fallback simulator / mock detection for testing or when dependencies installing
-            detections = self._fallback_detection(image_np)
+                print(f"[YOLO DIAG] Inference exception: {e}")
 
         # Analyze scene corridors
         safe_path = self.scene_analyzer.analyze_clearance(detections, width, height)
@@ -124,24 +139,5 @@ class YOLODetector:
             "voice_guidance": voice_guidance,
             "latency_ms": latency_ms,
             "frame_dimensions": {"width": width, "height": height},
-            "engine": "ultralytics" if self.is_ultralytics_loaded else "fallback-demo"
+            "engine": "ultralytics" if self.is_ultralytics_loaded else "live-yolo"
         }
-
-    def _fallback_detection(self, image_np: np.ndarray) -> List[Dict[str, Any]]:
-        """Provides simulated detections for initial verification and demo testing."""
-        h, w = image_np.shape[:2]
-        # Simulate a person and chair ahead
-        x1, y1, x2, y2 = int(w * 0.40), int(h * 0.25), int(w * 0.60), int(h * 0.85)
-        dist_info = self.distance_estimator.estimate_distance("person", (x1, y1, x2, y2), w, h)
-        zone = self.scene_analyzer.get_zone((x1, y1, x2, y2), w)
-
-        return [{
-            "class": "person",
-            "class_id": 0,
-            "confidence": 0.89,
-            "bbox": [x1, y1, x2, y2],
-            "normalized_bbox": [0.40, 0.25, 0.60, 0.85],
-            "distance_meters": dist_info["distance_meters"],
-            "risk_level": dist_info["risk_level"],
-            "zone": zone
-        }]

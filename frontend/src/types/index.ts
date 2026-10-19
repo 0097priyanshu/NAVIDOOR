@@ -22,6 +22,7 @@ export type FontScale = 'normal' | 'large' | 'extraLarge';
 
 export interface DetectedObject {
   id: string;
+  classId?: number;
   label: string;
   emojiIcon: string;
   category: 'obstacle' | 'person' | 'door' | 'text' | 'sign' | 'furniture' | 'hazard';
@@ -30,6 +31,8 @@ export interface DetectedObject {
   direction: 'left' | 'center' | 'right';
   xRatio: number;
   yRatio: number;
+  x2Ratio?: number;
+  y2Ratio?: number;
   isHazard?: boolean;
 }
 

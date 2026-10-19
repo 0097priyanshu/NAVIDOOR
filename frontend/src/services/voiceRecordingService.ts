@@ -38,6 +38,16 @@ function getExpoAudio(): any {
     }
   } catch (e) {}
 
+  // 2. Fallback to legacy expo-av (older Expo SDKs) if ExponentAV native module exists
+  try {
+    const { NativeModules } = require('react-native');
+    if (NativeModules?.ExponentAV) {
+      const expoAv = require('expo-av');
+      if (expoAv && (expoAv.Audio || expoAv.default?.Audio)) {
+        return expoAv.Audio || expoAv.default?.Audio;
+      }
+    }
+  } catch (e) {}
 
   return null;
 }
@@ -48,6 +58,7 @@ export class VoiceRecordingService {
   private speechRecognition: any = null;
   private lastLiveTranscript: string = '';
   private onAutoResultCallback: ((text: string) => void) | null = null;
+  private mobileStatusInterval: any = null;
 
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
@@ -125,7 +136,7 @@ export class VoiceRecordingService {
     this.pcmSamples = [];
     this.onAutoResultCallback = onAutoResult || null;
 
-    console.log('RECORDING STARTED: YES');
+    console.log(`[VOICE] Recording started: ${new Date().toISOString()}`);
 
     // 1. NATIVE MOBILE RECORDING (iOS & Android via expo-audio or expo-av)
     if (Platform.OS !== 'web') {
@@ -174,11 +185,88 @@ export class VoiceRecordingService {
               this.recording = null;
             }
 
+            const customOptions = {
+              ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+              isMeteringEnabled: true,
+              android: {
+                ...Audio.RecordingOptionsPresets.HIGH_QUALITY?.android,
+                meteringEnabled: true,
+              },
+              ios: {
+                ...Audio.RecordingOptionsPresets.HIGH_QUALITY?.ios,
+                meteringEnabled: true,
+              },
+            };
+
+            let hasSpokenMobile = false;
+            let lastSpeechTimeMobile = Date.now();
+            const recordingStartTimeMobile = Date.now();
+
+            const processMobileStatus = (status: any) => {
+              if (!this.isRecording || !status) return;
+
+              const metering = typeof status.metering === 'number' ? status.metering : -160;
+              const currentDuration = Date.now() - recordingStartTimeMobile;
+
+              // Metering ranges from -160 (silence) to 0 (max dB). Voice threshold: > -42 dB
+              if (metering > -42) {
+                if (!hasSpokenMobile) {
+                  hasSpokenMobile = true;
+                  console.log(`[VOICE] Mobile speech detected (dB: ${metering.toFixed(1)}): ${new Date().toISOString()}`);
+                }
+                lastSpeechTimeMobile = Date.now();
+              } else if (hasSpokenMobile && currentDuration > 2000 && Date.now() - lastSpeechTimeMobile > 2200) {
+                // 2.2s of silence after speech (with min 2.0s recording window) -> auto stop & process
+                console.log(`[VOICE] Mobile silence detected after speech (${currentDuration}ms total), auto-stopping...`);
+                hasSpokenMobile = false;
+                if (this.mobileStatusInterval) {
+                  clearInterval(this.mobileStatusInterval);
+                  this.mobileStatusInterval = null;
+                }
+                if (this.onAutoResultCallback) {
+                  const cb = this.onAutoResultCallback;
+                  this.onAutoResultCallback = null;
+                  this.stopRecording().then((res) => {
+                    const txt = res.liveTranscript || '';
+                    cb(txt);
+                  });
+                }
+              } else if (!hasSpokenMobile && currentDuration > 10000) {
+                // 10.0s total safety timeout with no speech on Mobile -> auto stop
+                console.log(`[VOICE FAILURE] reason=recording duration timeout (no speech detected after ${currentDuration}ms)`);
+                if (this.mobileStatusInterval) {
+                  clearInterval(this.mobileStatusInterval);
+                  this.mobileStatusInterval = null;
+                }
+                if (this.onAutoResultCallback) {
+                  const cb = this.onAutoResultCallback;
+                  this.onAutoResultCallback = null;
+                  this.stopRecording().then((res) => {
+                    const txt = res.liveTranscript || '';
+                    cb(txt);
+                  });
+                }
+              }
+            };
+
             const { recording } = await Audio.Recording.createAsync(
-              Audio.RecordingOptionsPresets.HIGH_QUALITY
+              customOptions,
+              processMobileStatus,
+              100
             );
             this.recording = recording;
-            console.log('[VoiceRecordingService] Mobile Audio recording active:', this.recording.getURI());
+
+            if (this.mobileStatusInterval) clearInterval(this.mobileStatusInterval);
+            this.mobileStatusInterval = setInterval(async () => {
+              if (this.recording && typeof this.recording.getStatusAsync === 'function') {
+                try {
+                  const st = await this.recording.getStatusAsync();
+                  processMobileStatus(st);
+                } catch (e) {}
+              }
+            }, 120);
+
+            console.log('[VoiceRecordingService] Mobile Audio recording active with VAD metering:', this.recording.getURI());
             return true;
           }
         } catch (err) {
@@ -193,7 +281,7 @@ export class VoiceRecordingService {
       }
     }
 
-    // 2. WEB BROWSER RECORDING (HTML5 MediaRecorder & PCM WAV Generator)
+    // 2. WEB BROWSER RECORDING (HTML5 MediaRecorder & PCM WAV Generator with VAD)
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       try {
         if (!this.activeStream || !this.activeStream.active) {
@@ -207,6 +295,9 @@ export class VoiceRecordingService {
           });
         }
 
+        let hasSpoken = false;
+        let lastSpeechTime = Date.now();
+
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioContextClass) {
           this.audioCtx = new AudioContextClass();
@@ -217,16 +308,45 @@ export class VoiceRecordingService {
           this.sourceNode = this.audioCtx.createMediaStreamSource(this.activeStream);
           this.scriptNode = this.audioCtx.createScriptProcessor(4096, 1, 1);
 
+          const webRecStart = Date.now();
           this.scriptNode.onaudioprocess = (e) => {
             if (this.isRecording) {
               const input = e.inputBuffer.getChannelData(0);
               this.pcmSamples.push(new Float32Array(input));
+
+              // Compute RMS volume for Voice Activity Detection (VAD)
+              let sum = 0;
+              for (let i = 0; i < input.length; i++) {
+                sum += input[i] * input[i];
+              }
+              const rms = Math.sqrt(sum / input.length);
+
+              const webRecDuration = Date.now() - webRecStart;
+              if (rms > 0.010) {
+                if (!hasSpoken) {
+                  hasSpoken = true;
+                  console.log(`[VOICE] Speech detected: ${new Date().toISOString()}`);
+                }
+                lastSpeechTime = Date.now();
+              } else if (hasSpoken && webRecDuration > 2000 && Date.now() - lastSpeechTime > 2200) {
+                // 2.2s of silence detected after speech (min 2.0s recording window) -> auto finalize
+                hasSpoken = false;
+                console.log(`[VOICE] Silence detected after speech (${webRecDuration}ms total), auto-stopping...`);
+                if (this.onAutoResultCallback) {
+                  const cb = this.onAutoResultCallback;
+                  this.onAutoResultCallback = null;
+                  this.stopRecording().then((res) => {
+                    const txt = res.liveTranscript || '';
+                    cb(txt);
+                  });
+                }
+              }
             }
           };
 
           this.sourceNode.connect(this.scriptNode);
           this.scriptNode.connect(this.audioCtx.destination);
-          console.log(`[VoiceRecordingService] Web AudioContext PCM listener active (${this.audioSampleRate}Hz)`);
+          console.log(`[VoiceRecordingService] Web AudioContext PCM VAD listener active (${this.audioSampleRate}Hz)`);
         }
 
         this.mediaRecorder = new MediaRecorder(this.activeStream);
@@ -249,7 +369,7 @@ export class VoiceRecordingService {
             try { this.speechRecognition.abort(); } catch (e) {}
           }
           this.speechRecognition = new SpeechRecognition();
-          this.speechRecognition.continuous = true;
+          this.speechRecognition.continuous = false;
           this.speechRecognition.interimResults = true;
           this.speechRecognition.lang = LANG_BCP47_MAP[langCode] || 'en-US';
 
@@ -262,7 +382,7 @@ export class VoiceRecordingService {
             }
             if (transcript && transcript.trim()) {
               this.lastLiveTranscript = transcript.trim();
-              console.log('[VoiceRecordingService] Live speech detected:', this.lastLiveTranscript);
+              console.log(`[VOICE] Speech detected: ${new Date().toISOString()} | "${this.lastLiveTranscript}"`);
             }
           };
 
@@ -272,9 +392,7 @@ export class VoiceRecordingService {
               this.lastLiveTranscript = '';
               const cb = this.onAutoResultCallback;
               this.onAutoResultCallback = null;
-              if (text && text.trim()) {
-                cb(text.trim());
-              }
+              cb(text ? text.trim() : '');
             }
           };
 
@@ -355,11 +473,16 @@ export class VoiceRecordingService {
   }
 
   async stopRecording(): Promise<{ blob: Blob | null; uri: string | null; liveTranscript: string }> {
-    console.log('RECORDING STOPPED: YES');
+    console.log(`[VOICE] Recording stopped: ${new Date().toISOString()}`);
     const liveTranscript = this.lastLiveTranscript;
     this.lastLiveTranscript = '';
     this.isRecording = false;
     this.onAutoResultCallback = null;
+
+    if (this.mobileStatusInterval) {
+      clearInterval(this.mobileStatusInterval);
+      this.mobileStatusInterval = null;
+    }
 
     if (this.speechRecognition) {
       try { this.speechRecognition.stop(); } catch (e) {}

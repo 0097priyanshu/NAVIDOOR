@@ -20,7 +20,7 @@ class GuidanceGenerator:
         Creates a high-priority voice prompt for the blind user.
         Prioritizes the closest, highest-priority hazard.
         """
-        lang = language.lower()
+        lang = language.split("-")[0].lower() if language else "en"
         if lang not in self.translations:
             lang = "en"
         tr = self.translations[lang]
@@ -29,14 +29,14 @@ class GuidanceGenerator:
             return tr.get("safe_path", "Clear walking path directly ahead.")
 
         # Sort detections by:
-        # 1. Critical risk level first
-        # 2. Priority of object class (pedestrians, cars, stairs > chairs)
+        # 1. High-priority object class (laptops, phones, bottles, people > background tables)
+        # 2. Risk level (CRITICAL > WARNING > INFO)
         # 3. Proximity (closest distance)
         sorted_dets = sorted(
             detections,
             key=lambda d: (
-                0 if d.get("risk_level") == "CRITICAL" else (1 if d.get("risk_level") == "WARNING" else 2),
                 -CLASS_PRIORITY.get(d.get("class", ""), 1),
+                0 if d.get("risk_level") == "CRITICAL" else (1 if d.get("risk_level") == "WARNING" else 2),
                 d.get("distance_meters", 10.0)
             )
         )
@@ -57,30 +57,35 @@ class GuidanceGenerator:
 
         # Actionable avoidance guidance
         rec_dir = safe_path.get("recommended_direction", "FORWARD")
+        unit = tr.get("meters", "m")
+        
+        action_str = ""
+        if rec_dir == "RIGHT":
+            action_str = " " + tr.get("turn_right", "Step right.")
+        elif rec_dir == "LEFT":
+            action_str = " " + tr.get("turn_left", "Step left.")
+        elif rec_dir == "STOP":
+            action_str = " " + tr.get("please_stop", "Please stop.")
 
         if lang == "hi":
-            msg = f"{dir_str} {dist} मीटर पर {localized_name} है।"
-            if rec_dir == "RIGHT":
-                msg += " दाईं ओर मुड़ें।"
-            elif rec_dir == "LEFT":
-                msg += " बाईं ओर मुड़ें।"
-            elif rec_dir == "STOP":
-                msg += " कृपया रुकें।"
+            msg = f"{dir_str} {dist} {unit} पर {localized_name} है।{action_str}"
         elif lang == "mr":
-            msg = f"{dir_str} {dist} मीटरवर {localized_name} आहे."
-            if rec_dir == "RIGHT":
-                msg += " उजवीकडे वळा."
-            elif rec_dir == "LEFT":
-                msg += " डावीकडे वळा."
-            elif rec_dir == "STOP":
-                msg += " कृपया थांबा."
-        else: # en
-            msg = f"{localized_name} {dist}m {dir_str}."
-            if rec_dir == "RIGHT":
-                msg += " Step right."
-            elif rec_dir == "LEFT":
-                msg += " Step left."
-            elif rec_dir == "STOP":
-                msg += " Please stop."
+            msg = f"{dir_str} {dist} {unit}वर {localized_name} आहे.{action_str}"
+        elif lang == "gu":
+            msg = f"{dir_str} {dist} {unit} પર {localized_name} છે.{action_str}"
+        elif lang == "pa":
+            msg = f"{dir_str} {dist} {unit} 'ਤੇ {localized_name} ਹੈ।{action_str}"
+        elif lang == "bn":
+            msg = f"{dir_str} {dist} {unit}ে {localized_name} আছে।{action_str}"
+        elif lang == "ta":
+            msg = f"{dir_str} {dist} {unit}ில் {localized_name} உள்ளது.{action_str}"
+        elif lang == "te":
+            msg = f"{dir_str} {dist} {unit} దూరంలో {localized_name} ఉంది.{action_str}"
+        elif lang == "kn":
+            msg = f"{dir_str} {dist} {unit} ದೂರದಲ್ಲಿ {localized_name} ಇದೆ.{action_str}"
+        elif lang == "ml":
+            msg = f"{dir_str} {dist} {unit}ൽ {localized_name} ഉണ്ട്.{action_str}"
+        else: # en and fallbacks
+            msg = f"{localized_name} {dist}{unit} {dir_str}.{action_str}"
 
         return msg
