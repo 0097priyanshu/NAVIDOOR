@@ -278,9 +278,9 @@ ${visionContextText ? `CAMERA VISION DATA: ${visionContextText}` : ''}`;
 
   extractNaturalIntent(query, language = 'en') {
     const raw = (query || '').trim();
-    let q = raw.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '');
+    let q = raw.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, ' ').replace(/\s+/g, ' ').trim();
 
-    if (q === 'namaskar' || q === 'namaste' || q === 'hello' || q === 'hi' || q === ' नमस्कार' || q === 'नमस्ते' || q.includes('namaskar') || q.includes('namaste')) {
+    if (q === 'namaskar' || q === 'namaste' || q === 'hello' || q === 'hi' || q === 'नमस्कार' || q === 'नमस्ते' || q.includes('namaskar') || q.includes('namaste')) {
       const greetingMap = {
         mr: 'नमस्कार! मी नवीडोअर एआय असिस्टंट आहे. मी तुम्हाला कशी मदत करू शकतो?',
         hi: 'नमस्ते! मैं नवीडोर एआई असिस्टेंट हूँ। मैं आपकी क्या मदद कर सकता हूँ?',
@@ -304,12 +304,124 @@ ${visionContextText ? `CAMERA VISION DATA: ${visionContextText}` : ''}`;
       };
     }
 
-    if (q.startsWith('close') || q === 'back' || q.includes('go back')) {
-      return { action: 'closeModal', suggestedAnswer: 'Closing screen.' };
+    // Camera Flip / Switch / Facing
+    const isCameraFlip = 
+      q.includes('flip camera') || q.includes('flip the camera') || q.includes('switch camera') || q.includes('switch the camera') ||
+      q.includes('change camera') || q.includes('reverse camera') || q.includes('turn camera') ||
+      q.includes('कॅमेरा बदला') || q.includes('कॅमेरा उलटा') || q.includes('कॅमेरा फिरवा') ||
+      q.includes('कैमरा बदलो') || q.includes('कैमरा फ्लिप') || q.includes('कैमरा घुमाओ');
+    
+    if (isCameraFlip) {
+      return { action: 'toggleCameraFacing', suggestedAnswer: language === 'mr' ? 'कॅमेरा बदलत आहे.' : (language === 'hi' ? 'कैमरा बदला जा रहा है।' : 'Switching camera.') };
     }
 
+    const isFrontCamera = q.includes('front camera') || q.includes('selfie camera') || q.includes('समोरचा कॅमेरा') || q.includes('सामने का कैमरा');
+    if (isFrontCamera) {
+      return { action: 'setCameraFacing', cameraFacing: 'front', suggestedAnswer: language === 'mr' ? 'समोरचा कॅमेरा सक्रिय केला.' : (language === 'hi' ? 'सामने का कैमरा सक्रिय किया गया।' : 'Front camera active.') };
+    }
+
+    const isBackCamera = q.includes('back camera') || q.includes('rear camera') || q.includes('मागील कॅमेरा') || q.includes('पीछे का कैमरा');
+    if (isBackCamera) {
+      return { action: 'setCameraFacing', cameraFacing: 'back', suggestedAnswer: language === 'mr' ? 'मागील कॅमेरा सक्रिय केला.' : (language === 'hi' ? 'पीछे का कैमरा सक्रिय किया गया।' : 'Rear camera active.') };
+    }
+
+    // Torch / Flashlight
+    const isTorchOn = 
+      q.includes('turn on torch') || q.includes('turn on the torch') || q.includes('turn on flashlight') || q.includes('turn on the flashlight') ||
+      q.includes('torch on') || q.includes('flashlight on') || q.includes('flash on') ||
+      q.includes('टॉर्च चालू') || q.includes('फ्लॅश चालू') || q.includes('टॉर्च ऑन') || q.includes('फ्लैश ऑन') || q.includes('टॉर्च जलाओ') || q.includes('फ्लैशलाइट जलाओ');
+    if (isTorchOn) {
+      return { action: 'setTorch', boolValue: true, suggestedAnswer: language === 'mr' ? 'फ्लॅशलाइट चालू केली.' : (language === 'hi' ? 'फ्लैशलाइट चालू की गई।' : 'Flashlight on.') };
+    }
+
+    const isTorchOff = 
+      q.includes('turn off torch') || q.includes('turn off the torch') || q.includes('turn off flashlight') || q.includes('turn off the flashlight') ||
+      q.includes('torch off') || q.includes('flashlight off') || q.includes('flash off') ||
+      q.includes('टॉर्च बंद') || q.includes('फ्लॅश बंद') || q.includes('टॉर्च ऑफ') || q.includes('फ्लैश ऑफ') || q.includes('टॉर्च बुझाओ') || q.includes('फ्लैशलाइट बंद करो');
+    if (isTorchOff) {
+      return { action: 'setTorch', boolValue: false, suggestedAnswer: language === 'mr' ? 'फ्लॅशलाइट बंद केली.' : (language === 'hi' ? 'फ्लैशलाइट बंद की गई।' : 'Flashlight off.') };
+    }
+
+    const isTorchToggle = q.includes('toggle torch') || q.includes('toggle flashlight') || q.includes('torch') || q.includes('flashlight') || q.includes('टॉर्च') || q.includes('फ्लॅशलाइट');
+    if (isTorchToggle && (q.includes('toggle') || q.includes('बदला') || q.includes('बदलो'))) {
+      return { action: 'toggleTorch', suggestedAnswer: language === 'mr' ? 'टॉर्च टॉगल केली.' : (language === 'hi' ? 'टॉर्च टॉगल की गई।' : 'Toggling flashlight.') };
+    }
+
+    // Live YOLO Vision Scanning & Surroundings
+    const isYoloScan = 
+      q.includes('scan') || q.includes('what is ahead') || q.includes('what is in front') || q.includes('whats in front') ||
+      q.includes('describe surroundings') || q.includes('look around') || q.includes('detect objects') ||
+      q.includes('स्कॅन करा') || q.includes('स्कॅन') || q.includes('समोर काय आहे') || q.includes('आजूबाजूला काय आहे') ||
+      q.includes('स्कैन करो') || q.includes('स्कैन') || q.includes('सामने क्या है') || q.includes('आसपास क्या है');
+    if (isYoloScan && !q.includes('medicine') && !q.includes('औषध') && !q.includes('दवा')) {
+      return { action: 'runLiveYoloScan', suggestedAnswer: language === 'mr' ? 'दृष्टी स्कॅनिंग सुरू करत आहे.' : (language === 'hi' ? 'दृष्टि स्कैनिंग शुरू की जा रही है।' : 'Scanning surroundings with AI vision.') };
+    }
+
+    // Photo capture
+    const isPhotoCapture = 
+      q.includes('take a photo') || q.includes('take photo') || q.includes('take picture') || q.includes('capture photo') || q.includes('snap photo') ||
+      q.includes('फोटो काढा') || q.includes('चित्र काढा') || q.includes('फोटो घ्या') ||
+      q.includes('फोटो खींचो') || q.includes('तस्वीर लो') || q.includes('फोटो लो');
+    if (isPhotoCapture) {
+      return { action: 'capturePhoto', suggestedAnswer: language === 'mr' ? 'फोटो काढत आहे.' : (language === 'hi' ? 'फोटो खींचा जा रहा है।' : 'Capturing photo and analyzing.') };
+    }
+
+    // Repeat / what did you say
+    const isRepeat = 
+      q.includes('repeat') || q.includes('say again') || q.includes('what did you say') || q.includes('pardon') ||
+      q.includes('पुन्हा सांगा') || q.includes('काय म्हणालात') || q.includes('पुन्हा बोल') ||
+      q.includes('फिर से बोलो') || q.includes('फिर से कहो') || q.includes('क्या कहा');
+    if (isRepeat) {
+      return { action: 'repeatAnnouncement', suggestedAnswer: '' };
+    }
+
+    // Emergency / SOS
+    const isSos = 
+      q.includes('emergency') || q.includes('sos') || q.includes('help me') || q.includes('call help') ||
+      q.includes('आणीबाणी') || q.includes('मदत करा') || q.includes('वाचवा') ||
+      q.includes('आपातकाल') || q.includes('मदद करो') || q.includes('बचाओ');
+    if (isSos) {
+      return { action: 'triggerSosAlert', suggestedAnswer: language === 'mr' ? 'आणीबाणी अलर्ट सक्रिय केला.' : (language === 'hi' ? 'आपातकालीन अलर्ट सक्रिय किया गया।' : 'Emergency alert activated.') };
+    }
+
+    // Close / Back
+    if (q.startsWith('close') || q === 'back' || q.includes('go back') || q.includes('बंद करा') || q.includes('बंद करो')) {
+      return { action: 'closeModal', suggestedAnswer: language === 'mr' ? 'स्क्रीन बंद करत आहे.' : (language === 'hi' ? 'स्क्रीन बंद की जा रही है।' : 'Closing screen.') };
+    }
+
+    // Profile
     if (q.includes('profile') || q.includes('प्रोफाइल') || q.includes('प्रोफाईल') || q.includes('माझी प्रोफाइल')) {
-      return { action: 'openProfileModal', suggestedAnswer: 'Opening User Profile.' };
+      return { action: 'openProfileModal', suggestedAnswer: language === 'mr' ? 'प्रोफाईल उघडत आहे.' : (language === 'hi' ? 'प्रोफाइल खोली जा रही है।' : 'Opening User Profile.') };
+    }
+
+    // Family Companion
+    if (q.includes('family') || q.includes('companion') || q.includes('केअरटेकर') || q.includes('कौटुंबिक') || q.includes('परिवार') || q.includes('केयरटेकर')) {
+      return { action: 'openFamilyCompanion', suggestedAnswer: language === 'mr' ? 'कौटुंबिक काळजीवाहू उघडत आहे.' : (language === 'hi' ? 'फैमिली कंपैनियन खोला जा रहा है।' : 'Opening Family Companion.') };
+    }
+
+    // Mode Cycling
+    if (q.includes('next mode') || q.includes('pudhil mode') || q.includes('पुढील मोड') || q.includes('अगला मोड')) {
+      return { action: 'cycleNextMode', suggestedAnswer: language === 'mr' ? 'पुढील मोडवर स्विच करत आहे.' : (language === 'hi' ? 'अगले मोड पर जा रहे हैं।' : 'Switching to next mode.') };
+    }
+    if (q.includes('previous mode') || q.includes('prev mode') || q.includes('magil mode') || q.includes('मागील मोड') || q.includes('पिछला मोड')) {
+      return { action: 'cyclePrevMode', suggestedAnswer: language === 'mr' ? 'मागील मोडवर स्विच करत आहे.' : (language === 'hi' ? 'पिछले मोड पर जा रहे हैं।' : 'Switching to previous mode.') };
+    }
+
+    // Mode Switch direct
+    if (q.includes('assist mode') || q.includes('assistance mode') || q.includes('मदत मोड') || q.includes('सहायता मोड')) {
+      return { action: 'switchMode', targetMode: 'assist', suggestedAnswer: 'Assist mode active.' };
+    }
+    if (q.includes('navigate mode') || q.includes('navigation mode') || q.includes('नेव्हिगेशन मोड') || q.includes('दिशा मोड')) {
+      return { action: 'switchMode', targetMode: 'navigate', suggestedAnswer: 'Navigation mode active.' };
+    }
+    if (q.includes('read mode') || q.includes('reading mode') || q.includes('वाचन मोड') || q.includes('पढ़ने का मोड')) {
+      return { action: 'switchMode', targetMode: 'read', suggestedAnswer: 'Read mode active.' };
+    }
+    if (q.includes('medicine mode') || q.includes('medical mode') || q.includes('औषध मोड') || q.includes('दवा मोड')) {
+      return { action: 'switchMode', targetMode: 'medicine', suggestedAnswer: 'Medicine mode active.' };
+    }
+    if (q.includes('transport mode') || q.includes('transit mode') || q.includes('वाहतूक मोड') || q.includes('परिवहन मोड')) {
+      return { action: 'switchMode', targetMode: 'transport', suggestedAnswer: 'Transport mode active.' };
     }
 
     if (q.includes('logout') || q.includes('log out')) {

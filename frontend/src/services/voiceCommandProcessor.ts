@@ -10,6 +10,7 @@ export interface CommandParseResult {
     | 'switchLanguage' 
     | 'switchMode' 
     | 'cycleNextMode'
+    | 'cyclePrevMode'
     | 'logoutUser'
     | 'updateUserName' 
     | 'updateUserPhone'
@@ -20,7 +21,13 @@ export interface CommandParseResult {
     | 'updateSpeechRate'
     | 'updateFontScale'
     | 'toggleTorch' 
+    | 'setTorch'
     | 'toggleCameraFacing' 
+    | 'setCameraFacing'
+    | 'runLiveYoloScan'
+    | 'toggleDetection'
+    | 'capturePhoto'
+    | 'repeatAnnouncement'
     | 'triggerSosAlert' 
     | 'toggleSpatialAudio' 
     | 'voiceSearch';
@@ -33,6 +40,8 @@ export interface CommandParseResult {
   rateValue?: number;
   searchQuery?: string;
   feedbackPrompt?: string;
+  boolValue?: boolean;
+  cameraFacing?: 'front' | 'back';
 }
 
 const LANGUAGE_KEYWORD_MAP: Array<{
@@ -140,6 +149,12 @@ export class VoiceCommandProcessor {
       .replace(/हिसट्री/g, 'हिस्ट्री')
       .replace(/लैंग्वेस|लँग्वेस/g, 'लैंग्वेज')
       .replace(/प्रोफइल/g, 'प्रोफाइल');
+
+    // Stripped version without conversational filler words for ultra-flexible matching
+    const clean = q
+      .replace(/\b(please|can you|could you|would you|hey|navidoor|the|a|an|my|now|just|to|around|it|for|me|in|on|of|back to|go to|switch to|turn to|change to)\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
 
     // 0. STOP / HALT ASSISTANT SPEECH IMMEDIATELY
     if (
@@ -426,6 +441,17 @@ export class VoiceCommandProcessor {
 
     // 11. GENERAL CYCLE SECTION / MODE COMMANDS
     if (
+      /prev(ious)?.*(mode|section)/i.test(q) || /last.*(mode|section)/i.test(q) ||
+      clean === 'prev mode' || clean === 'previous mode' || clean === 'previous section' ||
+      q.includes('पिछला मोड') || q.includes('मागचा मोड') || q.includes('मागील विभाग')
+    ) {
+      return { isCommand: true, action: 'cyclePrevMode' };
+    }
+
+    if (
+      /next.*(mode|section)/i.test(q) || /switch.*(mode|section)/i.test(q) ||
+      /change.*(mode|section)/i.test(q) || /cycle.*(mode|section)/i.test(q) ||
+      clean === 'next mode' || clean === 'next section' || clean === 'change mode' || clean === 'switch mode' ||
       q.includes('change section') || q.includes('switch section') || q.includes('next section') || q.includes('open section') ||
       q.includes('change mode') || q.includes('switch mode') || q.includes('next mode') || q.includes('open mode') ||
       q.includes('section change') || q.includes('mode change') || q.includes('cycle section') ||
@@ -440,40 +466,136 @@ export class VoiceCommandProcessor {
 
     // 12. EXPLICIT EMERGENCY SOS COMMANDS
     if (
-      q.includes('trigger sos') || q.includes('emergency sos') || q.includes('send sos') ||
-      q.includes('sos alert') || q.includes('call sos') || q.includes('emergency help') ||
-      q.includes('help me') || q.includes('i need help') || q.includes('call 911') || 
-      q.includes('call police') || q.includes('call ambulance') || q.includes('save me') ||
+      /open.*sos/i.test(q) || /show.*sos/i.test(q) || clean === 'sos screen'
+    ) {
+      return { isCommand: true, action: 'openSosModal' };
+    }
+
+    if (
+      /trigger.*sos/i.test(q) || /emergency.*sos/i.test(q) || /send.*sos/i.test(q) ||
+      /call.*sos/i.test(q) || /sos.*alert/i.test(q) || /call.*(police|ambulance|911|112|help)/i.test(q) ||
+      q === 'sos' || q === 'help' || q === 'help me' || q.includes('i need help') ||
+      q.includes('save me') || q.includes('emergency help') ||
       q.includes('आपातकालीन मदद') || q.includes('एसओएस') || q.includes('बचाओ') || 
       q.includes('मुझे मदद चाहिए') || q.includes('मदत करा') || q.includes('वाचवा')
     ) {
       return { isCommand: true, action: 'triggerSosAlert' };
     }
 
-    // 13. FLASHLIGHT COMMANDS
-    if (
-      q.includes('torch') || q.includes('flashlight') || q.includes('light on') || q.includes('light off') ||
-      q.includes('टॉर्च') || q.includes('लाइट')
-    ) {
+    // 13. FLASHLIGHT / TORCH COMMANDS
+    const isTorchCommand =
+      /torch|flashlight/i.test(q) ||
+      /light (on|off)/i.test(q) ||
+      /turn (on|off).*light/i.test(q) ||
+      clean === 'torch' || clean === 'flashlight' || clean === 'light' ||
+      q.includes('टॉर्च') || q.includes('लाइट') || q.includes('फ्लैशलाइट') || q.includes('दिवा') ||
+      /(लाइट|बत्ती).*(चालू|बंद|ऑन|ऑफ)/i.test(q);
+
+    if (isTorchCommand) {
+      if (/turn on|light on|flash on|torch on|चालू|ऑन|lava|लाओ|जलाओ/i.test(q)) {
+        return { isCommand: true, action: 'setTorch', boolValue: true };
+      }
+      if (/turn off|light off|flash off|torch off|बंद|ऑफ|विझवा|बुझाओ/i.test(q)) {
+        return { isCommand: true, action: 'setTorch', boolValue: false };
+      }
       return { isCommand: true, action: 'toggleTorch' };
     }
 
-    // 14. CAMERA SWITCH COMMANDS
-    if (
-      q.includes('switch camera') || q.includes('flip camera') || q.includes('front camera') ||
-      q.includes('back camera') || q.includes('कैमरा')
-    ) {
+    // 14. CAMERA FLIP / SWITCH / LENS COMMANDS (Handles "flip the camera", "switch camera", etc.)
+    const isCameraCommand =
+      /flip.*(camera|cam)/i.test(q) ||
+      /switch.*(camera|cam)/i.test(q) ||
+      /change.*(camera|cam)/i.test(q) ||
+      /turn.*(camera|cam)/i.test(q) ||
+      /rotate.*(camera|cam)/i.test(q) ||
+      /toggle.*(camera|cam)/i.test(q) ||
+      /(camera|cam).*flip/i.test(q) ||
+      /(camera|cam).*switch/i.test(q) ||
+      /(camera|cam).*change/i.test(q) ||
+      /(camera|cam).*(turn|rotate|around)/i.test(q) ||
+      /(front|selfie|back|rear).*(camera|cam)/i.test(q) ||
+      /(camera|cam).*(front|selfie|back|rear)/i.test(q) ||
+      q.includes('selfie mode') || q.includes('selfie camera') ||
+      clean === 'flip camera' || clean === 'switch camera' || clean === 'change camera' || clean === 'camera' ||
+      // Devanagari & Indic variations
+      /(कैमरा|कॅमेरा|केमेरा|கேமரா|కెమెరా|ಕ್ಯಾಮೆರಾ|ക്യാമറ|ক্যামেরা|ਕੈਮਰਾ).*(बदल|फिरव|उलट|पलट|घुमा|चेंज|स्विच|पुढ|माग|सामने|पीछे)/i.test(q) ||
+      /(बदल|फिरव|उलट|पलट|घुमा|चेंज|स्विच).*(कैमरा|कॅमेरा|केमेरा|கேமரா|కెమెరా|ಕ್ಯಾಮೆರಾ|ക്യാമറ|ক্যামেরা|ਕੈਮਰਾ)/i.test(q) ||
+      clean === 'कॅमेरा' || clean === 'कैमरा';
+
+    if (isCameraCommand) {
+      if (/front|selfie|सामने|पुढच/i.test(q)) {
+        return { isCommand: true, action: 'setCameraFacing', cameraFacing: 'front' };
+      }
+      if (/back|rear|environment|पीछे|मागच/i.test(q)) {
+        return { isCommand: true, action: 'setCameraFacing', cameraFacing: 'back' };
+      }
       return { isCommand: true, action: 'toggleCameraFacing' };
     }
 
-    // 15. SPATIAL AUDIO COMMANDS
+    // 15. YOLO AI VISION SCAN & SCENE ANALYSIS COMMANDS
+    const isScanCommand =
+      q === 'scan' || clean === 'scan' || clean === 'yolo scan' ||
+      /scan.*(surrounding|room|area|obstacle|scene|around|view|now|ahead|front|everything|path)/i.test(q) ||
+      /yolo.*scan/i.test(q) ||
+      /(run|start|do).*scan/i.test(q) ||
+      /what.*(in front of|ahead of|ahead|in front).*me/i.test(q) ||
+      /what.*do you see/i.test(q) ||
+      /what.*is (in front|ahead)/i.test(q) ||
+      /detect.*obstacle/i.test(q) ||
+      /check.*obstacle/i.test(q) ||
+      /describe.*(scene|room|surrounding|view)/i.test(q) ||
+      /is.*(path|way|road).*clear/i.test(q) ||
+      q.includes('look ahead') || q.includes('look around') ||
+      q.includes('स्कॅन करा') || q.includes('स्कैन करो') || q.includes('समोर काय आहे') ||
+      q.includes('सामने क्या है') || q.includes('रास्ता साफ है') || q.includes('अडथळा तपासा');
+
+    if (isScanCommand) {
+      return { isCommand: true, action: 'runLiveYoloScan' };
+    }
+
+    // 16. PHOTO CAPTURE & SNAPSHOT COMMANDS
+    const isPhotoCommand =
+      /(take|capture|snap|click).*(photo|picture|image|pic|snap)/i.test(q) ||
+      /(photo|picture|image).*(take|capture|snap|click)/i.test(q) ||
+      clean === 'take photo' || clean === 'take picture' ||
+      q.includes('फोटो काढा') || q.includes('फोटो खींचो') || q.includes('तस्वीर खींचो');
+
+    if (isPhotoCommand) {
+      return { isCommand: true, action: 'capturePhoto' };
+    }
+
+    // 17. REPEAT SPEECH ANNOUNCEMENT
+    const isRepeatCommand =
+      q === 'repeat' || clean === 'repeat' || q === 'again' ||
+      /repeat.*(that|announcement|speech|it|again)/i.test(q) ||
+      /say.*(that|again)/i.test(q) ||
+      /what did you say/i.test(q) ||
+      q.includes('पुन्हा सांगा') || q.includes('फिर से बोलो') || q.includes('दोहराएं') || q.includes('दोहराओ');
+
+    if (isRepeatCommand) {
+      return { isCommand: true, action: 'repeatAnnouncement' };
+    }
+
+    // 18. PAUSE / RESUME CONTINUOUS AI VISION DETECTION
+    const isPauseDetection =
+      /(pause|freeze).*(detection|vision|camera|ai)/i.test(q) ||
+      q.includes('विजन रोको') || q.includes('विजन थांबवा');
+    const isResumeDetection =
+      /(resume|unpause|start).*(detection|vision|camera|ai)/i.test(q) ||
+      q.includes('विजन शुरू करो') || q.includes('विजन सुरू करा');
+
+    if (isPauseDetection || isResumeDetection) {
+      return { isCommand: true, action: 'toggleDetection' };
+    }
+
+    // 19. SPATIAL AUDIO COMMANDS
     if (
       q.includes('spatial audio') || q.includes('3d audio') || q.includes('toggle audio')
     ) {
       return { isCommand: true, action: 'toggleSpatialAudio' };
     }
 
-    // 16. VOICE SEARCH QUERY
+    // 20. VOICE SEARCH QUERY
     if (q.startsWith('search') || q.startsWith('find') || q.includes('खोजो') || q.includes('शोधा')) {
       const cleanSearch = raw.replace(/^search for |^find |^खोजो |^शोधा /gi, '').trim();
       return { isCommand: true, action: 'voiceSearch', searchQuery: cleanSearch || 'pharmacy' };

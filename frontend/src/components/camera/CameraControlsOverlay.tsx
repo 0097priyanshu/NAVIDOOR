@@ -1,8 +1,11 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Dimensions, Platform } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { Zap, ZapOff, RefreshCw, Volume2, Camera, Eye } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const isNarrowScreen = SCREEN_WIDTH < 390;
 
 export const CameraControlsOverlay: React.FC = () => {
   const { 
@@ -52,6 +55,8 @@ export const CameraControlsOverlay: React.FC = () => {
     }
   };
 
+  const iconSize = isNarrowScreen ? 15 : 18;
+
   return (
     <View style={styles.accessibleOverlayContainer} pointerEvents="box-none">
       {/* UBER CYAN MONOCHROME TOP UTILITY ACTION BAR */}
@@ -64,7 +69,7 @@ export const CameraControlsOverlay: React.FC = () => {
           accessibilityHint="Scans the camera view and speaks detected objects out loud"
           accessibilityRole="button"
         >
-          <Eye size={18} color="#FFFFFF" />
+          <Eye size={iconSize} color="#FFFFFF" />
           <Text style={styles.utilityPillText}>SCAN</Text>
         </TouchableOpacity>
 
@@ -76,7 +81,7 @@ export const CameraControlsOverlay: React.FC = () => {
           accessibilityHint="Toggles camera flashlight for scanning in low light"
           accessibilityRole="button"
         >
-          {torchOn ? <Zap size={18} color="#F59E0B" /> : <ZapOff size={18} color="#FFFFFF" />}
+          {torchOn ? <Zap size={iconSize} color="#F59E0B" /> : <ZapOff size={iconSize} color="#FFFFFF" />}
           <Text style={[styles.utilityPillText, torchOn && styles.utilityPillTextTorch]}>
             {torchOn ? 'LIGHT' : 'LIGHT'}
           </Text>
@@ -90,7 +95,7 @@ export const CameraControlsOverlay: React.FC = () => {
           accessibilityHint="Switches between rear environment camera and front self camera"
           accessibilityRole="button"
         >
-          <RefreshCw size={18} color="#FFFFFF" />
+          <RefreshCw size={iconSize} color="#FFFFFF" />
           <Text style={styles.utilityPillText}>FLIP</Text>
         </TouchableOpacity>
 
@@ -102,11 +107,11 @@ export const CameraControlsOverlay: React.FC = () => {
           accessibilityHint="Re-reads the last scene description or obstacle info"
           accessibilityRole="button"
         >
-          <Volume2 size={19} color="#FFFFFF" />
+          <Volume2 size={iconSize} color="#FFFFFF" />
           <Text style={styles.utilityPillText}>REPEAT</Text>
         </TouchableOpacity>
 
-        {/* 4. YOLO AI Vision Scan Button */}
+        {/* 5. YOLO AI Vision Scan Button */}
         <TouchableOpacity
           style={[styles.utilityPill, styles.utilityPillYolo]}
           onPress={() => {
@@ -119,8 +124,8 @@ export const CameraControlsOverlay: React.FC = () => {
           accessibilityHint="Scans the camera view for obstacles and announces distances"
           accessibilityRole="button"
         >
-          <Camera size={19} color="#FFFFFF" />
-          <Text style={styles.utilityPillTextYolo}>YOLO SCAN</Text>
+          <Camera size={iconSize} color="#FFFFFF" />
+          <Text style={styles.utilityPillTextYolo}>{isNarrowScreen ? 'YOLO' : 'YOLO SCAN'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -135,30 +140,30 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 25,
-    paddingHorizontal: 16,
-    paddingTop: 72,
+    paddingHorizontal: isNarrowScreen ? 8 : 14,
+    paddingTop: Platform.OS === 'ios' ? 56 : (Platform.OS === 'android' ? 48 : 36),
   },
   topUtilityBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    gap: isNarrowScreen ? 4 : 6,
   },
   utilityPill: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    height: 48,
-    borderRadius: 24,
+    gap: isNarrowScreen ? 3 : 5,
+    height: isNarrowScreen ? 42 : 46,
+    borderRadius: 23,
     backgroundColor: '#0284C7',
-    paddingHorizontal: 8,
+    paddingHorizontal: isNarrowScreen ? 4 : 6,
     shadowColor: '#0284C7',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.35,
-    shadowRadius: 6,
-    elevation: 6,
+    shadowRadius: 5,
+    elevation: 5,
   },
   utilityPillActiveTorch: {
     backgroundColor: '#F59E0B',
@@ -173,17 +178,17 @@ const styles = StyleSheet.create({
   },
   utilityPillText: {
     color: '#FFFFFF',
-    fontSize: 11.5,
+    fontSize: isNarrowScreen ? 10 : 11,
     fontWeight: '900',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   utilityPillTextTorch: {
     color: '#FFFFFF',
   },
   utilityPillTextYolo: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: isNarrowScreen ? 10 : 10.5,
     fontWeight: '900',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
 });

@@ -302,10 +302,42 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
         get().setFontScale(parsed.targetFontScale);
         const msg = activeLang === 'mr' ? 'मजकुराचा आकार बदलला.' : (activeLang === 'hi' ? 'टेक्स्ट का आकार बदल दिया गया है।' : `Text size updated.`);
         get().speak(msg);
+      } else if (parsed.action === 'openSosModal') {
+        get().setSosModalOpen(true);
+        const msg = activeLang === 'mr' ? 'आणीबाणी संपर्क स्क्रीन उघडत आहे.' : (activeLang === 'hi' ? 'आपातकालीन स्क्रीन खोली जा रही है।' : 'Opening emergency SOS screen.');
+        get().speak(msg);
+      } else if (parsed.action === 'openFamilyCompanion') {
+        get().setFamilyCompanionOpen(true);
+        const msg = activeLang === 'mr' ? 'कौटुंबिक काळजीवाहू स्क्रीन उघडत आहे.' : (activeLang === 'hi' ? 'फैमिली कंपैनियन स्क्रीन खोली जा रही है।' : 'Opening Family Companion screen.');
+        get().speak(msg);
+      } else if (parsed.action === 'cyclePrevMode') {
+        get().cyclePrevMode();
       } else if (parsed.action === 'toggleTorch') {
         get().toggleTorch();
+      } else if (parsed.action === 'setTorch') {
+        if (parsed.boolValue !== undefined) {
+          get().setTorchOn(parsed.boolValue);
+        } else {
+          get().toggleTorch();
+        }
       } else if (parsed.action === 'toggleCameraFacing') {
         get().toggleCameraFacing();
+      } else if (parsed.action === 'setCameraFacing') {
+        if (parsed.cameraFacing) {
+          get().setCameraFacing(parsed.cameraFacing);
+        } else {
+          get().toggleCameraFacing();
+        }
+      } else if (parsed.action === 'runLiveYoloScan') {
+        get().runLiveYoloScan();
+      } else if (parsed.action === 'capturePhoto') {
+        get().capturePhotoAndAnalyze();
+      } else if (parsed.action === 'toggleDetection') {
+        get().toggleDetection();
+      } else if (parsed.action === 'repeatAnnouncement') {
+        const last = get().lastAnnouncement;
+        const fallback = activeLang === 'mr' ? 'नेव्हिडूर सिस्टीम सज्ज आहे.' : (activeLang === 'hi' ? 'नेवीडूर सिस्टम तैयार है।' : 'NAVIDOOR assist is ready.');
+        get().speak(last || fallback, true);
       } else if (parsed.action === 'triggerSosAlert') {
         get().triggerSosAlert();
       } else if (parsed.action === 'toggleSpatialAudio') {
@@ -398,12 +430,29 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
           }
           if (intent.speechRate) get().setSpeechRate(intent.speechRate);
           if (intent.fontScale) get().setFontScale(intent.fontScale);
+        } else if (intent.action === 'cyclePrevMode') {
+          get().cyclePrevMode();
         } else if (intent.action === 'triggerSosAlert') {
           get().triggerSosAlert();
         } else if (intent.action === 'toggleTorch') {
           get().toggleTorch();
+        } else if (intent.action === 'setTorch') {
+          if (intent.boolValue !== undefined) get().setTorchOn(intent.boolValue);
+          else get().toggleTorch();
         } else if (intent.action === 'toggleCameraFacing') {
           get().toggleCameraFacing();
+        } else if (intent.action === 'setCameraFacing') {
+          if (intent.cameraFacing) get().setCameraFacing(intent.cameraFacing);
+          else get().toggleCameraFacing();
+        } else if (intent.action === 'runLiveYoloScan') {
+          get().runLiveYoloScan();
+        } else if (intent.action === 'capturePhoto') {
+          get().capturePhotoAndAnalyze();
+        } else if (intent.action === 'toggleDetection') {
+          get().toggleDetection();
+        } else if (intent.action === 'repeatAnnouncement') {
+          const last = get().lastAnnouncement;
+          get().speak(last || 'NAVIDOOR assist is ready.', true);
         } else if (intent.action === 'toggleSpatialAudio') {
           get().toggleSpatialAudio();
         }
@@ -495,15 +544,23 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   isSimulatedCamera: false,
   setSimulatedCamera: (simulated) => set({ isSimulatedCamera: simulated }),
   cameraFacing: 'back',
-  setCameraFacing: (facing) => set({ cameraFacing: facing }),
+  setCameraFacing: (facing) => {
+    set({ cameraFacing: facing });
+    const t = getTranslation(get().activeLanguageCode);
+    get().speak(facing === 'front' ? t.actions.frontCamera : t.actions.rearCamera);
+  },
   toggleCameraFacing: () => {
     const next = get().cameraFacing === 'back' ? 'front' : 'back';
     set({ cameraFacing: next });
     const t = getTranslation(get().activeLanguageCode);
-    get().speak(next ? t.actions.frontCamera : t.actions.rearCamera);
+    get().speak(next === 'front' ? t.actions.frontCamera : t.actions.rearCamera);
   },
   torchOn: false,
-  setTorchOn: (on) => set({ torchOn: on }),
+  setTorchOn: (on) => {
+    set({ torchOn: on });
+    const t = getTranslation(get().activeLanguageCode);
+    get().speak(on ? t.actions.flashlightOn : t.actions.flashlightOff);
+  },
   toggleTorch: () => {
     const next = !get().torchOn;
     set({ torchOn: next });
