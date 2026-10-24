@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { Sparkles, Volume2 } from 'lucide-react-native';
 
@@ -8,7 +8,6 @@ export const AIVisionOverlay: React.FC = () => {
     lastAnnouncement, 
     speak, 
     activeMode,
-    detectedObjects 
   } = useNavidoorStore();
 
   const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(activeMode);
@@ -22,43 +21,7 @@ export const AIVisionOverlay: React.FC = () => {
 
   return (
     <>
-      {/* Visual YOLO Bounding Boxes on Camera Stream */}
-      {detectedObjects && detectedObjects.length > 0 && (
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          {detectedObjects.slice(0, 3).map((obj) => {
-            const isHazard = obj.isHazard || obj.distanceMeters < 2.0;
-            const borderColor = isHazard ? '#EF4444' : '#10B981';
-            const bgColor = isHazard ? 'rgba(239, 68, 68, 0.18)' : 'rgba(16, 185, 129, 0.18)';
-            const topPos = Math.max(190, Math.min(430, (obj.yRatio || 0.4) * 500));
-            const leftPos = Math.max(24, Math.min(220, (obj.xRatio || 0.3) * 300));
-
-            return (
-              <View
-                key={obj.id}
-                style={[
-                  styles.yoloBoundingBox,
-                  {
-                    top: topPos,
-                    left: leftPos,
-                    borderColor,
-                    backgroundColor: bgColor,
-                  }
-                ]}
-              >
-                <View style={[styles.yoloBadge, { backgroundColor: borderColor }]}>
-                  <Text style={styles.yoloBadgeText}>
-                    {obj.emojiIcon} {obj.label}
-                  </Text>
-                </View>
-                <Text style={[styles.yoloDistanceTag, { color: borderColor }]}>
-                  {obj.distanceMeters}m • {obj.direction?.toUpperCase()}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      )}
-
+      {/* Invisible Background YOLO Vision Processing - Camera stream stays clean and unobstructed */}
       <View style={styles.voiceHudContainer} pointerEvents="box-none">
         {/* Accessible Voice Guidance HUD */}
         <TouchableOpacity 
@@ -86,7 +49,7 @@ export const AIVisionOverlay: React.FC = () => {
 const styles = StyleSheet.create({
   voiceHudContainer: {
     position: 'absolute',
-    top: 130,
+    top: Platform.OS === 'ios' ? 172 : (Platform.OS === 'android' ? 152 : 132),
     left: 16,
     right: 16,
     zIndex: 20,
@@ -131,30 +94,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#0284C7',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  yoloBoundingBox: {
-    position: 'absolute',
-    borderWidth: 2.5,
-    borderRadius: 12,
-    padding: 6,
-    minWidth: 110,
-    zIndex: 15,
-  },
-  yoloBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginBottom: 4,
-  },
-  yoloBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
-  yoloDistanceTag: {
-    fontSize: 11,
-    fontWeight: '800',
   },
 });

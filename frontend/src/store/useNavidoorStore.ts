@@ -16,7 +16,9 @@ import { voiceCommandProcessor } from '../services/voiceCommandProcessor';
 import { voiceSearchService } from '../services/voiceSearchService';
 import { voiceConversationService } from '../services/voiceConversationService';
 import * as Haptics from 'expo-haptics';
-import { requestTranslation } from '../services/voiceAssistantBackend';
+import { requestTranslation, requestWhisperSTT } from '../services/voiceAssistantBackend';
+import { voiceRecordingService } from '../services/voiceRecordingService';
+import { socketClient } from '../services/socketClient';
 import { yoloVisionService } from '../services/yoloVisionService';
 
 interface NavidoorState {
@@ -26,6 +28,8 @@ interface NavidoorState {
   lastAnnouncement: string;
   speak: (text: string, interrupt?: boolean) => Promise<void> | void;
   stopVoice: () => void;
+  startVoiceListening: () => Promise<void>;
+  stopVoiceListening: () => Promise<void>;
   speechRate: number;
   setSpeechRate: (rate: number) => void;
   processVoiceInput: (input: string) => Promise<void>;
@@ -184,6 +188,46 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     set({ voiceState: 'idle' });
   },
 
+  startVoiceListening: async () => {
+    if (get().voiceState === 'listening') return;
+    get().stopVoice();
+    set({ voiceState: 'listening', lastAnnouncement: '🎤 Listening... Speak now.' });
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (e) {}
+
+    await voiceRecordingService.startRecording(get().activeLanguageCode, async (autoText) => {
+      set({ voiceState: 'thinking' });
+      try {
+        await get().processVoiceInput(autoText ? autoText.trim() : '');
+      } catch (e) {
+        set({ voiceState: 'idle' });
+      }
+    });
+  },
+
+  stopVoiceListening: async () => {
+    if (get().voiceState !== 'listening') return;
+    set({ voiceState: 'thinking', lastAnnouncement: '⚙️ Processing speech...' });
+    const result = await voiceRecordingService.stopRecording();
+    let textToProcess = result.liveTranscript ? result.liveTranscript.trim() : '';
+
+    if (!textToProcess && (result.blob || result.uri)) {
+      const text = await requestWhisperSTT(
+        result.blob,
+        get().activeLanguageCode,
+        result.uri || 'device_mic'
+      );
+      if (text) textToProcess = text.trim();
+    }
+
+    try {
+      await get().processVoiceInput(textToProcess);
+    } catch (e) {
+      set({ voiceState: 'idle' });
+    }
+  },
+
   processVoiceInput: async (input: string) => {
     const cleanInput = (input || '').trim();
     const activeLang = get().activeLanguageCode;
@@ -195,7 +239,7 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
         en: "I didn't catch that. Please repeat.",
         hi: 'मैं समझ नहीं पाया। कृपया फिर से बोलें।',
         mr: 'मला समजले नाही. कृपया पुन्हा बोला.',
-        gu: 'હું સમજી શક્યો નથી. કૃપા કરીને ફરી બોલો.',
+        gu: 'હું સમજી શક્યો નથી. કૃપા કરીને ફરી બોलो.',
         pa: 'ਮੈਂ ਸਮਝ ਨਹੀਂ ਸਕਿਆ। ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਬੋਲੋ।',
         bn: 'আমি বুঝতে পারিনি। দয়া করে আবার বলুন।',
         ta: 'எனக்கு புரியவில்லை. தயவுசெய்து மீண்டும் சொல்லவும்.',
@@ -607,7 +651,11 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   setSingleScanHandler: (fn: (() => void) | null) => set({ singleScanHandler: fn }),
   triggerYoloScan: () => {
     const fn = get().singleScanHandler;
-    if (fn) fn();
+    if (fn) {
+      fn();
+    } else {
+      get().runLiveYoloScan();
+    }
   },
   capturePhotoAndAnalyze: async () => {
     try {
@@ -770,9 +818,15 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   setSosModalOpen: (open) => set({ isSosModalOpen: open }),
   emergencyContacts: INITIAL_EMERGENCY_CONTACTS,
   triggerSosAlert: () => {
+    if (get().userRole === 'undecided') {
+      set({ userRole: 'navidoor_user' });
+    }
     set({ isSosModalOpen: true });
     speakAnnouncement('Emergency alert activated. Location broadcasting to Sunita Sharma.');
     playObstacleBeep(1200, 400);
+    try {
+      socketClient.emitEmergencySOS('Live GPS Location broadcasted via Emergency SOS');
+    } catch (e) {}
   },
 
   isFamilyCompanionOpen: false,

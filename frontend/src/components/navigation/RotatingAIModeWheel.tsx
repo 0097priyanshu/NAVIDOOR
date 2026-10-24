@@ -70,6 +70,8 @@ export const RotatingAIModeWheel: React.FC = () => {
     setVoiceState, 
     speak, 
     stopVoice, 
+    startVoiceListening,
+    stopVoiceListening,
     capturePhotoAndAnalyze,
     isProfileModalOpen,
     isFirstTimeUser,
@@ -170,43 +172,15 @@ export const RotatingAIModeWheel: React.FC = () => {
       stopVoice();
     }
 
-    if (voiceState === 'listening') {
-      isMicProcessingLockRef.current = true;
-      setVoiceState('thinking');
-      useNavidoorStore.setState({ lastAnnouncement: '⚙️ Processing speech...' });
-      
-      const result = await voiceRecordingService.stopRecording();
-      let textToProcess = result.liveTranscript ? result.liveTranscript.trim() : '';
-
-      if (!textToProcess && (result.blob || result.uri)) {
-        const text = await requestWhisperSTT(
-          result.blob,
-          activeLanguageCode,
-          result.uri || 'device_mic'
-        );
-        if (text) textToProcess = text.trim();
+    isMicProcessingLockRef.current = true;
+    try {
+      if (voiceState === 'listening') {
+        await stopVoiceListening();
+      } else {
+        await startVoiceListening();
       }
-
-      try {
-        await processVoiceInput(textToProcess);
-      } finally {
-        isMicProcessingLockRef.current = false;
-      }
-    } else {
-      stopVoice();
-      setVoiceState('listening');
-      useNavidoorStore.setState({ lastAnnouncement: '🎤 Listening... Speak now.' });
-      
-      await voiceRecordingService.startRecording(activeLanguageCode, async (autoText) => {
-        if (isMicProcessingLockRef.current) return;
-        isMicProcessingLockRef.current = true;
-        setVoiceState('thinking');
-        try {
-          await processVoiceInput(autoText ? autoText.trim() : '');
-        } finally {
-          isMicProcessingLockRef.current = false;
-        }
-      });
+    } finally {
+      isMicProcessingLockRef.current = false;
     }
   };
 
