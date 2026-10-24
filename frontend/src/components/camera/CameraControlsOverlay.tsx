@@ -24,9 +24,9 @@ export const CameraControlsOverlay: React.FC = () => {
 
   const handleScanPress = () => {
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     } catch (e) {}
-    speak('Scanning surroundings...', true);
+    speak('Scanning surroundings with YOLO...', true);
     triggerYoloScan();
   };
 
@@ -61,12 +61,12 @@ export const CameraControlsOverlay: React.FC = () => {
     <View style={styles.accessibleOverlayContainer} pointerEvents="box-none">
       {/* UBER CYAN MONOCHROME TOP UTILITY ACTION BAR */}
       <View style={styles.topUtilityBar} pointerEvents="box-none">
-        {/* 1. Manual AI Vision Scan Button */}
+        {/* 1. Integrated YOLO AI Vision Scan Button */}
         <TouchableOpacity
           style={[styles.utilityPill, styles.scanPill]}
           onPress={handleScanPress}
-          accessibilityLabel="Scan surroundings for objects and obstacles"
-          accessibilityHint="Scans the camera view and speaks detected objects out loud"
+          accessibilityLabel="Scan surroundings with YOLO AI Vision for obstacles and distances"
+          accessibilityHint="Scans camera view with YOLO AI and speaks detected objects, distances, and path clearance"
           accessibilityRole="button"
         >
           <Eye size={iconSize} color="#FFFFFF" />
@@ -83,7 +83,7 @@ export const CameraControlsOverlay: React.FC = () => {
         >
           {torchOn ? <Zap size={iconSize} color="#F59E0B" /> : <ZapOff size={iconSize} color="#FFFFFF" />}
           <Text style={[styles.utilityPillText, torchOn && styles.utilityPillTextTorch]}>
-            {torchOn ? 'LIGHT' : 'LIGHT'}
+            LIGHT
           </Text>
         </TouchableOpacity>
 
@@ -110,23 +110,6 @@ export const CameraControlsOverlay: React.FC = () => {
           <Volume2 size={iconSize} color="#FFFFFF" />
           <Text style={styles.utilityPillText}>REPEAT</Text>
         </TouchableOpacity>
-
-        {/* 5. YOLO AI Vision Scan Button */}
-        <TouchableOpacity
-          style={[styles.utilityPill, styles.utilityPillYolo]}
-          onPress={() => {
-            try {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-            } catch (e) {}
-            useNavidoorStore.getState().runLiveYoloScan();
-          }}
-          accessibilityLabel="Run YOLO AI Vision Scan"
-          accessibilityHint="Scans the camera view for obstacles and announces distances"
-          accessibilityRole="button"
-        >
-          <Camera size={iconSize} color="#FFFFFF" />
-          <Text style={styles.utilityPillTextYolo}>{isNarrowScreen ? 'YOLO' : 'YOLO SCAN'}</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -141,20 +124,20 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 25,
     paddingHorizontal: isNarrowScreen ? 8 : 14,
-    paddingTop: Platform.OS === 'ios' ? 56 : (Platform.OS === 'android' ? 48 : 36),
+    paddingTop: Platform.OS === 'ios' ? 112 : (Platform.OS === 'android' ? 94 : 74),
   },
   topUtilityBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: isNarrowScreen ? 4 : 6,
+    gap: isNarrowScreen ? 6 : 8,
   },
   utilityPill: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: isNarrowScreen ? 3 : 5,
+    gap: isNarrowScreen ? 4 : 6,
     height: isNarrowScreen ? 42 : 46,
     borderRadius: 23,
     backgroundColor: '#0284C7',
@@ -170,25 +153,16 @@ const styles = StyleSheet.create({
   },
   scanPill: {
     backgroundColor: '#0D9488',
-  },
-  utilityPillYolo: {
-    backgroundColor: '#10B981',
     borderWidth: 1.5,
-    borderColor: '#34D399',
+    borderColor: '#2DD4BF',
   },
   utilityPillText: {
     color: '#FFFFFF',
-    fontSize: isNarrowScreen ? 10 : 11,
+    fontSize: isNarrowScreen ? 10.5 : 12,
     fontWeight: '900',
     letterSpacing: 0.3,
   },
   utilityPillTextTorch: {
     color: '#FFFFFF',
-  },
-  utilityPillTextYolo: {
-    color: '#FFFFFF',
-    fontSize: isNarrowScreen ? 10 : 10.5,
-    fontWeight: '900',
-    letterSpacing: 0.3,
   },
 });

@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { StyleSheet, StatusBar, PanResponder, View } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import { StyleSheet, StatusBar, PanResponder, View, Platform } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useNavidoorStore } from './src/store/useNavidoorStore';
 import { CameraViewCanvas } from './src/components/camera/CameraViewCanvas';
@@ -20,18 +20,76 @@ import * as Haptics from 'expo-haptics';
 export default function App() {
   const { cycleNextMode, cyclePrevMode, userRole, familyUser } = useNavidoorStore();
 
-  // WhatsApp / Instagram-style Full-Screen Horizontal Swipe Gesture Handler
+  // 1. Triple-Tap Anywhere on Screen Detection for Emergency SOS
+  const tapHistoryRef = useRef<number[]>([]);
+  const lastTapTimestampRef = useRef<number>(0);
+
+  const handleGlobalScreenTap = (source: string = 'screen-tap'): boolean => {
+    const now = Date.now();
+    // Ignore rapid duplicate event emissions for the same physical tap (within 70ms)
+    if (now - lastTapTimestampRef.current < 70) {
+      return false;
+    }
+    lastTapTimestampRef.current = now;
+
+    // Filter taps occurring within the 850ms rolling gesture window
+    const recentTaps = tapHistoryRef.current.filter((t) => now - t < 850);
+    recentTaps.push(now);
+    tapHistoryRef.current = recentTaps;
+
+    console.log(`[ScreenTap] Tap registered via ${source} (${recentTaps.length}/3 in 850ms)`);
+
+    if (recentTaps.length >= 3) {
+      tapHistoryRef.current = [];
+      console.log(`[ScreenTap] 🚨 TRIPLE TAP CONFIRMED! Triggering Emergency SOS alert...`);
+      try {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      } catch (e) {}
+
+      const store = useNavidoorStore.getState();
+      if (!store.isSosModalOpen) {
+        store.triggerSosAlert();
+      }
+      return true; // Claim the 3rd tap so child controls under finger don't trigger accidental clicks
+    }
+    return false;
+  };
+
+  // 2. Web Pointer Event Listener for Mouse/Touch Clicks Anywhere on Screen
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const handlePointerDown = (e: MouseEvent | TouchEvent) => {
+        const target = e.target as HTMLElement | null;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+          return;
+        }
+        handleGlobalScreenTap('web-pointerdown');
+      };
+      window.addEventListener('pointerdown', handlePointerDown, { capture: true });
+      return () => {
+        window.removeEventListener('pointerdown', handlePointerDown, { capture: true });
+      };
+    }
+  }, []);
+
+  // 3. Full-Screen Horizontal Swipe Gesture Handler & Triple-Tap Interceptor
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponderCapture: () => false,
+      onStartShouldSetPanResponderCapture: () => {
+        return handleGlobalScreenTap('panresponder-capture');
+      },
       onMoveShouldSetPanResponderCapture: (_, gestureState) => {
-        // Intercept horizontal swipe gesture unconditionally across entire screen and navbar (dx > 15px & dx > dy)
-        return Math.abs(gestureState.dx) > 15 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+        // If user is swiping horizontally, cancel tap sequence so swipe isn't counted as taps
+        if (Math.abs(gestureState.dx) > 15) {
+          tapHistoryRef.current = [];
+          return Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+        }
+        return false;
       },
       onPanResponderTerminationRequest: () => false,
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dx < -20) {
-          // Swiped LEFT -> Move to NEXT section (like Instagram Stories / WhatsApp tabs)
+          // Swiped LEFT -> Move to NEXT section
           try {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           } catch (e) {}
@@ -63,10 +121,7 @@ export default function App() {
 
     // 3. Existing NAVIDOOR User Experience (role === 'navidoor_user')
     return (
-      <SafeAreaView 
-        style={styles.rootContainer}
-        {...panResponder.panHandlers}
-      >
+      <SafeAreaView style={styles.rootContainer}>
         <StatusBar barStyle="light-content" backgroundColor="#64748B" />
 
         {/* 1. CONTINUOUS CAMERA CANVAS / SOLID SLATE GRAY UTILITY BACKDROP */}
@@ -100,12 +155,18 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      {renderContent()}
+      <View style={styles.outerContainer} {...panResponder.panHandlers}>
+        {renderContent()}
+      </View>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    backgroundColor: '#64748B',
+  },
   rootContainer: {
     flex: 1,
     position: 'relative',

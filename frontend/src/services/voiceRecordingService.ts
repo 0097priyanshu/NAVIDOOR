@@ -14,7 +14,7 @@ const LANG_BCP47_MAP: Record<string, string> = {
   ml: 'ml-IN',
 };
 
-function getExpoAudio(): any {
+export function getExpoAudio(): any {
   if (Platform.OS === 'web') return null;
 
   // 1. Try modern expo-audio first (Expo SDK 57+)

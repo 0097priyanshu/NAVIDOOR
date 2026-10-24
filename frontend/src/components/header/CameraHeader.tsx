@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { AlertCircle, User } from 'lucide-react-native';
 import { UserProfileModal } from '../profile/UserProfileModal';
@@ -45,7 +45,7 @@ export const CameraHeader: React.FC = () => {
 const styles = StyleSheet.create({
   headerContainer: {
     position: 'absolute',
-    top: 14,
+    top: Platform.OS === 'ios' ? 52 : (Platform.OS === 'android' ? 36 : 16),
     left: 16,
     right: 16,
     zIndex: 30,
