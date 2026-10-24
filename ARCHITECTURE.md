@@ -2,9 +2,9 @@
 
 ## What Is This App?
 
-**NAVIDOOR** is an Indian, offline-first AI accessibility assistant and dual-portal ecosystem designed for visually impaired users and their family caregivers.
+**NAVIDOOR** is an Indian, offline-first AI accessibility assistant and dual-portal ecosystem designed for blind, visually impaired, and elderly users and their family caregivers.
 It runs as a cross-platform mobile application (React Native / Expo with a parallel Flutter client) offering two distinct role experiences:
-1. **NAVIDOOR User Mode**: AI vision assist, live camera hazard detection (**YOLOv11**), local LLM voice assistant with bilingual code-switching, and 12 navigation modes.
+1. **NAVIDOOR User Mode**: Continuous AI vision assist, live camera hazard detection (**YOLOv11**), local LLM voice assistant with bilingual code-switching, 12 navigation modes, and universal screen gesture triggers.
 2. **Family Companion Portal**: Dedicated visual dashboard for caregivers with real-time location monitoring, active journey tracking, emergency SOS alerts, and pairing management.
 
 It communicates with local microservices running on your PC over LAN (Wi-Fi):
@@ -19,33 +19,38 @@ It communicates with local microservices running on your PC over LAN (Wi-Fi):
 
 ```text
 NAVIDOOR/
-├── App.tsx                  ← Root entry point (Dual-role routing: RoleSelectionScreen | FamilyModeContainer | Main User App)
-├── index.js                 ← Registers App with Expo
-├── index.html               ← Web entry HTML
-├── app.json                 ← Expo config (camera/audio permissions, splash, icon)
-├── babel.config.js          ← Babel transpiler config
-├── tsconfig.json            ← TypeScript config
-├── package.json             ← Node dependencies
+├── package.json             ← Root scripts (npm run start, server, yolo, tunnel, web)
 ├── yolo11n.pt               ← Official Ultralytics YOLOv11 nano model weights
+├── ARCHITECTURE.md          ← System architecture, data flow & component design
+├── README.md                ← Project overview, setup instructions & feature guide
+├── SPEECH_SETUP_GUIDE.md    ← Multilingual Whisper.cpp & local speech setup guide
 │
-├── src/                     ← All React Native frontend code
-│   ├── components/          ← UI component hierarchy
-│   │   ├── camera/          ← Camera view canvas, photo capture, YOLOv11 bounding boxes overlay
-│   │   ├── header/          ← Top status bar (SOS button, profile avatar)
-│   │   ├── navigation/      ← Rotating AI Mode Wheel (bottom 12-mode nav)
-│   │   ├── overlays/        ← Modular section panels & toast notifications
-│   │   │   └── panels/      ← Standalone overlay panels (Emergency, Location, Medical, Settings, etc.)
-│   │   ├── onboarding/      ← Role selection screen & voice setup flow
-│   │   ├── sos/             ← Emergency SOS modal & location broadcast
-│   │   ├── family/          ← Family Companion Portal (Container, Home, Location, Activity, Alerts, Profile tabs)
-│   │   ├── designSystem/    ← Design system preview modal
-│   │   ├── profile/         ← User profile / medical ID modal
-│   │   └── common/          ← Shared components (UnifiedMicButton with animated aura)
-│   ├── store/               ← Global state management (Zustand store: useNavidoorStore)
-│   ├── services/            ← Backend API clients + voice recording service + socket client
-│   ├── theme/               ← Design system tokens, colors, high-contrast themes
-│   ├── types/               ← TypeScript type definitions
-│   └── utils/               ← Speech utilities, translations, sound effects
+├── frontend/                ← React Native / Expo Mobile Application
+│   ├── App.tsx              ← Root entry point (Triple-tap gesture interceptor, dual-role routing)
+│   ├── index.js             ← Registers App with Expo
+│   ├── index.html           ← Web entry HTML
+│   ├── app.json             ← Expo config (permissions, splash, icons, plugins)
+│   ├── babel.config.js      ← Babel transpiler config
+│   ├── tsconfig.json        ← TypeScript config
+│   ├── package.json         ← Frontend dependencies (Expo SDK 57, RN 0.86, React 19)
+│   └── src/                 ← Frontend source hierarchy
+│       ├── components/      ← UI component hierarchy
+│       │   ├── camera/      ← Camera view canvas, unified controls (left SCAN), invisible YOLO overlay
+│       │   ├── header/      ← Top status bar (Emergency SOS button, profile avatar, spacing-aware)
+│       │   ├── navigation/  ← Rotating AI Mode Wheel (bottom 12-mode nav)
+│       │   ├── overlays/    ← Modular section panels & toast notifications
+│       │   │   └── panels/  ← Standalone overlay panels (Emergency, Location, Medical, Settings, etc.)
+│       │   ├── onboarding/  ← Role selection screen & voice setup flow
+│       │   ├── sos/         ← Emergency SOS modal, warning chime, and GPS broadcast
+│       │   ├── family/      ← Family Companion Portal (Home, Location, Activity, Alerts, Profile)
+│       │   ├── designSystem/← Design system preview modal
+│       │   ├── profile/     ← User profile / medical ID modal
+│       │   └── common/      ← Shared components (UnifiedMicButton with animated aura)
+│       ├── store/           ← Global state management (Zustand store: useNavidoorStore)
+│       ├── services/        ← Backend API clients, VAD audio recording, and Socket.IO client
+│       ├── theme/           ← Design system tokens, colors, high-contrast themes
+│       ├── types/           ← TypeScript type definitions
+│       └── utils/           ← Speech utilities, translations, sound effects
 │
 ├── backend/                 ← Node.js Express server (runs on PC / LAN)
 │   ├── index.js             ← Main Express server + STT/TTS/Chat REST APIs + Socket.IO server
@@ -53,11 +58,12 @@ NAVIDOOR/
 │   ├── models/whisper/      ← ggml-base.bin (141MB) & ggml-small.bin (487MB)
 │   ├── config/languages.js  ← 10 Indian language configs (en, hi, mr, gu, pa, bn, ta, te, kn, ml)
 │   ├── indicf5/             ← AI4Bharat IndicF5 Python Neural TTS microservice (port 5002)
+│   ├── scripts/             ← Automated setup scripts (setup_speech_pipeline.js)
 │   └── services/
-│       ├── whisperService.js     ← Whisper.cpp STT wrapper (clean 16kHz resampling, code-switching, script validation)
-│       ├── aiAssistantService.js ← Local Ollama LLM Reasoning Engine (direct native prompting & clarification safety)
+│       ├── whisperService.js     ← Whisper.cpp STT wrapper (clean 16kHz resampling, code-switching)
+│       ├── aiAssistantService.js ← Local Ollama LLM Reasoning Engine (direct native prompting)
 │       ├── indicf5Service.js     ← AI4Bharat IndicF5 TTS engine client wrapper
-│       ├── socketService.js      ← Socket.IO real-time event hub
+│       ├── socketService.js      ← Socket.IO real-time event hub (GPS & SOS broadcast)
 │       └── translationService.js ← Regional Indian language translation engine
 │
 └── yolo/                    ← Python YOLOv11 Computer Vision Service (Port 5003)
@@ -77,23 +83,24 @@ NAVIDOOR/
 
 | Technology | Version | Purpose |
 | :--- | :--- | :--- |
-| **React Native** | 0.74.5 | Cross-platform mobile framework |
-| **Expo** | SDK 51 | Dev tooling, camera, audio, haptics, location APIs |
-| **TypeScript** | ~5.3.3 | Type safety across entire codebase |
+| **React Native** | 0.86.3 | Cross-platform mobile framework (Architecture v0.86) |
+| **Expo** | SDK 57 | Modern runtime, camera, audio, haptics, location APIs |
+| **React** | 19.2.3 | Modern React core runtime |
+| **TypeScript** | ^5.4.0 | End-to-end type safety across mobile application |
 | **Zustand** | ^4.5.2 | Lightweight reactive state management (`useNavidoorStore`) |
-| **expo-camera** | ~15.0.16 | Real-time continuous camera feed & high-res photo capture |
-| **expo-speech** | ~12.0.2 | Instant offline device TTS fallback |
-| **expo-haptics** | ~13.0.1 | Tactile vibration feedback on mode swipes & mic tap |
-| **expo-location** | ~17.0.1 | High-precision GPS for live navigation & SOS broadcast |
-| **expo-av** / **expo-audio** | SDK 51 | Audio recording with native metering (`isMeteringEnabled: true`) |
-| **socket.io-client** | ^4.8.3 | Real-time caregiver live stream & SOS event listener |
+| **expo-camera** | ~57.0.5 | Continuous camera feed & high-res photo capture |
+| **expo-audio** | ^57.0.5 | Native audio recording with real-time metering (`isMeteringEnabled: true`) |
+| **expo-speech** | ~57.0.3 | Instant offline device TTS fallback |
+| **expo-haptics** | ~57.0.3 | Tactile vibration feedback on gestures, scans & warnings |
+| **expo-location** | ~57.0.20 | High-precision GPS coordinates for live navigation & SOS broadcast |
+| **socket.io-client** | ^4.8.3 | Real-time caregiver live stream & emergency event dispatch |
 
 ### Backend & AI Microservices (PC / LAN)
 
 | Service | Port | Technology | Purpose |
 | :--- | :--- | :--- | :--- |
 | **Backend Gateway** | `5001` | Node.js v22+ Express + Socket.IO | Main API gateway, family pairing, socket hub |
-| **Speech-to-Text** | `5001` (internal) | `Whisper.cpp` (`main.exe`) | Offline multilingual STT with code-switching |
+| **Speech-to-Text** | `5001` (internal) | `Whisper.cpp` (`main.exe`) | Offline multilingual STT with natural code-switching |
 | **AI Vision Engine** | `5003` | Python 3.10+ + Ultralytics YOLOv11 | Real-time hazard detection & 3D distance estimation |
 | **Neural TTS** | `5002` | Python + AI4Bharat IndicF5 PyTorch | Neural voice synthesis for 10 Indian languages |
 | **Local LLM Engine** | `11434` | Ollama (`llama3.2` / `qwen2.5-coder`) | Conversational reasoning & vision context Q&A |
@@ -102,10 +109,10 @@ NAVIDOOR/
 
 ## Architecture & Data Flow
 
-### 1. Dual-Role Routing (App Startup)
+### 1. Dual-Role Routing & Screen Accessibility Triggers
 
 ```text
-App Launch (App.tsx)
+App Launch (frontend/App.tsx)
 ├── Checks userRole in Zustand store
 ├── Case 'undecided': Renders <RoleSelectionScreen />
 │     ├── NAVIDOOR User Card -> Sets userRole = 'navidoor_user', opens voice onboarding
@@ -113,14 +120,34 @@ App Launch (App.tsx)
 ├── Case 'family_member':
 │     ├── If not logged in -> Renders <FamilyAuthScreen />
 │     └── If logged in -> Renders <FamilyModeContainer /> (Caregiver Portal)
-└── Case 'navidoor_user': Renders main AI Accessibility workspace (<CameraViewCanvas />, <RotatingAIModeWheel />, <SectionViewPanel />)
+└── Case 'navidoor_user': Renders main AI Accessibility workspace
+      ├── <CameraViewCanvas /> (Continuous camera canvas)
+      ├── <CameraHeader /> (Platform-aware spacing, SOS & Profile buttons)
+      ├── <SectionViewPanel /> (12 feature panels)
+      ├── <RotatingAIModeWheel /> (Haptic 12-mode wheel + Unified Mic button)
+      └── <SectionToastNotification />
 ```
+
+#### Universal Screen Triple-Tap Gesture (Emergency SOS Trigger)
+For blind and visually impaired users, finding a specific on-screen button during an emergency or disorientation is extremely difficult. NAVIDOOR incorporates a universal screen-wide gesture:
+- **Detection**: Handled at the root in [`frontend/App.tsx`](file:///c:/Users/Aadya/NAVIDOOR/frontend/App.tsx) via `PanResponder` (`onStartShouldSetPanResponderCapture`) on mobile and a capturing `pointerdown` listener on web.
+- **Gesture Rule**: Tapping 3 times anywhere on the screen within an **850ms** rolling window (with 70ms tap deduplication).
+- **Behavior**:
+  1. Captures the 3rd tap to avoid firing buttons underneath.
+  2. Triggers `triggerSosAlert()` in [`frontend/src/store/useNavidoorStore.ts`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/store/useNavidoorStore.ts).
+  3. Promotes `userRole` to `'navidoor_user'` automatically if currently undecided.
+  4. Triggers warning haptics (`Haptics.NotificationFeedbackType.Warning`).
+  5. Plays alert warning beeps and opens `<SOSModal />`.
+  6. Emits `emergency:sos` over Socket.IO with user GPS coordinates and battery telemetry to linked caregivers.
+
+---
 
 ### 2. End-to-End Voice Assistant Pipeline
 
 ```text
                ┌────────────────────────────────────────────────────────┐
-               │           User Speaks into Microphone                  │
+               │           User Taps Floating Mic Button                │
+               │           (Animated expanding aura feedback)           │
                └──────────────────────────┬─────────────────────────────┘
                                           │
                                           ▼
@@ -172,13 +199,15 @@ App Launch (App.tsx)
                └────────────────────────────────────────────────────────┘
 ```
 
-### 3. YOLOv11 Computer Vision & Hazard Avoidance Pipeline
+---
+
+### 3. YOLOv11 Computer Vision & Invisible Hazard Avoidance Pipeline
 
 ```text
-Continuous Camera Frame (CameraViewCanvas)
+Unified Left SCAN Button Pressed (CameraControlsOverlay)
    │
-   ▼ POST /detect (Base64 JPEG)
-Python YOLOv11 Vision Server (Port 5003)
+   ▼ High-Resolution Frame Captured
+Python YOLOv11 Vision Server (Port 5003: POST /detect)
    │
    ├── Ultralytics YOLOv11 Inference (yolo11n.pt ~28ms)
    │
@@ -193,8 +222,18 @@ Python YOLOv11 Vision Server (Port 5003)
    │   - Recommends path deviations ("Obstacle ahead. Step right.")
    │
    ▼ Return JSON Detections + Safe Path + Spoken Hints
-Render Dynamic Bounding Boxes + Tactile Haptic Alert + Spoken Guidance
+Invisible Background Processing:
+   ├── Tactile Haptic Pulses (Heavy on CRITICAL, Medium on WARNING)
+   ├── Proximity Beep Audio Feedback (Frequency increases as distance decreases)
+   ├── Natural Voice Guidance Announcement via TTS
+   └── Clean UI Canvas: Bounding boxes work invisibly in the background
 ```
+
+#### Non-Overlapping Platform Spacing
+The camera interface utilizes platform-specific safe-area insets (`Platform.OS === 'web'`, `android`, `ios`) across:
+- `<CameraHeader />`: Anchored to the top with responsive status bar padding.
+- `<CameraControlsOverlay />`: Top margin positioned safely below the header buttons (Emergency SOS and Profile) so controls never overlap.
+- `<AIVisionOverlay />`: Respects the same top offset guidelines for clean visual hierarchy.
 
 ---
 
@@ -223,14 +262,17 @@ Render Dynamic Bounding Boxes + Tactile Haptic Alert + Spoken Guidance
 
 | File | Purpose |
 | :--- | :--- |
-| `App.tsx` | Root entry point, role-based routing, screen-level gesture handler |
-| `src/store/useNavidoorStore.ts` | Central Zustand store managing navigation modes, voice state, detections, and user profile |
-| `src/services/voiceRecordingService.ts` | Mobile VAD audio metering (-42 dB, 2.2s silence threshold, 2.0s min window, 10s max window) |
-| `src/services/voiceAssistantBackend.ts` | HTTP API client with dynamic LAN auto-discovery via Expo `hostUri` |
-| `src/components/camera/CameraViewCanvas.tsx` | Continuous camera stream with live YOLOv11 bounding boxes and distance tags |
-| `src/components/navigation/RotatingAIModeWheel.tsx` | Curved 12-mode navigation wheel dock with haptic rotation |
-| `backend/index.js` | Express server + Socket.IO hub connecting STT, Chat, TTS, and Family services |
-| `backend/services/whisperService.js` | Whisper.cpp wrapper with clean 16kHz resampling, `--prompt` code-switching, and script validation |
-| `backend/services/aiAssistantService.js` | Direct native LLM reasoning engine with programmatic validation & clarification safety check |
-| `yolo/yolo_server.py` | Python YOLOv11 server with pinhole distance estimation and corridor guidance |
-| `yolo/core/distance_estimator.py` | 3D pinhole distance calculator and left/center/right safe corridor analyzer |
+| [`frontend/App.tsx`](file:///c:/Users/Aadya/NAVIDOOR/frontend/App.tsx) | Root entry point, Universal Triple-Tap SOS gesture interceptor, horizontal swipe mode cycler, and dual-role routing |
+| [`frontend/src/store/useNavidoorStore.ts`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/store/useNavidoorStore.ts) | Central Zustand store managing navigation modes, voice state, detections, and `triggerSosAlert()` logic |
+| [`frontend/src/components/camera/CameraControlsOverlay.tsx`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/components/camera/CameraControlsOverlay.tsx) | Unified camera controls with left `SCAN` button (YOLOv11 integration, distance beeps, non-overlapping spacing) |
+| [`frontend/src/components/camera/CameraHeader.tsx`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/components/camera/CameraHeader.tsx) | Top status header with 5-second hold Emergency SOS button and user profile avatar |
+| [`frontend/src/components/camera/AIVisionOverlay.tsx`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/components/camera/AIVisionOverlay.tsx) | Invisible background hazard inference, distance badges, and proximity audio cues |
+| [`frontend/src/components/navigation/RotatingAIModeWheel.tsx`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/components/navigation/RotatingAIModeWheel.tsx) | Curved 12-mode navigation wheel dock with haptic rotation and centered Unified Mic button |
+| [`frontend/src/services/voiceRecordingService.ts`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/services/voiceRecordingService.ts) | Mobile VAD audio metering (-42 dB, 2.2s silence threshold, 2.0s min window, 10s max window) |
+| [`frontend/src/services/voiceAssistantBackend.ts`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/services/voiceAssistantBackend.ts) | HTTP API client with dynamic LAN auto-discovery via Expo `hostUri` |
+| [`backend/index.js`](file:///c:/Users/Aadya/NAVIDOOR/backend/index.js) | Express server + Socket.IO hub connecting STT, Chat, TTS, and Family services |
+| [`backend/services/whisperService.js`](file:///c:/Users/Aadya/NAVIDOOR/backend/services/whisperService.js) | Whisper.cpp wrapper with clean 16kHz resampling, `--prompt` code-switching, and script validation |
+| [`backend/services/aiAssistantService.js`](file:///c:/Users/Aadya/NAVIDOOR/backend/services/aiAssistantService.js) | Direct native LLM reasoning engine with programmatic validation & clarification safety check |
+| [`yolo/yolo_server.py`](file:///c:/Users/Aadya/NAVIDOOR/yolo/yolo_server.py) | Python YOLOv11 server with pinhole distance estimation and corridor guidance |
+| [`yolo/core/distance_estimator.py`](file:///c:/Users/Aadya/NAVIDOOR/yolo/core/distance_estimator.py) | 3D pinhole distance calculator and left/center/right safe corridor analyzer |
+

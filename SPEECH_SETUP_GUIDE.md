@@ -123,8 +123,6 @@ node backend/test_response_generation_verification.js
   Final response: "मला नीट समजलं नाही. कृपया पुन्हा सांगा."
   ```
 
----
-
 ## 6. Running the Application
 
 1. **Install Dependencies**:
@@ -136,7 +134,7 @@ node backend/test_response_generation_verification.js
    ```bash
    npm run server
    ```
-   *(Backend runs on `http://localhost:5001`)*
+   *(Backend runs on `http://localhost:5001` — LAN accessible)*
 
 3. **Start Ollama LLM** (Ensure running on `127.0.0.1:11434`):
    ```bash
@@ -145,13 +143,17 @@ node backend/test_response_generation_verification.js
 
 4. **Start Mobile / Web Frontend**:
    ```bash
-   npx expo start --clear
+   npm start
+   # Or for remote testing via Expo tunnel:
+   npm run tunnel
    ```
 
 ---
 
 ## 7. Troubleshooting & Important Notes
 
+- **On-Demand VAD vs Background Wake-Word Loops**: The voice assistant is triggered on demand via the Accessible Unified Mic Button (featuring expanding visual/tactile aura and audio chime) and utilizes mobile-native VAD metering (`isMeteringEnabled: true`). This ensures instant speech turnaround (~400ms) without heavy background audio capture loops that drain mobile batteries or freeze the camera thread.
 - **Destructive Filters Warning**: Do not re-introduce aggressive lowpass (`lowpass=f=3800`) or high-volume boost filters. Speech recognition in Indic languages relies on high-frequency formants (fricatives and sibilants) between 4000 Hz and 7000 Hz.
 - **Code-Switching Context**: Whisper.cpp supports natural mixing of English technical terms (e.g., *phone, meeting, camera, app, login*) when primed with `--prompt`.
 - **Zero Cloud Leakage**: All speech recognition, LLM reasoning, and audio synthesis operate 100% locally on your machine.
+

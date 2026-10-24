@@ -8,26 +8,31 @@ It is powered by official state-of-the-art **Ultralytics YOLOv11** (`yolo11n.pt`
 
 ## 🌟 Capabilities & Features
 
-1. **Obstacle & Hazard Detection (YOLOv11 Nano)**:
+1. **Invisible Background Vision Processing**:
+   - Detection, 3D pinhole distance calculations, and corridor analysis run completely in the background without cluttering the screen with visual bounding box overlays.
+   - Eliminates visual distractions while providing rich audio and tactile feedback to visually impaired users.
+2. **Unified Left `SCAN` Button Integration**:
+   - Integrated with the mobile client's single left `SCAN` button (`CameraControlsOverlay`), triggering high-resolution capture, instant inference, and immediate spoken guidance.
+3. **Obstacle & Hazard Detection (YOLOv11 Nano)**:
    - Pedestrians, vehicles (cars, buses, auto-rickshaws, motorcycles, bicycles).
    - Architectural elements: doors, open doorways, stairs, ramps, elevators, poles.
    - Ground hazards: puddles, potholes, open manholes, road dividers.
-2. **Indian Public Transit Assistant**:
+4. **Indian Public Transit Assistant**:
    - Detects incoming city buses and regional state transport buses.
    - Localizes bus front door and boarding zones.
-3. **AI Medicine Assistant**:
+5. **AI Medicine Assistant**:
    - Detects medicine bottles, pill containers, and blister packaging strips.
-4. **Pinhole Geometry 3D Distance Estimation**:
+6. **Pinhole Geometry 3D Distance Estimation & Dynamic Audio Beeps**:
    - Calculates real-world distance using physical object dimensions and camera focal geometry:
      $$\text{Distance} = \frac{H_{\text{real}} \cdot f_{\text{camera}}}{h_{\text{bbox}}}$$
    - Classifies risk levels for immediate tactile/audio feedback:
-     - `CRITICAL` (< 1.2 meters): Urgent collision alert.
-     - `WARNING` (1.2m – 2.5m): Approaching obstacle.
-     - `INFO` (2.5m – 5.0m): Facility or landmark detection.
-5. **Safe Walking Path Corridor Analysis**:
+     - `CRITICAL` (< 1.2 meters): Rapid audio beeping + urgent collision alert.
+     - `WARNING` (1.2m – 2.5m): Medium-paced audio beeping + approaching obstacle hint.
+     - `INFO` (2.5m – 5.0m): Facility or landmark announcement.
+7. **Safe Walking Path Corridor Analysis**:
    - Divides the live camera frame into 3 vertical zones: `LEFT`, `CENTER`, and `RIGHT`.
    - Computes corridor clearance and recommends path deviations (e.g. *"Obstacle ahead. Step right."*).
-6. **Multilingual Spoken Announcements**:
+8. **Multilingual Spoken Announcements**:
    - Formats voice guidance cues across **English**, **Hindi** (हिंदी), **Marathi** (मराठी), and all 10 supported regional languages.
 
 ---
@@ -41,7 +46,9 @@ python -m pip install -r yolo/requirements.txt
 
 ### 2. Run the Verification Test Suite
 ```bash
-python yolo/test_yolo.py
+npm run test:yolo
+# Or directly:
+py -3.10 yolo/test_yolo.py
 ```
 
 ### 3. Start the YOLOv11 Server (Port 5003)
@@ -50,7 +57,7 @@ python yolo/test_yolo.py
 npm run yolo
 
 # Or running Python script directly:
-python yolo/yolo_server.py
+py -3.10 yolo/yolo_server.py
 ```
 *(Server listens on `http://0.0.0.0:5003` — LAN accessible for mobile devices and Node.js backend).*
 
@@ -129,3 +136,4 @@ yolo/
     ├── distance_estimator.py   # Pinhole distance & 3-corridor analysis
     └── indian_labels.py        # Indian contextual classes & translations
 ```
+
