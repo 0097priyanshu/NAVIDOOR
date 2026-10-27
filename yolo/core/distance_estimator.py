@@ -38,7 +38,7 @@ class DistanceEstimator:
         raw_distance = (real_height * effective_focal) / box_height
 
         # Ground plane perspective adjustment (only for floor hazards / walking obstacles near feet)
-        GROUND_HAZARDS = {'pothole', 'manhole', 'water_puddle', 'stairs', 'person', 'dog', 'cow', 'cat', 'pole'}
+        GROUND_HAZARDS = {'pothole', 'manhole', 'water_puddle', 'stairs', 'upstair', 'downstair', 'person', 'dog', 'cow', 'cat', 'pole'}
         bottom_ratio = y2 / float(frame_height)
         if bottom_ratio > 0.85 and class_name.lower() in GROUND_HAZARDS:
             # Near feet of the user

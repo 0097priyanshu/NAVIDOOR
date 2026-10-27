@@ -134,6 +134,8 @@ CLASS_PRIORITY = {
 # Regional Indian Language Translations (All 10 Voice Assistant Languages)
 TRANSLATIONS = {
     'en': {
+        'upstair': 'stairs going up',
+        'downstair': 'stairs going down',
         'person': 'Person',
         'car': 'Car',
         'bus': 'Bus',
@@ -169,6 +171,8 @@ TRANSLATIONS = {
         'please_stop': 'Please stop.',
     },
     'hi': {
+        'upstair': 'ऊपर की सीढ़ियाँ',
+        'downstair': 'नीचे की सीढ़ियाँ',
         'person': 'व्यक्ति',
         'car': 'गाड़ी',
         'bus': 'बस',
@@ -204,6 +208,8 @@ TRANSLATIONS = {
         'please_stop': 'कृपया रुकें।',
     },
     'mr': {
+        'upstair': 'वर जाणाऱ्या पायऱ्या',
+        'downstair': 'खाली जाणाऱ्या पायऱ्या',
         'person': 'व्यक्ती',
         'car': 'गाडी',
         'bus': 'बस',
@@ -239,6 +245,8 @@ TRANSLATIONS = {
         'please_stop': 'कृपया थांबा.',
     },
     'gu': {
+        'upstair': 'ઉપર જતી સીડી',
+        'downstair': 'નીચે જતી સીડી',
         'person': 'વ્યક્તિ',
         'car': 'ગાડી',
         'bus': 'બસ',
@@ -274,6 +282,8 @@ TRANSLATIONS = {
         'please_stop': 'કૃપા કરીને થોભો.',
     },
     'pa': {
+        'upstair': 'ਉੱਪਰ ਜਾਣ ਵਾਲੀਆਂ ਪੌੜੀਆਂ',
+        'downstair': 'ਹੇਠਾਂ ਜਾਣ ਵਾਲੀਆਂ ਪੌੜੀਆਂ',
         'person': 'ਬੰਦਾ',
         'car': 'ਕਾਰ',
         'bus': 'ਬੱਸ',
@@ -309,6 +319,8 @@ TRANSLATIONS = {
         'please_stop': 'ਕਿਰਪਾ ਕਰਕੇ ਰੁਕੋ।',
     },
     'bn': {
+        'upstair': 'উপরে ওঠার সিঁড়ি',
+        'downstair': 'নিচে নামার সিঁড়ি',
         'person': 'মানুষ',
         'car': 'গাড়ি',
         'bus': 'বাস',
@@ -344,6 +356,8 @@ TRANSLATIONS = {
         'please_stop': 'দয়া করে থামুন।',
     },
     'ta': {
+        'upstair': 'மேலே செல்லும் படிகள்',
+        'downstair': 'கீழே செல்லும் படிகள்',
         'person': 'நபர்',
         'car': 'கார்',
         'bus': 'பேருந்து',
@@ -379,6 +393,8 @@ TRANSLATIONS = {
         'please_stop': 'தயவுசெய்து நிற்கவும்.',
     },
     'te': {
+        'upstair': 'పైకి వెళ్లే మెట్లు',
+        'downstair': 'కిందికి వెళ్లే మెట్లు',
         'person': 'వ్యక్తి',
         'car': 'కారు',
         'bus': 'బస్సు',
@@ -414,6 +430,8 @@ TRANSLATIONS = {
         'please_stop': 'దయచేసి ఆగండి.',
     },
     'kn': {
+        'upstair': 'ಮೇಲೆ ಹೋಗುವ ಮೆಟ್ಟಿಲುಗಳು',
+        'downstair': 'ಕೆಳಗೆ ಹೋಗುವ ಮೆಟ್ಟಿಲುಗಳು',
         'person': 'ವ್ಯಕ್ತಿ',
         'car': 'ಕಾರು',
         'bus': 'ಬಸ್',
@@ -449,6 +467,8 @@ TRANSLATIONS = {
         'please_stop': 'ದಯವಿಟ್ಟು ನಿಲ್ಲಿ.',
     },
     'ml': {
+        'upstair': 'മുകളിലേക്കുള്ള പടികൾ',
+        'downstair': 'താഴേക്കുള്ള പടികൾ',
         'person': 'ആൾ',
         'car': 'കാർ',
         'bus': 'ബസ്',

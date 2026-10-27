@@ -36,6 +36,11 @@ __pycache__/
 *.bin
 *.onnx
 *.pt
+!yolo/models/yolo11n_staircase.pt
+
+# YOLO Training Datasets and Runs
+yolo/dataset/
+yolo/runs/
 *.exe
 *.dll
 *.wav
