@@ -5,8 +5,13 @@ const ffmpegPath = require('ffmpeg-static');
 const { getLanguageMeta } = require('../config/languages');
 
 class WhisperService {
-  constructor() {
-    this.binPath = process.env.WHISPER_BIN_PATH || path.join(__dirname, '../bin/main.exe');
+    const macBin = path.join(__dirname, '../bin/main');
+    const winBin = path.join(__dirname, '../bin/main.exe');
+    this.binPath = process.env.WHISPER_BIN_PATH || (
+      process.platform === 'win32'
+        ? (fs.existsSync(winBin) ? winBin : macBin)
+        : (fs.existsSync(macBin) ? macBin : winBin)
+    );
     this.previousLanguageContext = 'mr';
   }
 

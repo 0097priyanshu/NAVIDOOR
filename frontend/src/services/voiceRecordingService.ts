@@ -25,13 +25,14 @@ export function getExpoAudio(): any {
       AudioModule = require('expo-audio/build/AudioModule').default;
     } catch (e) {}
 
-    const AudioRecorder = (AudioModule && AudioModule.AudioRecorder) || expoAudio.AudioRecorder || (expoAudio.default && expoAudio.default.AudioRecorder);
-    if (expoAudio && (expoAudio.requestRecordingPermissionsAsync || AudioRecorder)) {
+    const Recorder = (AudioModule && AudioModule.AudioRecorder) || expoAudio.AudioRecorder || (expoAudio.default && expoAudio.default.AudioRecorder);
+    if (expoAudio && (expoAudio.requestRecordingPermissionsAsync || Recorder)) {
       return {
         isExpoAudio: true,
         getPermissionsAsync: expoAudio.getRecordingPermissionsAsync,
         requestPermissionsAsync: expoAudio.requestRecordingPermissionsAsync,
-        AudioRecorder,
+        setAudioModeAsync: expoAudio.setAudioModeAsync,
+        AudioRecorder: Recorder,
         RecordingPresets: expoAudio.RecordingPresets,
         expoAudio,
       };
@@ -144,7 +145,24 @@ export class VoiceRecordingService {
       if (Audio) {
         try {
           if (Audio.isExpoAudio) {
-            const { AudioRecorder, RecordingPresets, expoAudio } = Audio;
+            const { AudioRecorder, RecordingPresets, expoAudio, setAudioModeAsync } = Audio;
+
+            // Configure audio mode for iOS recording permission on Expo SDK 57 (expo-audio)
+            try {
+              const setMode = setAudioModeAsync || (expoAudio && expoAudio.setAudioModeAsync);
+              if (typeof setMode === 'function') {
+                await setMode({
+                  allowsRecording: true,
+                  playsInSilentMode: true,
+                  shouldPlayInBackground: false,
+                  shouldRouteThroughEarpiece: false,
+                });
+                console.log('[VoiceRecordingService] Configured expo-audio setAudioModeAsync (allowsRecording: true)');
+              }
+            } catch (modeErr) {
+              console.warn('[VoiceRecordingService] expo-audio setAudioModeAsync note:', modeErr);
+            }
+
             if (!AudioRecorder) {
               throw new Error('AudioRecorder constructor unavailable on expo-audio module');
             }
@@ -172,13 +190,15 @@ export class VoiceRecordingService {
             console.log('[VoiceRecordingService] Mobile expo-audio recording active');
             return true;
           } else if (Audio.Recording) {
-            await Audio.setAudioModeAsync({
-              allowsRecordingIOS: true,
-              playsInSilentModeIOS: true,
-              staysActiveInBackground: false,
-              shouldDuckAndroid: true,
-              playThroughEarpieceAndroid: false,
-            });
+            if (typeof Audio.setAudioModeAsync === 'function') {
+              await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true,
+                playsInSilentModeIOS: true,
+                staysActiveInBackground: false,
+                shouldDuckAndroid: true,
+                playThroughEarpieceAndroid: false,
+              });
+            }
 
             if (this.recording) {
               try { await this.recording.stopAndUnloadAsync(); } catch (e) {}
