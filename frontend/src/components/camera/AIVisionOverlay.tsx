@@ -8,10 +8,24 @@ export const AIVisionOverlay: React.FC = () => {
     lastAnnouncement, 
     speak, 
     activeMode,
+    isFirstTimeUser,
+    isProfileModalOpen,
+    isSosModalOpen,
+    isFamilyCompanionOpen,
+    isDesignSystemOpen,
+    userRole,
   } = useNavidoorStore();
 
   const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(activeMode);
-  if (!isVisionMode) return null;
+  const isProfileOrModalActive = 
+    isFirstTimeUser || 
+    isProfileModalOpen || 
+    isSosModalOpen || 
+    isFamilyCompanionOpen || 
+    isDesignSystemOpen || 
+    userRole !== 'navidoor_user';
+
+  if (!isVisionMode || isProfileOrModalActive) return null;
 
   const handleSpeechReplay = () => {
     if (lastAnnouncement) {
@@ -54,6 +68,7 @@ const styles = StyleSheet.create({
     right: 16,
     zIndex: 20,
     alignItems: 'center',
+    gap: 6,
   },
   voiceHudCard: {
     width: '100%',
@@ -96,3 +111,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+

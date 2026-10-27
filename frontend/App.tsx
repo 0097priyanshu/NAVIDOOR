@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
-import { StyleSheet, StatusBar, PanResponder, View, Platform } from 'react-native';
+import { StyleSheet, PanResponder, View, Platform } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useNavidoorStore } from './src/store/useNavidoorStore';
 import { CameraViewCanvas } from './src/components/camera/CameraViewCanvas';
@@ -122,7 +123,7 @@ export default function App() {
     // 3. Existing NAVIDOOR User Experience (role === 'navidoor_user')
     return (
       <SafeAreaView style={styles.rootContainer}>
-        <StatusBar barStyle="light-content" backgroundColor="#64748B" />
+        <StatusBar style="light" />
 
         {/* 1. CONTINUOUS CAMERA CANVAS / SOLID SLATE GRAY UTILITY BACKDROP */}
         <CameraViewCanvas />

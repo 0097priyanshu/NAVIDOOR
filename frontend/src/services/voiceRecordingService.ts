@@ -38,17 +38,6 @@ export function getExpoAudio(): any {
     }
   } catch (e) {}
 
-  // 2. Fallback to legacy expo-av (older Expo SDKs) if ExponentAV native module exists
-  try {
-    const { NativeModules } = require('react-native');
-    if (NativeModules?.ExponentAV) {
-      const expoAv = require('expo-av');
-      if (expoAv && (expoAv.Audio || expoAv.default?.Audio)) {
-        return expoAv.Audio || expoAv.default?.Audio;
-      }
-    }
-  } catch (e) {}
-
   return null;
 }
 
