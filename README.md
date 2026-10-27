@@ -11,13 +11,22 @@ The system features a cross-platform mobile client (React Native / Expo & Flutte
 1. **Camera as the Continuous Canvas**:
    - The camera remains active throughout the application. Changing navigation modes does **NOT** unmount or replace the camera stream.
    - Feature-specific floating overlays (Assist, Navigate, Read, Medicines, Location, Emergency, Medical ID, Settings) render directly over the live stream.
-2. **YOLOv11 Real-Time Vision & Invisible Hazard Avoidance**:
+2. **YOLOv11 Dual-Model Vision & Directional Staircase Hazard Avoidance**:
+   - Powered by official Ultralytics **YOLOv11** (`yolo11n.pt`) and a specialized fine-tuned **Directional Staircase Model** (`models/yolo11n_staircase.pt`, 5.4MB, 70.5% mAP@50).
+   - Accurately identifies `upstair` (ascending) and `downstair` (descending — critical fall risk) with localized voice announcements.
+   - **Invisible Background Processing**: Hazard detection, 3D distance estimation, and obstacle proximity beeps operate completely in the background without visual bounding box clutter on screen.
+   - **Unified Left `SCAN` Button**: A single tactile button triggers high-resolution scene capture, YOLOv11 inference, distance estimation, and spoken hazard guidance (eliminating redundant buttons).
+   - Real-time 3D pinhole distance estimation with categorized risk levels (`CRITICAL` < 1.2m, `WARNING` 1.2m–2.5m, `INFO` 2.5m–5.0m) and dynamic audio beeps.
+   - 3-corridor path clearance analysis (LEFT, CENTER, RIGHT) with directional spoken guidance.
    - Powered by official Ultralytics **YOLOv11** (`yolo11n.pt`) running on local Python microservice (`http://0.0.0.0:5003`).
    - **Invisible Background Processing**: Hazard detection, 3D distance estimation, and obstacle proximity beeps operate completely in the background without visual bounding box clutter on screen.
    - **Unified Left `SCAN` Button**: A single tactile button triggers high-resolution scene capture, YOLOv11 inference, distance estimation, and spoken hazard guidance (eliminating redundant buttons).
    - Real-time 3D pinhole distance estimation with categorized risk levels (`CRITICAL` < 1.2m, `WARNING` 1.2m–2.5m, `INFO` 2.5m–5.0m) and dynamic audio beeps.
    - 3-corridor path clearance analysis (LEFT, CENTER, RIGHT) with directional spoken guidance.
-3. **Universal Screen Triple-Tap Emergency SOS Trigger**:
+3. **Family Companion Portal & Secure QR Pairing**:
+   - Single-use 5-minute encrypted QR code pairing (`react-native-qrcode-svg` + `firebase` Firestore / Socket.IO dual-sync).
+   - Allows remote caregivers to monitor real-time location, receive emergency SOS notifications, and check active journeys.
+4. **Universal Screen Triple-Tap Emergency SOS Trigger**:
    - Designed specifically for blind and visually impaired users who cannot pinpoint a small on-screen button during an emergency.
    - **Triple-tap anywhere on the screen** within an **850ms** window to immediately activate the Emergency SOS modal, play warning alert beeps, trigger tactile haptic feedback, and broadcast live GPS coordinates to family caregivers.
 4. **100% Privacy-First & Local AI (Zero Cloud API Keys Required)**:
