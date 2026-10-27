@@ -658,6 +658,21 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   singleScanHandler: null as ((() => void) | null),
   setSingleScanHandler: (fn: (() => void) | null) => set({ singleScanHandler: fn }),
   triggerYoloScan: () => {
+    const s = get();
+    const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(s.activeMode);
+    const isProfileOrModalActive = 
+      s.isFirstTimeUser || 
+      s.isProfileModalOpen || 
+      s.isSosModalOpen || 
+      s.isFamilyCompanionOpen || 
+      s.isDesignSystemOpen || 
+      s.userRole !== 'navidoor_user';
+
+    if (!isVisionMode || isProfileOrModalActive) {
+      console.log('[Store] triggerYoloScan ignored: perception not needed or profile setup is active.');
+      return;
+    }
+
     const fn = get().singleScanHandler;
     if (fn) {
       fn();
@@ -722,6 +737,21 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   },
 
   runLiveYoloScan: async () => {
+    const s = get();
+    const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(s.activeMode);
+    const isProfileOrModalActive = 
+      s.isFirstTimeUser || 
+      s.isProfileModalOpen || 
+      s.isSosModalOpen || 
+      s.isFamilyCompanionOpen || 
+      s.isDesignSystemOpen || 
+      s.userRole !== 'navidoor_user';
+
+    if (!isVisionMode || isProfileOrModalActive) {
+      console.log('[Store] runLiveYoloScan ignored: perception not needed or profile setup is active.');
+      return;
+    }
+
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (e) {}

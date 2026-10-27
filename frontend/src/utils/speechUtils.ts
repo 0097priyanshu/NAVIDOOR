@@ -58,29 +58,15 @@ export const speakAnnouncement = async (
     
     // Ensure iOS plays in silent mode without being muted by iOS physical silent switch
     try {
-      try {
-        const { setAudioModeAsync } = require('expo-audio');
-        if (setAudioModeAsync) {
-          await setAudioModeAsync({
-            playsInSilentMode: true,
-          });
-        }
-      } catch (err) {}
-
-      const { NativeModules } = require('react-native');
-      if ((Platform.OS as string) !== 'web' && NativeModules?.ExponentAV) {
-        const expoAv = require('expo-av');
-        if (expoAv?.Audio?.setAudioModeAsync) {
-          await expoAv.Audio.setAudioModeAsync({
-            allowsRecordingIOS: true,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-            shouldDuckAndroid: true,
-            playThroughEarpieceAndroid: false,
-          });
-        }
+      const { setAudioModeAsync } = require('expo-audio');
+      if (setAudioModeAsync) {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: false,
+          shouldRouteThroughEarpiece: false,
+        });
       }
-    } catch (e) {}
+    } catch (err) {}
 
     try {
       const voices = await Speech.getAvailableVoicesAsync();

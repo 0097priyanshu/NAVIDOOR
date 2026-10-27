@@ -67,7 +67,7 @@ NAVIDOOR/
 │       └── translationService.js ← Regional Indian language translation engine
 │
 └── yolo/                    ← Python YOLOv11 Computer Vision Service (Port 5003)
-    ├── yolo_server.py       ← FastAPI / Flask server with /detect, /detect/bus, /detect/medicine
+    ├── yolo_server.py       ← Flask REST server with /detect, /detect/bus, /detect/medicine
     ├── test_yolo.py         ← Automated detection & distance estimation test suite
     ├── requirements.txt     ← Python dependencies (ultralytics, torch, opencv-python, flask)
     └── core/

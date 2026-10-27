@@ -17,7 +17,7 @@ class YOLODetector:
     def __init__(
         self,
         model_name: str = "yolo11n.pt",
-        confidence_threshold: float = 0.45,
+        confidence_threshold: float = 0.28,
         models_dir: str = None
     ):
         self.confidence_threshold = confidence_threshold
@@ -51,11 +51,11 @@ class YOLODetector:
 
     def detect_frame(
         self,
-        image_np: np.ndarray,
+        image_input: Union[np.ndarray, Any],
         language: str = "en"
     ) -> Dict[str, Any]:
         """
-        Runs object detection on a BGR or RGB numpy image frame.
+        Runs object detection on a PIL Image or BGR/RGB numpy frame.
         Returns:
             - detections: list of objects with bbox [x1, y1, x2, y2], confidence, distance_meters, risk_level, zone
             - safe_path: recommended walking direction and corridor status
@@ -63,33 +63,34 @@ class YOLODetector:
             - latency_ms: inference time
         """
         start_time = time.time()
-        height, width = image_np.shape[:2]
-        channels = image_np.shape[2] if image_np.ndim > 2 else 1
-
-        print(f"\n--- [YOLO DIAG] DETECT FRAME INITIATED ---")
-        print(f"[YOLO DIAG] Preprocessing input shape: height={height}, width={width}, channels={channels}")
+        if hasattr(image_input, "size"):
+            width, height = image_input.size
+        else:
+            height, width = image_input.shape[:2]
 
         detections: List[Dict[str, Any]] = []
 
         if self.is_ultralytics_loaded and self.model is not None:
             try:
-                # Run inference with conf=0.10 first to log raw count before NMS thresholding
-                raw_results_unfiltered = self.model(image_np, conf=0.10, verbose=False)
-                raw_box_count = sum(len(r.boxes) for r in raw_results_unfiltered)
-                print(f"[YOLO DIAG] Raw detections before conf thresholding (conf >= 0.10): {raw_box_count}")
+                # Run single inference pass at optimal 640px native resolution for maximum accuracy
+                results = self.model(
+                    image_input,
+                    imgsz=640,
+                    conf=self.confidence_threshold,
+                    iou=0.45,
+                    verbose=False
+                )
 
-                # Run inference with active conf threshold
-                results = self.model(image_np, conf=self.confidence_threshold, verbose=False)
                 for r in results:
                     boxes = r.boxes
-                    print(f"[YOLO DIAG] Raw tensor output shape: {boxes.data.shape if hasattr(boxes, 'data') else 'N/A'}")
-                    print(f"[YOLO DIAG] Detections after conf threshold ({self.confidence_threshold}): {len(boxes)}")
-                    
+                    if boxes is None or len(boxes) == 0:
+                        continue
+
                     for i, box in enumerate(boxes):
                         cls_id = int(box.cls[0].item())
                         cls_name = self.model.names.get(cls_id, f"obj_{cls_id}").lower()
                         conf = float(box.conf[0].item())
-                        coords = box.xyxy[0].tolist() # [x1, y1, x2, y2]
+                        coords = box.xyxy[0].tolist()  # [x1, y1, x2, y2]
                         x1, y1, x2, y2 = [int(v) for v in coords]
 
                         norm_bbox = [
@@ -98,8 +99,6 @@ class YOLODetector:
                             round(x2 / width, 3),
                             round(y2 / height, 3)
                         ]
-
-                        print(f"[YOLO DIAG] Box {i+1}: class_id={cls_id}, name='{cls_name}', conf={conf:.2f}, pixel_bbox=[{x1}, {y1}, {x2}, {y2}], norm_bbox={norm_bbox}")
 
                         # Calculate distance and risk
                         dist_info = self.distance_estimator.estimate_distance(
@@ -120,17 +119,25 @@ class YOLODetector:
                             "zone": zone
                         })
             except Exception as e:
-                print(f"[YOLO DIAG] Inference exception: {e}")
+                print(f"[YOLO Inference Error]: {e}")
 
-        # Analyze scene corridors
-        safe_path = self.scene_analyzer.analyze_clearance(detections, width, height)
+        # Analyze scene corridors with perception quality and flat surface checks
+        safe_path = self.scene_analyzer.analyze_clearance(
+            detections, width, height, image_input=image_input
+        )
 
-        # Generate spoken guidance
+        # Generate spoken guidance adhering to 5-state navigation model
         voice_guidance = self.guidance_generator.generate_spoken_guidance(
             detections, safe_path, language=language
         )
 
         latency_ms = round((time.time() - start_time) * 1000, 1)
+
+        # Diagnostics for development debugging
+        if len(detections) > 0 or safe_path.get("path_state") != "UNKNOWN":
+            det_summary = [(d["class"], d["confidence"], f"{d['distance_meters']}m") for d in detections]
+            print(f"[YOLO DIAG] Dets: {det_summary} | State: {safe_path.get('path_state')} | Guidance: '{voice_guidance}'")
+
 
         return {
             "success": True,
