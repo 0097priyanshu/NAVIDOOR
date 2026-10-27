@@ -20,6 +20,7 @@ import { requestTranslation, requestWhisperSTT } from '../services/voiceAssistan
 import { voiceRecordingService } from '../services/voiceRecordingService';
 import { socketClient } from '../services/socketClient';
 import { yoloVisionService } from '../services/yoloVisionService';
+import { familyPairingService } from '../services/familyPairingService';
 
 interface NavidoorState {
   // Voice System First
@@ -112,6 +113,13 @@ interface NavidoorState {
 
   isFamilyCompanionOpen: boolean;
   setFamilyCompanionOpen: (open: boolean) => void;
+  isFamilyQrModalOpen: boolean;
+  setIsFamilyQrModalOpen: (open: boolean) => void;
+  isFamilyScannerModalOpen: boolean;
+  setIsFamilyScannerModalOpen: (open: boolean) => void;
+  activePairingConnection: any | null;
+  setActivePairingConnection: (conn: any | null) => void;
+  disconnectActivePairing: () => Promise<void>;
 
   isDesignSystemOpen: boolean;
   setDesignSystemOpen: (open: boolean) => void;
@@ -831,6 +839,27 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
 
   isFamilyCompanionOpen: false,
   setFamilyCompanionOpen: (open) => set({ isFamilyCompanionOpen: open }),
+  isFamilyQrModalOpen: false,
+  setIsFamilyQrModalOpen: (open) => set({ isFamilyQrModalOpen: open }),
+  isFamilyScannerModalOpen: false,
+  setIsFamilyScannerModalOpen: (open) => set({ isFamilyScannerModalOpen: open }),
+  activePairingConnection: null,
+  setActivePairingConnection: (conn) => set({ activePairingConnection: conn }),
+  disconnectActivePairing: async () => {
+    const conn = get().activePairingConnection;
+    if (conn && conn.id) {
+      try {
+        await familyPairingService.disconnectConnection(conn.id);
+      } catch (e) {}
+    }
+    set({
+      activePairingConnection: null,
+      familyConnectionStatus: 'idle',
+      familyConnectedUserPhone: null,
+      familyConnectedUserData: null,
+    });
+    get().speak('Family companion disconnected.');
+  },
 
   isDesignSystemOpen: false,
   setDesignSystemOpen: (open) => set({ isDesignSystemOpen: open }),

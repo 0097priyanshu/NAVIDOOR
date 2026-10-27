@@ -9,6 +9,7 @@ import { SectionViewPanel } from './src/components/overlays/SectionViewPanel';
 import { VoiceOnboardingModal } from './src/components/onboarding/VoiceOnboardingModal';
 import { SOSModal } from './src/components/sos/SOSModal';
 import { FamilyCompanionModal } from './src/components/family/FamilyCompanionModal';
+import { FamilyQRCodeModal } from './src/components/family/FamilyQRCodeModal';
 import { DesignSystemModal } from './src/components/designSystem/DesignSystemModal';
 import { SectionToastNotification } from './src/components/overlays/SectionToastNotification';
 import { RoleSelectionScreen } from './src/components/onboarding/RoleSelectionScreen';
@@ -145,6 +146,7 @@ export default function App() {
         {/* 7. EMERGENCY SOS & REMOTE FAMILY COMPANION MODALS */}
         <SOSModal />
         <FamilyCompanionModal />
+        <FamilyQRCodeModal />
         <DesignSystemModal />
 
         {/* Real-time family caregiver connection request approval popup */}

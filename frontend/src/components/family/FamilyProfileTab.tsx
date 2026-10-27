@@ -14,7 +14,8 @@ export const FamilyProfileTab: React.FC = () => {
     setFamilyConnectedUserPhone, 
     setFamilyConnectedUserData,
     setUserRole, 
-    setIsFirstTimeUser
+    setIsFirstTimeUser,
+    disconnectActivePairing,
   } = useNavidoorStore();
 
   const permissions = familyConnectedUserData?.permissions || {
@@ -136,6 +137,40 @@ export const FamilyProfileTab: React.FC = () => {
                 );
               })}
             </View>
+
+            {/* Revoke Connection Button */}
+            <TouchableOpacity 
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'center',
+                alignItems: 'center',
+                backgroundColor: '#FFE4E6',
+                borderWidth: 1.5,
+                borderColor: '#E11D48',
+                borderRadius: 14,
+                paddingVertical: 12,
+                marginTop: 14,
+                gap: 8,
+              }}
+              onPress={() => {
+                triggerHaptic();
+                Alert.alert(
+                  'Revoke Connection',
+                  `Are you sure you want to disconnect from ${displayName}?`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { 
+                      text: 'Revoke', 
+                      style: 'destructive', 
+                      onPress: () => disconnectActivePairing() 
+                    }
+                  ]
+                );
+              }}
+            >
+              <LogOut size={16} color="#E11D48" />
+              <Text style={{ color: '#E11D48', fontWeight: '900', fontSize: 13 }}>Revoke Connection</Text>
+            </TouchableOpacity>
           </View>
         );
       })()}

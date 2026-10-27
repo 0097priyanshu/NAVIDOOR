@@ -5,6 +5,7 @@ const ffmpegPath = require('ffmpeg-static');
 const { getLanguageMeta } = require('../config/languages');
 
 class WhisperService {
+  constructor() {
     const macBin = path.join(__dirname, '../bin/main');
     const winBin = path.join(__dirname, '../bin/main.exe');
     this.binPath = process.env.WHISPER_BIN_PATH || (

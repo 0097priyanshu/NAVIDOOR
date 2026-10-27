@@ -2,26 +2,38 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { socketClient } from '../../services/socketClient';
+import { familyPairingService, ConnectionData } from '../../services/familyPairingService';
 import { BACKEND_URL } from '../../services/voiceAssistantBackend';
 import { Users, Check, X, ShieldAlert } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 export const FamilyRequestReceivedModal: React.FC = () => {
-  const { userRole, userPhone, speak } = useNavidoorStore();
+  const { 
+    userRole, 
+    userPhone, 
+    speak, 
+    setFamilyConnectionStatus, 
+    setFamilyConnectedUserData, 
+    setFamilyConnectedUserPhone,
+    setActivePairingConnection 
+  } = useNavidoorStore();
+
   const [pendingRequest, setPendingRequest] = useState<{
+    connectionId?: string;
     familyPhone: string;
     familyName: string;
     relationship: string;
   } | null>(null);
 
   useEffect(() => {
-    // Only run if the active role is navidoor_user
-    if (userRole !== 'navidoor_user' || !userPhone) return;
+    // Only active when in navidoor_user mode
+    if (userRole !== 'navidoor_user') return;
 
-    // 1. Fetch any pending requests immediately at launch
+    // 1. Fetch any pending requests immediately at launch from backend
     const checkPending = async () => {
       try {
-        const res = await fetch(`${BACKEND_URL}/api/user/pending-requests?phone=${encodeURIComponent(userPhone)}`);
+        const queryParam = userPhone ? `phone=${encodeURIComponent(userPhone)}` : '';
+        const res = await fetch(`${BACKEND_URL}/api/user/pending-requests?${queryParam}`);
         if (!res.ok) return;
         const contentType = res.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) return;
@@ -30,11 +42,12 @@ export const FamilyRequestReceivedModal: React.FC = () => {
         if (data.success && data.requests && data.requests.length > 0) {
           const req = data.requests[0];
           setPendingRequest({
-            familyPhone: req.fromFamilyPhone,
-            familyName: req.familyName,
-            relationship: req.relationship
+            connectionId: req.id,
+            familyPhone: req.companionPhone || req.fromFamilyPhone,
+            familyName: req.companionName || req.familyName || 'Family Caregiver',
+            relationship: req.companionRelationship || req.relationship || 'Family Companion',
           });
-          speak(`${req.familyName} wants to connect with you as a ${req.relationship}. Tap the left half of the screen to accept, or the right half to reject.`);
+          speak(`${req.companionName || req.familyName || 'A family companion'} wants to connect with you. Tap the green button to accept, or the red button to reject.`);
         }
       } catch (err) {
         // Silently handle backend fetch offline/error
@@ -42,26 +55,53 @@ export const FamilyRequestReceivedModal: React.FC = () => {
     };
     checkPending();
 
-    // 2. Register socket to listen for real-time connection requests
-    socketClient.connect();
-    socketClient.registerPhone(userPhone, 'navidoor_user');
-
-    const socket = socketClient.getSocket();
-    if (socket) {
-      socket.on('family:connectionRequest', (data: any) => {
+    // 2. Subscribe to familyPairingService for immediate zero-lag local & firestore requests
+    const unsubPairingService = familyPairingService.subscribeToIncomingRequests(userPhone || 'navidoor_device_user', (req) => {
+      if (req && req.status === 'pending') {
         try {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         } catch (e) {}
-        
-        setPendingRequest(data);
-        speak(`${data.familyName} wants to connect with you as a ${data.relationship}. Tap the left half of the screen to accept, or the right half to reject.`);
-      });
+
+        setPendingRequest({
+          connectionId: req.id,
+          familyPhone: req.companionPhone,
+          familyName: req.companionName || 'Family Companion',
+          relationship: req.companionRelationship || 'Family Companion',
+        });
+        speak(`${req.companionName || 'A family companion'} wants to connect with you. Tap the green button to accept, or the red button to reject.`);
+      }
+    });
+
+    // 3. Register socket to listen for real-time connection requests
+    socketClient.connect();
+    if (userPhone) {
+      socketClient.registerPhone(userPhone, 'navidoor_user');
+    }
+
+    const socket = socketClient.getSocket();
+    let handleSocketRequest: any = null;
+    if (socket) {
+      handleSocketRequest = (data: any) => {
+        try {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        } catch (e) {}
+
+        setPendingRequest({
+          connectionId: data.connectionId || data.id,
+          familyPhone: data.familyPhone || data.companionPhone,
+          familyName: data.familyName || data.companionName || 'Caregiver',
+          relationship: data.relationship || data.companionRelationship || 'Family Companion',
+        });
+        speak(`${data.familyName || 'A family companion'} wants to connect with you as ${data.relationship || 'companion'}. Tap Accept or Reject.`);
+      };
+
+      socket.on('family:connectionRequest', handleSocketRequest);
     }
 
     return () => {
-      const socket = socketClient.getSocket();
-      if (socket) {
-        socket.off('family:connectionRequest');
+      unsubPairingService();
+      if (socket && handleSocketRequest) {
+        socket.off('family:connectionRequest', handleSocketRequest);
       }
     };
   }, [userRole, userPhone]);
@@ -73,25 +113,49 @@ export const FamilyRequestReceivedModal: React.FC = () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     } catch (e) {}
 
+    const connId = pendingRequest.connectionId;
+
     try {
-      const response = await fetch(`${BACKEND_URL}/api/user/approve-connection`, {
+      if (approved) {
+        if (connId) {
+          await familyPairingService.approveConnection(connId);
+        }
+        setFamilyConnectionStatus('connected');
+        setFamilyConnectedUserPhone(pendingRequest.familyPhone);
+        setFamilyConnectedUserData({
+          userName: pendingRequest.familyName,
+          userPhone: pendingRequest.familyPhone,
+          relationship: pendingRequest.relationship,
+        });
+        setActivePairingConnection({
+          id: connId,
+          companionName: pendingRequest.familyName,
+          companionPhone: pendingRequest.familyPhone,
+          companionRelationship: pendingRequest.relationship,
+          status: 'connected',
+        });
+        speak('Connection request accepted. Your family companion is now connected.');
+      } else {
+        if (connId) {
+          await familyPairingService.rejectConnection(connId);
+        }
+        speak('Connection request declined.');
+      }
+
+      // Also notify backend endpoint for fallback
+      await fetch(`${BACKEND_URL}/api/user/approve-connection`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          connectionId: connId,
           userPhone,
           familyPhone: pendingRequest.familyPhone,
-          approved
-        })
+          approved,
+        }),
       });
-
-      if (response.ok) {
-        speak(approved ? 'Connection request accepted.' : 'Connection request rejected.');
-      } else {
-        speak('Failed to respond to connection request.');
-      }
     } catch (err) {
-      console.error(err);
-      speak('A connection network error occurred.');
+      console.error('[FamilyRequestReceivedModal] Approval error:', err);
+      speak(approved ? 'Connection accepted.' : 'Connection rejected.');
     } finally {
       setPendingRequest(null);
     }
@@ -112,7 +176,7 @@ export const FamilyRequestReceivedModal: React.FC = () => {
           </Text>
 
           <Text style={styles.subMessage}>
-            They will be able to monitor your location and assistant compliance checkups.
+            They will be able to monitor your location and receive emergency SOS alerts.
           </Text>
 
           <View style={styles.buttonRow}>
@@ -120,7 +184,7 @@ export const FamilyRequestReceivedModal: React.FC = () => {
             <TouchableOpacity 
               style={[styles.btn, styles.acceptBtn]} 
               onPress={() => handleResponse(true)}
-              accessibilityLabel="Accept Connection Request"
+              accessibilityLabel="Accept Connection Request from Family Companion"
               accessibilityRole="button"
             >
               <Check size={28} color="#FFFFFF" />
@@ -147,7 +211,7 @@ export const FamilyRequestReceivedModal: React.FC = () => {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: '#64748B', // Slate gray backdrop overlay
+    backgroundColor: '#64748B',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,

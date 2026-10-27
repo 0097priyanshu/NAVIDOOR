@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityInd
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { BACKEND_URL } from '../../services/voiceAssistantBackend';
 import { socketClient } from '../../services/socketClient';
-import { Users, Link, QrCode, Shield, Battery, MapPin, Activity } from 'lucide-react-native';
+import { Users, Link, QrCode, Shield, Battery, MapPin, Activity, LogOut } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 export const FamilyHomeTab: React.FC = () => {
@@ -14,7 +14,9 @@ export const FamilyHomeTab: React.FC = () => {
     familyConnectedUserPhone,
     setFamilyConnectedUserPhone,
     familyConnectedUserData,
-    setFamilyConnectedUserData
+    setFamilyConnectedUserData,
+    setIsFamilyScannerModalOpen,
+    disconnectActivePairing,
   } = useNavidoorStore();
 
   const [connectPhone, setConnectPhone] = useState('');
@@ -50,23 +52,9 @@ export const FamilyHomeTab: React.FC = () => {
           );
           if (dashRes.ok && dashRes.headers.get('content-type')?.includes('application/json')) {
             const dashData = await dashRes.json();
-            if (dashData.success) {
+            if (dashData.success && dashData.data) {
               setFamilyConnectedUserData(dashData.data);
             }
-          }
-        } else {
-          const fallbackPhone = familyConnectedUserPhone || '+91 98123 45678';
-          setFamilyConnectedUserPhone(fallbackPhone);
-          setFamilyConnectionStatus('connected');
-          if (!familyConnectedUserData) {
-            setFamilyConnectedUserData({
-              userName: 'Aarav Sharma',
-              userPhone: fallbackPhone,
-              location: { latitude: 28.6315, longitude: 77.2167, address: 'Block B, Connaught Place, New Delhi' },
-              activity: { status: 'Walking safely with AI voice assist', battery: '85%', speed: '1.2 m/s', mode: 'assist' },
-              journey: { status: 'In Progress', to: 'AIIMS Hospital', from: 'Connaught Place', started: '10:15 AM', eta: '10:45 AM' },
-              alerts: []
-            });
           }
         }
       }
@@ -76,31 +64,23 @@ export const FamilyHomeTab: React.FC = () => {
   };
 
   useEffect(() => {
-    loadDashboardData();
-
-    if (!familyConnectedUserData) {
-      setFamilyConnectedUserData({
-        userName: 'Aarav Sharma',
-        userPhone: familyConnectedUserPhone || '+91 98123 45678',
-        location: { latitude: 28.6315, longitude: 77.2167, address: 'Block B, Connaught Place, New Delhi' },
-        activity: { status: 'Walking safely with AI voice assist', battery: '85%', speed: '1.2 m/s', mode: 'assist' },
-        journey: { status: 'In Progress', to: 'AIIMS Hospital', from: 'Connaught Place', started: '10:15 AM', eta: '10:45 AM' },
-        alerts: []
-      });
-    }
-    if (familyConnectionStatus !== 'connected') {
-      setFamilyConnectionStatus('connected');
+    if (familyConnectionStatus === 'connected') {
+      loadDashboardData();
     }
 
-    // Listen to real-time socket events for connection acceptance
+    // Listen to real-time socket events for connection acceptance and revocation
     const socket = socketClient.getSocket();
-    if (socket && familyUser?.phone) {
-      socket.on('family:connectionResponse', (data: any) => {
+    let handleResponse: any = null;
+    let handleRevoked: any = null;
+
+    if (socket) {
+      handleResponse = (data: any) => {
         if (data.approved) {
           try {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           } catch (e) {}
           Alert.alert('Connection Approved', 'The NAVIDOOR User has accepted your request!');
+          setFamilyConnectionStatus('connected');
           loadDashboardData();
         } else {
           try {
@@ -109,16 +89,29 @@ export const FamilyHomeTab: React.FC = () => {
           Alert.alert('Connection Rejected', 'Your connection request was declined.');
           setFamilyConnectionStatus('rejected');
         }
-      });
+      };
+
+      handleRevoked = () => {
+        try {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        } catch (e) {}
+        Alert.alert('Disconnected', 'The connection with NAVIDOOR user has been disconnected.');
+        setFamilyConnectionStatus('idle');
+        setFamilyConnectedUserPhone(null);
+        setFamilyConnectedUserData(null);
+      };
+
+      socket.on('family:connectionResponse', handleResponse);
+      socket.on('family:connectionRevoked', handleRevoked);
     }
 
     return () => {
-      const socket = socketClient.getSocket();
       if (socket) {
-        socket.off('family:connectionResponse');
+        if (handleResponse) socket.off('family:connectionResponse', handleResponse);
+        if (handleRevoked) socket.off('family:connectionRevoked', handleRevoked);
       }
     };
-  }, [familyUser?.phone]);
+  }, [familyConnectionStatus, familyUser?.phone]);
 
   const handleConnect = async () => {
     try {
@@ -219,7 +212,14 @@ export const FamilyHomeTab: React.FC = () => {
 
             <TouchableOpacity 
               style={styles.qrBtn} 
-              onPress={() => Alert.alert('Scan QR Code', 'Scanning is simulated. You can type the phone number "+91 98123 45678" to connect to the active mock user.')}
+              onPress={() => {
+                try {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                } catch (e) {}
+                setIsFamilyScannerModalOpen(true);
+              }}
+              accessibilityLabel="Scan QR code from NAVIDOOR user device"
+              accessibilityRole="button"
             >
               <QrCode size={20} color="#FFFFFF" />
               <Text style={styles.qrBtnText}>Scan QR</Text>
@@ -237,17 +237,22 @@ export const FamilyHomeTab: React.FC = () => {
           </View>
           
           <Text style={styles.cardDesc}>
-            A connection request has been sent to <Text style={styles.highlightText}>{familyConnectedUserPhone}</Text>.
+            A connection request has been sent to <Text style={styles.highlightText}>{familyConnectedUserPhone || 'the NAVIDOOR user'}</Text>.
           </Text>
 
           <View style={styles.pendingIndicatorBox}>
             <ActivityIndicator size="large" color="#F59E0B" style={{ marginBottom: 12 }} />
-            <Text style={styles.pendingIndicatorText}>Waiting for user approval...</Text>
+            <Text style={styles.pendingIndicatorText}>Waiting for user approval on their device...</Text>
           </View>
 
-          <TouchableOpacity style={[styles.connectBtn, { backgroundColor: '#64748B' }]} onPress={() => loadDashboardData()}>
-            <Text style={styles.connectBtnText}>Check Approval Status</Text>
-          </TouchableOpacity>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={[styles.connectBtn, { backgroundColor: '#64748B', flex: 1 }]} onPress={() => loadDashboardData()}>
+              <Text style={styles.connectBtnText}>Check Status</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.connectBtn, { backgroundColor: '#E11D48', flex: 1 }]} onPress={() => setFamilyConnectionStatus('idle')}>
+              <Text style={styles.connectBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -270,13 +275,13 @@ export const FamilyHomeTab: React.FC = () => {
       )}
 
       {/* 4. CONNECTED STATE */}
-      {(familyConnectionStatus === 'connected' || !familyConnectionStatus || familyConnectionStatus === 'idle') && (() => {
+      {familyConnectionStatus === 'connected' && (() => {
         const userData = familyConnectedUserData || {
-          userName: 'Aarav Sharma',
-          userPhone: familyConnectedUserPhone || '+91 98123 45678',
-          location: { latitude: 28.6315, longitude: 77.2167, address: 'Block B, Connaught Place, New Delhi' },
-          activity: { status: 'Walking safely with AI voice assist', battery: '85%', speed: '1.2 m/s', mode: 'assist' },
-          journey: { status: 'In Progress', to: 'AIIMS Hospital', from: 'Connaught Place', started: '10:15 AM', eta: '10:45 AM' },
+          userName: 'NAVIDOOR User',
+          userPhone: familyConnectedUserPhone || '',
+          location: { latitude: 28.6315, longitude: 77.2167, address: 'Connaught Place, New Delhi' },
+          activity: { status: 'Assisted Mobility Active', battery: '85%', speed: '1.2 m/s', mode: 'assist' },
+          journey: { status: 'Active Navigation', to: 'Safe Destination', from: 'Current Location', started: 'Just now', eta: '15 min' },
           alerts: []
         };
         const displayName = userData.name || userData.userName || 'Aarav Sharma';
@@ -355,6 +360,33 @@ export const FamilyHomeTab: React.FC = () => {
                 </Text>
               </View>
             </View>
+
+            {/* Disconnect Option */}
+            <TouchableOpacity 
+              style={styles.disconnectCardBtn}
+              onPress={() => {
+                try {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                } catch (e) {}
+                Alert.alert(
+                  'Disconnect User',
+                  `Revoke connection with ${displayName}?`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { 
+                      text: 'Disconnect', 
+                      style: 'destructive', 
+                      onPress: () => disconnectActivePairing() 
+                    }
+                  ]
+                );
+              }}
+              accessibilityLabel="Disconnect from NAVIDOOR user"
+              accessibilityRole="button"
+            >
+              <LogOut size={18} color="#FFFFFF" />
+              <Text style={styles.disconnectCardBtnText}>DISCONNECT FROM NAVIDOOR USER</Text>
+            </TouchableOpacity>
           </>
         );
       })()}
@@ -646,5 +678,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     lineHeight: 18,
+  },
+  disconnectCardBtn: {
+    backgroundColor: '#E11D48',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 18,
+    gap: 8,
+    marginTop: 16,
+    minHeight: 48,
+  },
+  disconnectCardBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 13,
+    letterSpacing: 0.5,
   },
 });

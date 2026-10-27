@@ -16,6 +16,7 @@ import { FamilyLocationTab } from './FamilyLocationTab';
 import { FamilyActivityTab } from './FamilyActivityTab';
 import { FamilyAlertsTab } from './FamilyAlertsTab';
 import { FamilyProfileTab } from './FamilyProfileTab';
+import { FamilyQRScannerModal } from './FamilyQRScannerModal';
 import { Home, MapPin, Activity, AlertTriangle, User } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
@@ -144,6 +145,9 @@ export const FamilyModeContainer: React.FC = () => {
       <View style={styles.screenContent}>
         {renderActiveTab()}
       </View>
+
+      {/* QR Code Scanner for Pairing */}
+      <FamilyQRScannerModal />
 
       {/* Continuous Semi-Circle Arc Wheel Navbar */}
       <View style={styles.wheelRootContainer} pointerEvents="box-none">

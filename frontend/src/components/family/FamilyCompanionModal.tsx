@@ -1,14 +1,58 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Alert } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { ACCESSIBILITY } from '../../theme/designSystem';
-import { Users, Mic, Volume2, X, ShieldCheck, MessageSquare } from 'lucide-react-native';
+import { Users, Mic, Volume2, X, ShieldCheck, MessageSquare, QrCode, LogOut } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 
 export const FamilyCompanionModal: React.FC = () => {
-  const { isFamilyCompanionOpen, setFamilyCompanionOpen, speak } = useNavidoorStore();
+  const { 
+    isFamilyCompanionOpen, 
+    setFamilyCompanionOpen, 
+    setIsFamilyQrModalOpen,
+    familyConnectionStatus,
+    familyConnectedUserData,
+    disconnectActivePairing,
+    speak 
+  } = useNavidoorStore();
+
   const [isAudioConnected, setIsAudioConnected] = useState(true);
 
   if (!isFamilyCompanionOpen) return null;
+
+  const isConnected = familyConnectionStatus === 'connected';
+  const companionName = familyConnectedUserData?.userName || familyConnectedUserData?.name || 'Sunita Sharma';
+  const companionRelation = familyConnectedUserData?.relationship || 'Daughter';
+
+  const handleOpenQr = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (e) {}
+    setFamilyCompanionOpen(false);
+    setIsFamilyQrModalOpen(true);
+  };
+
+  const handleDisconnect = () => {
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    } catch (e) {}
+
+    Alert.alert(
+      'Disconnect Companion',
+      `Revoke connection with ${companionName}? They will no longer have access to live location or alerts.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Disconnect', 
+          style: 'destructive', 
+          onPress: async () => {
+            await disconnectActivePairing();
+            setFamilyCompanionOpen(false);
+          } 
+        }
+      ]
+    );
+  };
 
   return (
     <Modal visible={isFamilyCompanionOpen} transparent statusBarTranslucent animationType="slide">
@@ -20,55 +64,85 @@ export const FamilyCompanionModal: React.FC = () => {
               <Users size={24} color="#0284C7" />
               <Text style={styles.headerTitle}>REMOTE FAMILY COMPANION</Text>
             </View>
-            <TouchableOpacity onPress={() => setFamilyCompanionOpen(false)} style={styles.closeBtn}>
+            <TouchableOpacity 
+              onPress={() => setFamilyCompanionOpen(false)} 
+              style={styles.closeBtn}
+              accessibilityLabel="Close Family Companion Modal"
+              accessibilityRole="button"
+            >
               <X size={24} color="#0F172A" />
             </TouchableOpacity>
           </View>
 
-          {/* Connection Status Banner */}
-          <View style={styles.statusBanner}>
-            <View style={styles.livePulseDot} />
-            <Text style={styles.statusText}>Sunita Sharma Connected (Live Video Shared)</Text>
-          </View>
+          {isConnected ? (
+            <>
+              {/* Connection Status Banner */}
+              <View style={styles.statusBanner}>
+                <View style={styles.livePulseDot} />
+                <Text style={styles.statusText}>{companionName} Connected ({companionRelation})</Text>
+              </View>
 
-          {/* Remote Caretaker Voice Note */}
-          <View style={styles.voiceNoteCard}>
-            <View style={styles.noteTop}>
-              <MessageSquare size={16} color="#0284C7" />
-              <Text style={styles.noteSender}>Sunita Sharma (Daughter):</Text>
+              {/* Remote Caretaker Voice Note */}
+              <View style={styles.voiceNoteCard}>
+                <View style={styles.noteTop}>
+                  <MessageSquare size={16} color="#0284C7" />
+                  <Text style={styles.noteSender}>{companionName} ({companionRelation}):</Text>
+                </View>
+                <Text style={styles.noteText}>
+                  "I am watching your stream! The entrance is directly to your right, next to the main gate."
+                </Text>
+                <TouchableOpacity 
+                  style={styles.listenBtn}
+                  onPress={() => speak(`${companionName} says: The entrance is directly to your right, next to the main gate.`)}
+                  accessibilityLabel="Listen to voice note from caregiver"
+                  accessibilityRole="button"
+                >
+                  <Volume2 size={16} color="#FFFFFF" />
+                  <Text style={styles.listenBtnText}>Listen Voice Note</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Direct Controls */}
+              <View style={styles.controlsRow}>
+                <TouchableOpacity
+                  style={[styles.ctrlBtn, { backgroundColor: isAudioConnected ? '#0284C7' : '#64748B' }]}
+                  onPress={() => setIsAudioConnected(!isAudioConnected)}
+                  accessibilityLabel={isAudioConnected ? "Mute companion microphone" : "Unmute companion microphone"}
+                  accessibilityRole="button"
+                >
+                  <Mic size={20} color="#FFFFFF" />
+                  <Text style={styles.ctrlBtnText}>{isAudioConnected ? 'Mic Live' : 'Muted'}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.ctrlBtn, styles.disconnectBtn]}
+                  onPress={handleDisconnect}
+                  accessibilityLabel="Revoke connection with family companion"
+                  accessibilityRole="button"
+                >
+                  <LogOut size={20} color="#FFFFFF" />
+                  <Text style={styles.disconnectBtnText}>Disconnect</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <View style={styles.notConnectedBox}>
+              <Users size={48} color="#94A3B8" style={{ marginBottom: 10 }} />
+              <Text style={styles.notConnectedTitle}>No Companion Connected</Text>
+              <Text style={styles.notConnectedText}>
+                Generate a temporary 5-minute QR code so your trusted caregiver can scan and connect with your device.
+              </Text>
+              <TouchableOpacity 
+                style={styles.generateQrBtn}
+                onPress={handleOpenQr}
+                accessibilityLabel="Generate pairing QR code for companion"
+                accessibilityRole="button"
+              >
+                <QrCode size={20} color="#FFFFFF" />
+                <Text style={styles.generateQrBtnText}>GENERATE PAIRING QR CODE</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.noteText}>
-              "I am watching your stream! The entrance is directly to your right, next to the main gate."
-            </Text>
-            <TouchableOpacity 
-              style={styles.listenBtn}
-              onPress={() => speak("Sunita says: The entrance is directly to your right, next to the main gate.")}
-            >
-              <Volume2 size={16} color="#FFFFFF" />
-              <Text style={styles.listenBtnText}>Listen Voice Note</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Direct Controls */}
-          <View style={styles.controlsRow}>
-            <TouchableOpacity
-              style={[styles.ctrlBtn, { backgroundColor: isAudioConnected ? '#0284C7' : '#64748B' }]}
-              onPress={() => setIsAudioConnected(!isAudioConnected)}
-            >
-              <Mic size={20} color="#FFFFFF" />
-              <Text style={styles.ctrlBtnText}>{isAudioConnected ? 'Mic Live' : 'Muted'}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.ctrlBtn, styles.closeCompanionBtn]}
-              onPress={() => setFamilyCompanionOpen(false)}
-              accessibilityLabel="Close Family Companion Session"
-              accessibilityRole="button"
-            >
-              <ShieldCheck size={20} color="#FFFFFF" />
-              <Text style={styles.closeCompanionBtnText}>Close Companion</Text>
-            </TouchableOpacity>
-          </View>
+          )}
         </View>
       </View>
     </Modal>
@@ -136,7 +210,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: '#0284C7',
+    backgroundColor: '#10B981',
   },
   statusText: {
     color: '#0284C7',
@@ -203,13 +277,50 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 14,
   },
-  closeCompanionBtn: {
+  disconnectBtn: {
     backgroundColor: '#E11D48',
   },
-  closeCompanionBtnText: {
+  disconnectBtnText: {
     color: '#FFFFFF',
     fontWeight: '900',
     fontSize: 14,
+    letterSpacing: 0.5,
+  },
+  notConnectedBox: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+  },
+  notConnectedTitle: {
+    color: '#0F172A',
+    fontSize: 16,
+    fontWeight: '900',
+    marginBottom: 6,
+  },
+  notConnectedText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    textAlign: 'center',
+    marginBottom: 18,
+  },
+  generateQrBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0284C7',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: ACCESSIBILITY.borderRadiusButton,
+    gap: 10,
+    width: '100%',
+    minHeight: ACCESSIBILITY.minTouchTargetSize,
+  },
+  generateQrBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 13,
     letterSpacing: 0.5,
   },
 });
