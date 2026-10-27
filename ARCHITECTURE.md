@@ -10,7 +10,7 @@ It runs as a cross-platform mobile application (React Native / Expo with a paral
 It communicates with local microservices running on your PC over LAN (Wi-Fi):
 - Node.js Express server on port `5001`
 - AI4Bharat IndicF5 neural TTS microservice on port `5002`
-- YOLOv11 Computer Vision server on port `5003`
+- YOLOv11 Dual-Model Computer Vision server on port `5003` (80 COCO classes + custom directional staircase model)
 - Local Ollama LLM runtime on port `11434`
 
 ---
@@ -252,6 +252,9 @@ The camera interface utilizes platform-specific safe-area insets (`Platform.OS =
 | POST | `/detect/medicine` | YOLOv11 (5003) | Detects medicine bottles, pill strips, and labels |
 | POST | `/api/family/login` | Backend (5001) | Caregiver companion portal authentication |
 | POST | `/api/family/register` | Backend (5001) | Caregiver companion registration |
+| POST | `/api/family/register-token` | Backend (5001) | Register secure 5-minute single-use pairing QR token |
+| POST | `/api/family/claim-token` | Backend (5001) | Validate & claim pairing token when companion scans QR code |
+| POST | `/api/family/update-connection` | Backend (5001) | Approve, reject, or disconnect active family pairings |
 | POST | `/api/family/connect` | Backend (5001) | Submit pairing request to user by phone number |
 | GET | `/api/family/dashboard-data` | Backend (5001) | Caregiver dashboard metrics (battery, journey, location) |
 | WS | Socket.IO Gateway | Backend (5001) | Real-time GPS location streaming, SOS alerts, pairing events |
@@ -276,3 +279,33 @@ The camera interface utilizes platform-specific safe-area insets (`Platform.OS =
 | [`yolo/yolo_server.py`](file:///c:/Users/Aadya/NAVIDOOR/yolo/yolo_server.py) | Python YOLOv11 server with pinhole distance estimation and corridor guidance |
 | [`yolo/core/distance_estimator.py`](file:///c:/Users/Aadya/NAVIDOOR/yolo/core/distance_estimator.py) | 3D pinhole distance calculator and left/center/right safe corridor analyzer |
 
+
+---
+
+## 7. YOLOv11 Dual-Model Architecture & Directional Staircase Detection
+
+NAVIDOOR features a specialized **Dual-Model Vision Pipeline** running inside `yolo/core/detector.py`:
+1. **Primary General Model (`yolo11n.pt`)**:
+   - Detects all 80 standard COCO classes (pedestrians, cars, buses, bicycles, furniture, doors, etc.) at native 640px resolution.
+2. **Specialized Directional Staircase Model (`models/yolo11n_staircase.pt`)**:
+   - Fine-tuned on 502 annotated staircase samples to detect:
+     - `upstair`: Stairs ascending ahead (1.2m calibrated height)
+     - `downstair`: Stairs descending ahead (1.0m calibrated height — elevated hazard priority to prevent falls)
+   - Evaluated at **70.5% mAP@50** and ~14.9ms inference latency on CPU.
+3. **Detection Fusion & Priority Sorting**:
+   - Both models execute in parallel on the live camera frame (~30ms total latency).
+   - Directional stairs suppress generic lower-confidence detections and immediately trigger tactile vibration + directional spoken cues across 10 Indian languages.
+
+---
+
+## 8. Family Companion QR Pairing & Dual-Sync Architecture
+
+The Family Companion Mode connects visually impaired users with their family caregivers through a secure, zero-friction pairing flow:
+1. **Single-Use 5-Minute QR Tokens**:
+   - When the user taps *Pair Family Companion*, a cryptographically randomized token (`pair_{timestamp}_{randomHex}`) is generated.
+   - Strictly expires after 300 seconds (5 minutes) and is single-use.
+2. **Real-Time Dual Synchronization**:
+   - **Local LAN / Socket.IO**: Immediate peer-to-peer connection request and approval chimes on the local network.
+   - **Cloud Firestore**: Real-time cloud sync (`onSnapshot` on `pairing_tokens/{token}`) allowing caregivers to monitor their family member even when on separate networks (e.g. mobile 5G/LTE).
+3. **Caregiver Safety Controls**:
+   - Live GPS location tracking, active journey route monitoring, battery telemetry, and instant audible Emergency SOS alerts.

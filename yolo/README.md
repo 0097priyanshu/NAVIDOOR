@@ -1,47 +1,60 @@
-# NAVIDOOR – YOLOv11 AI Vision Assist Module
+# NAVIDOOR — YOLOv11 AI Vision Assist Module
 
 The **YOLOv11 AI Vision Assist Module** provides real-time computer vision inference, obstacle and hazard detection, 3D pinhole distance estimation, safe walking corridor clearance analysis, and multilingual spoken guidance for blind, visually impaired, and elderly users.
 
-It is powered by official state-of-the-art **Ultralytics YOLOv11** (`yolo11n.pt`) and runs as an independent high-performance Python microservice on port **5003**.
+It is powered by a high-performance **Dual-Model YOLOv11 Architecture** running as an independent Python microservice on port **5003**.
 
 ---
 
-## 🌟 Capabilities & Features
+## 🚀 Capabilities & Features
 
-1. **Invisible Background Vision Processing**:
-   - Detection, 3D pinhole distance calculations, and corridor analysis run completely in the background without cluttering the screen with visual bounding box overlays.
-   - Eliminates visual distractions while providing rich audio and tactile feedback to visually impaired users.
-2. **Unified Left `SCAN` Button Integration**:
+1. **Dual-Model Vision Engine (COCO + Custom Directional Staircase)**:
+   - **Primary Model (`yolo11n.pt`)**: 80 standard COCO classes (pedestrians, vehicles, obstacles, furniture, doors, etc.).
+   - **Specialized Model (`models/yolo11n_staircase.pt`)**: Custom fine-tuned YOLO11 nano model specifically trained on 502 annotated staircase samples to detect:
+     - `upstair` (stairs ascending ahead)
+     - `downstair` (stairs descending ahead — critical fall risk)
+   - Runs both models concurrently in ~30ms total on CPU, seamlessly merging detections.
+2. **Invisible Background Vision Processing**:
+   - Detection, 3D distance calculations, and corridor analysis run completely in the background without cluttering the mobile camera canvas with bounding box overlays.
+   - Eliminates visual distractions while providing rich audio and tactile haptic feedback to visually impaired users.
+3. **Unified Left `SCAN` Button Integration**:
    - Integrated with the mobile client's single left `SCAN` button (`CameraControlsOverlay`), triggering high-resolution capture, instant inference, and immediate spoken guidance.
-3. **Obstacle & Hazard Detection (YOLOv11 Nano)**:
-   - Pedestrians, vehicles (cars, buses, auto-rickshaws, motorcycles, bicycles).
-   - Architectural elements: doors, open doorways, stairs, ramps, elevators, poles.
-   - Ground hazards: puddles, potholes, open manholes, road dividers.
-4. **Indian Public Transit Assistant**:
-   - Detects incoming city buses and regional state transport buses.
-   - Localizes bus front door and boarding zones.
-5. **AI Medicine Assistant**:
-   - Detects medicine bottles, pill containers, and blister packaging strips.
-6. **Pinhole Geometry 3D Distance Estimation & Dynamic Audio Beeps**:
+4. **Pinhole Geometry 3D Distance Estimation & Dynamic Audio Beeps**:
    - Calculates real-world distance using physical object dimensions and camera focal geometry:
      $$\text{Distance} = \frac{H_{\text{real}} \cdot f_{\text{camera}}}{h_{\text{bbox}}}$$
+   - Calibrated heights: `upstair` = 1.2m, `downstair` = 1.0m, `person` = 1.7m, `door` = 2.0m.
    - Classifies risk levels for immediate tactile/audio feedback:
      - `CRITICAL` (< 1.2 meters): Rapid audio beeping + urgent collision alert.
      - `WARNING` (1.2m – 2.5m): Medium-paced audio beeping + approaching obstacle hint.
      - `INFO` (2.5m – 5.0m): Facility or landmark announcement.
-7. **Safe Walking Path Corridor Analysis**:
+5. **Safe Walking Path Corridor Analysis**:
    - Divides the live camera frame into 3 vertical zones: `LEFT`, `CENTER`, and `RIGHT`.
    - Computes corridor clearance and recommends path deviations (e.g. *"Obstacle ahead. Step right."*).
-8. **Multilingual Spoken Announcements**:
-   - Formats voice guidance cues across **English**, **Hindi** (हिंदी), **Marathi** (मराठी), and all 10 supported regional languages.
+6. **Multilingual Spoken Announcements (10 Indian Languages)**:
+   - Formats voice guidance cues across **English**, **Hindi** (हिंदी), **Marathi** (मराठी), **Gujarati** (ગુજરાતી), **Punjabi** (ਪੰਜਾਬੀ), **Bengali** (বাংলা), **Tamil** (தமிழ்), **Telugu** (తెలుగు), **Kannada** (ಕನ್ನಡ), and **Malayalam** (മലയാളം).
 
 ---
 
-## 🚀 How to Run the YOLOv11 Server
+## 📊 Fine-Tuned Staircase Model Metrics
+
+| Metric | Value |
+| :--- | :--- |
+| **Model Base** | Ultralytics YOLO11 Nano (`yolo11n.pt`) |
+| **Dataset** | 502 Pascal VOC XML + JPG image pairs (402 train / 100 val) |
+| **Classes** | `0: upstair`, `1: downstair` |
+| **Overall mAP@50** | **70.5% (0.705)** |
+| `upstair` mAP@50 | **69.0% (0.690)** |
+| `downstair` mAP@50 | **71.9% (0.719)** |
+| **Inference Latency** | **~14.9 ms** per frame on CPU |
+| **Model File Size** | **5.46 MB** (`models/yolo11n_staircase.pt`) |
+
+---
+
+## 🛠️ How to Run the YOLOv11 Server
 
 ### 1. Install Dependencies
 ```bash
-python -m pip install -r yolo/requirements.txt
+py -3.10 -m pip install -r yolo/requirements.txt
 ```
 
 ### 2. Run the Verification Test Suite
@@ -70,10 +83,11 @@ py -3.10 yolo/yolo_server.py
 ```json
 {
   "status": "online",
-  "service": "NAVIDOOR YOLOv11 AI Vision Service",
+  "service": "NAVIDOOR YOLO AI Vision Service",
   "port": 5003,
-  "engine": "ultralytics-yolo11",
-  "model_loaded": true
+  "engine": "ultralytics",
+  "model_loaded": true,
+  "confidence_threshold": 0.28
 }
 ```
 
@@ -92,48 +106,46 @@ py -3.10 yolo/yolo_server.py
   "success": true,
   "detections": [
     {
-      "class": "person",
-      "confidence": 0.91,
-      "bbox": [150, 100, 320, 420],
-      "distance_meters": 2.1,
-      "risk_level": "WARNING",
-      "zone": "CENTER"
+      "class": "downstair",
+      "class_id": 1,
+      "confidence": 0.64,
+      "bbox": [33, 123, 189, 187],
+      "distance_meters": 4.8,
+      "risk_level": "INFO",
+      "zone": "CENTER",
+      "source": "staircase"
     }
   ],
   "safe_path": {
-    "recommended_direction": "RIGHT",
-    "guidance_hint": "समोर अडथळा आहे. उजवीकडे व्हा.",
+    "recommended_direction": "CAUTION",
+    "path_state": "OBSTACLE_DETECTED",
     "corridors": {
-      "left": { "clear": false, "count": 1 },
+      "left": { "clear": true, "count": 0 },
       "center": { "clear": false, "count": 1 },
       "right": { "clear": true, "count": 0 }
     }
   },
-  "voice_guidance": "समोर व्यक्ती २.१ मीटर अंतरावर आहे. उजवीकडे व्हा.",
+  "voice_guidance": "अगदी समोर 4.8 मीटरवर खाली जाणाऱ्या पायऱ्या आहे.",
   "latency_ms": 28.4
 }
 ```
 
-### 3. Bus & Door Detection
-`POST /detect/bus`
-- Localizes bus front door entry vectors and boarding guidance.
-
-### 4. Medicine Detection
-`POST /detect/medicine`
-- Identifies pill bottles, blister strips, and dosage labels.
-
 ---
 
-## 🏗 Module Structure
+## 📂 Module Structure
 
 ```text
 yolo/
 ├── yolo_server.py             # Flask inference server (Port 5003)
 ├── test_yolo.py               # Automated unit test suite
 ├── requirements.txt           # ultralytics, torch, opencv-python, flask
-├── yolo11n.pt                 # YOLOv11 Nano model weights
+├── models/
+│   ├── yolo11n.pt             # Primary YOLOv11 Nano general weights (80 COCO classes)
+│   └── yolo11n_staircase.pt   # Fine-tuned directional staircase model (upstair / downstair)
 └── core/
+    ├── detector.py            # Dual-model inference orchestrator
     ├── distance_estimator.py   # Pinhole distance & 3-corridor analysis
-    └── indian_labels.py        # Indian contextual classes & translations
+    ├── scene_analyzer.py      # Spatial clearance & path validation
+    ├── guidance_generator.py  # 10-language voice alert synthesis
+    └── indian_labels.py       # Indian contextual classes & translations
 ```
-
