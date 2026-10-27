@@ -31,8 +31,24 @@ class YoloClientService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageBase64, language }),
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(4000),
       });
+
+      if (response.status === 429) {
+        return {
+          success: false,
+          busy: true,
+          error: 'YOLO engine busy, frame dropped',
+          detections: [],
+          safe_path: {
+            path_state: 'UNKNOWN',
+            recommended_direction: 'STOP',
+            guidance_hint: 'Processing busy. Path unverified.',
+          },
+          voice_guidance: '',
+          latency_ms: 0,
+        };
+      }
 
       if (!response.ok) {
         throw new Error(`YOLO service responded with HTTP ${response.status}`);
@@ -45,8 +61,13 @@ class YoloClientService {
         success: false,
         error: error.message,
         detections: [],
-        safe_path: { recommended_direction: 'FORWARD' },
+        safe_path: {
+          path_state: 'UNKNOWN',
+          recommended_direction: 'STOP',
+          guidance_hint: 'Perception offline. Path unverified.',
+        },
         voice_guidance: '',
+        latency_ms: 0,
       };
     }
   }
@@ -57,8 +78,13 @@ class YoloClientService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageBase64, language }),
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(4000),
       });
+
+      if (response.status === 429) {
+        return { success: false, busy: true, bus_arrived: false };
+      }
+
       return await response.json();
     } catch (error) {
       return { success: false, error: error.message, bus_arrived: false };

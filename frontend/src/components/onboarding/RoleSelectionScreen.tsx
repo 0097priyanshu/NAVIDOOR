@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { Sparkles, Eye, ShieldCheck, Heart, ChevronRight } from 'lucide-react-native';
@@ -25,7 +26,7 @@ export const RoleSelectionScreen: React.FC = () => {
 
   return (
     <View style={styles.fullScreenWrapper}>
-      <StatusBar barStyle="light-content" backgroundColor="#64748B" />
+      <StatusBar style="light" />
       <SafeAreaView style={styles.root}>
         <ScrollView 
           style={styles.scroll} 

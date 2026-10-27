@@ -263,7 +263,7 @@ export const RotatingAIModeWheel: React.FC = () => {
                 accessibilityRole="button"
                 accessibilityLabel={`${item.label} mode selected`}
               >
-                {React.cloneElement(item.icon as React.ReactElement, {
+                {React.cloneElement(item.icon as React.ReactElement<any>, {
                   color: isActive ? '#FFFFFF' : '#0F172A',
                 })}
               </TouchableOpacity>

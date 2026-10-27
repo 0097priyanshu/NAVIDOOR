@@ -128,7 +128,7 @@ py -3.10 yolo/yolo_server.py
 
 ```text
 yolo/
-├── yolo_server.py             # FastAPI / Flask inference server (Port 5003)
+├── yolo_server.py             # Flask inference server (Port 5003)
 ├── test_yolo.py               # Automated unit test suite
 ├── requirements.txt           # ultralytics, torch, opencv-python, flask
 ├── yolo11n.pt                 # YOLOv11 Nano model weights
