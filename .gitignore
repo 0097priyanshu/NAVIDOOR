@@ -37,6 +37,7 @@ __pycache__/
 *.onnx
 *.pt
 !yolo/models/yolo11n_staircase.pt
+!yolo/models/yolo11n_pothole.pt
 
 # YOLO Training Datasets and Runs
 yolo/dataset/
@@ -48,3 +49,4 @@ yolo/runs/
 # OS metadata
 .DS_Store
 Thumbs.db
+

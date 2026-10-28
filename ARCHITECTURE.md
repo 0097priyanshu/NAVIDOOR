@@ -10,7 +10,7 @@ It runs as a cross-platform mobile application (React Native / Expo with a paral
 It communicates with local microservices running on your PC over LAN (Wi-Fi):
 - Node.js Express server on port `5001`
 - AI4Bharat IndicF5 neural TTS microservice on port `5002`
-- YOLOv11 Dual-Model Computer Vision server on port `5003` (80 COCO classes + custom directional staircase model)
+- YOLOv11 Triple-Model Computer Vision server on port `5003` (80 COCO classes + custom directional staircase + fine-tuned pothole hazard model)
 - Local Ollama LLM runtime on port `11434`
 
 ---
@@ -282,19 +282,23 @@ The camera interface utilizes platform-specific safe-area insets (`Platform.OS =
 
 ---
 
-## 7. YOLOv11 Dual-Model Architecture & Directional Staircase Detection
+## 7. YOLOv11 Triple-Model Architecture & Specialized Hazard Detection
 
-NAVIDOOR features a specialized **Dual-Model Vision Pipeline** running inside `yolo/core/detector.py`:
-1. **Primary General Model (`yolo11n.pt`)**:
+NAVIDOOR features a specialized **Triple-Model Vision Pipeline** running inside yolo/core/detector.py:
+1. **Primary General Model (yolo11n.pt)**:
    - Detects all 80 standard COCO classes (pedestrians, cars, buses, bicycles, furniture, doors, etc.) at native 640px resolution.
-2. **Specialized Directional Staircase Model (`models/yolo11n_staircase.pt`)**:
+2. **Specialized Directional Staircase Model (models/yolo11n_staircase.pt)**:
    - Fine-tuned on 502 annotated staircase samples to detect:
-     - `upstair`: Stairs ascending ahead (1.2m calibrated height)
-     - `downstair`: Stairs descending ahead (1.0m calibrated height — elevated hazard priority to prevent falls)
+     - upstair: Stairs ascending ahead (1.2m calibrated height)
+     - downstair: Stairs descending ahead (1.0m calibrated height � elevated hazard priority to prevent falls)
    - Evaluated at **70.5% mAP@50** and ~14.9ms inference latency on CPU.
-3. **Detection Fusion & Priority Sorting**:
-   - Both models execute in parallel on the live camera frame (~30ms total latency).
-   - Directional stairs suppress generic lower-confidence detections and immediately trigger tactile vibration + directional spoken cues across 10 Indian languages.
+3. **Specialized Pothole Road Hazard Model (models/yolo11n_pothole.pt)**:
+   - Fine-tuned on 665 Roboflow annotated samples to detect:
+     - pothole: Road cavity, drain hole, or surface crater (0.15m ground plane calibrated height � critical trip & stumble hazard)
+   - Evaluated at **78.0% mAP@50** on the test split (82.9% precision) and runs concurrently on CPU.
+4. **Detection Fusion & Priority Sorting**:
+   - Models execute in parallel on the live camera frame.
+   - Potholes and directional stairs are treated as high-priority ground hazards in yolo/core/distance_estimator.py, triggering tactile vibration and localized voice guidance across 10 Indian languages (e.g. *"Pothole 0.4m directly ahead. Please stop."*).
 
 ---
 
@@ -309,3 +313,4 @@ The Family Companion Mode connects visually impaired users with their family car
    - **Cloud Firestore**: Real-time cloud sync (`onSnapshot` on `pairing_tokens/{token}`) allowing caregivers to monitor their family member even when on separate networks (e.g. mobile 5G/LTE).
 3. **Caregiver Safety Controls**:
    - Live GPS location tracking, active journey route monitoring, battery telemetry, and instant audible Emergency SOS alerts.
+
