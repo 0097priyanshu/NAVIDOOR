@@ -127,12 +127,32 @@ def run_tests():
         "source": "pothole"
     }]
     pothole_path = detector.scene_analyzer.analyze_clearance(pothole_dets, 640, 480)
-    assert pothole_path["path_state"] == "PATH_OBSTRUCTED", "Pothole ahead should yield OBSTACLE_DETECTED!"
+    assert pothole_path["path_state"] == "PATH_OBSTRUCTED", "Pothole ahead should yield PATH_OBSTRUCTED!"
     for lang in ['en', 'hi', 'ta', 'mr', 'kn']:
         cue = detector.guidance_generator.generate_spoken_guidance(pothole_dets, pothole_path, language=lang)
         print(f"Pothole Alert ({lang.upper()}): {cue}")
         assert len(cue) > 0, f"Pothole alert should generate guidance for {lang}"
     print("[PASS] Pothole ground hazard correctly triggers urgent accessibility alert.")
+
+    # 9. Test Pedestrian Crosswalk Landmark Detection & Spoken Guidance
+    print("\n--- Testing Crosswalk Landmark Detection & Guidance ---")
+    crosswalk_dets = [{
+        "class": "crosswalk",
+        "class_id": 0,
+        "confidence": 0.85,
+        "bbox": [150, 250, 490, 440],
+        "normalized_bbox": [0.23, 0.52, 0.77, 0.92],
+        "distance_meters": 2.5,
+        "risk_level": "WARNING",
+        "zone": "CENTER",
+        "source": "crosswalk"
+    }]
+    crosswalk_path = detector.scene_analyzer.analyze_clearance(crosswalk_dets, 640, 480)
+    for lang in ['en', 'hi', 'ta', 'mr', 'kn', 'te', 'bn', 'gu', 'pa', 'ml']:
+        cue = detector.guidance_generator.generate_spoken_guidance(crosswalk_dets, crosswalk_path, language=lang)
+        print(f"Crosswalk Guidance ({lang.upper()}): {cue}")
+        assert len(cue) > 0, f"Crosswalk guidance should generate speech for {lang}"
+    print("[PASS] Pedestrian crosswalk correctly detected with multilingual guidance cues.")
 
     print("\n" + "=" * 60)
 
