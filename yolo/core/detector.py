@@ -1,7 +1,7 @@
 """
 NAVIDOOR YOLOv11 / YOLOv8 AI Vision Detection Engine
-Loads pre-trained YOLO weights and fine-tuned staircase models, processes camera frames,
-estimates distances, and delivers structured bounding boxes and voice accessibility alerts.
+Loads pre-trained YOLO weights, fine-tuned staircase models, and fine-tuned pothole models,
+processes camera frames, estimates distances, and delivers structured bounding boxes and voice accessibility alerts.
 """
 
 import os
@@ -18,6 +18,7 @@ class YOLODetector:
         self,
         model_name: str = "yolo11n.pt",
         staircase_model_name: str = "yolo11n_staircase.pt",
+        pothole_model_name: str = "yolo11n_pothole.pt",
         confidence_threshold: float = 0.28,
         models_dir: str = None
     ):
@@ -33,14 +34,16 @@ class YOLODetector:
 
         self.model_path = os.path.join(self.models_dir, model_name)
         self.staircase_model_path = os.path.join(self.models_dir, staircase_model_name)
+        self.pothole_model_path = os.path.join(self.models_dir, pothole_model_name)
         
         self.model = None
         self.staircase_model = None
+        self.pothole_model = None
         self.is_ultralytics_loaded = False
-        self._initialize_models(model_name, staircase_model_name)
+        self._initialize_models(model_name, staircase_model_name, pothole_model_name)
 
-    def _initialize_models(self, model_name: str, staircase_model_name: str):
-        """Loads primary general model and fine-tuned staircase model."""
+    def _initialize_models(self, model_name: str, staircase_model_name: str, pothole_model_name: str):
+        """Loads primary general model, fine-tuned staircase model, and fine-tuned pothole model."""
         try:
             from ultralytics import YOLO
             target = self.model_path if os.path.exists(self.model_path) else model_name
@@ -56,6 +59,14 @@ class YOLODetector:
             else:
                 self.staircase_model = None
                 print(f"[YOLO DIAG] Notice: Staircase model not found at {self.staircase_model_path}")
+
+            # Load specialized fine-tuned pothole model
+            if os.path.exists(self.pothole_model_path):
+                self.pothole_model = YOLO(self.pothole_model_path)
+                print(f"[YOLO DIAG] Fine-tuned Pothole model loaded: {pothole_model_name} (classes: {self.pothole_model.names})")
+            else:
+                self.pothole_model = None
+                print(f"[YOLO DIAG] Notice: Pothole model not found at {self.pothole_model_path}")
         except Exception as e:
             print(f"[YOLO DIAG] Note: Ultralytics runtime error ({e}).")
             self.is_ultralytics_loaded = False
@@ -138,6 +149,20 @@ class YOLODetector:
                         # If directional stairs detected, suppress any generic lower-confidence stairs
                         detections = [d for d in detections if d["class"] != "stairs"]
                         detections.extend(stair_dets)
+
+                # 3. Fine-tuned Pothole detector
+                if self.pothole_model is not None:
+                    pothole_results = self.pothole_model(
+                        image_input,
+                        imgsz=320,
+                        conf=0.25,
+                        iou=0.45,
+                        verbose=False
+                    )
+                    pothole_dets = []
+                    self._extract_boxes(pothole_results, pothole_dets, width, height, source_tag="pothole")
+                    if pothole_dets:
+                        detections.extend(pothole_dets)
 
             except Exception as e:
                 print(f"[YOLO Inference Error]: {e}")

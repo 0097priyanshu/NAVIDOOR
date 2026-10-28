@@ -113,9 +113,34 @@ def run_tests():
     assert names.get(77) == "teddy bear", "COCO class 77 must be teddy bear"
     print(f"[PASS] YOLO model class names confirmed strictly distinct: 0={names.get(0)}, 41={names.get(41)}, 56={names.get(56)}, 63={names.get(63)}, 73={names.get(73)}, 77={names.get(77)}")
 
+    # 8. Test Ground Hazard & Pothole Distance & Alert Integration
+    print("\n--- Testing Pothole Ground Hazard Distance & Guidance ---")
+    pothole_dets = [{
+        "class": "pothole",
+        "class_id": 0,
+        "confidence": 0.88,
+        "bbox": [200, 320, 440, 460],
+        "normalized_bbox": [0.31, 0.67, 0.69, 0.96],
+        "distance_meters": 1.2,
+        "risk_level": "CRITICAL",
+        "zone": "CENTER",
+        "source": "pothole"
+    }]
+    pothole_path = detector.scene_analyzer.analyze_clearance(pothole_dets, 640, 480)
+    assert pothole_path["path_state"] == "PATH_OBSTRUCTED", "Pothole ahead should yield OBSTACLE_DETECTED!"
+    for lang in ['en', 'hi', 'ta', 'mr', 'kn']:
+        cue = detector.guidance_generator.generate_spoken_guidance(pothole_dets, pothole_path, language=lang)
+        print(f"Pothole Alert ({lang.upper()}): {cue}")
+        assert len(cue) > 0, f"Pothole alert should generate guidance for {lang}"
+    print("[PASS] Pothole ground hazard correctly triggers urgent accessibility alert.")
+
     print("\n" + "=" * 60)
+
     print("  ALL NAVIDOOR PIPELINE & SCENARIO TESTS PASSED!")
     print("=" * 60)
 
 if __name__ == "__main__":
     run_tests()
+
+
+
