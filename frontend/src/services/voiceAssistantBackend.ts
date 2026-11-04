@@ -2,8 +2,6 @@ import { SupportedLanguageCode, VoiceBackendStatus, LanguageMeta } from '../type
 import Constants from 'expo-constants';
 import { Platform, NativeModules } from 'react-native';
 
-const LOCAL_COMPUTER_IPS = ['10.34.122.97', '192.168.0.105', '10.134.91.97'];
-
 /**
  * Dynamically resolves the host PC IP address in real-time from the active Metro bundler session.
  * Works seamlessly across Home Wi-Fi, Mobile Hotspot, Office LAN, and USB tethering
@@ -55,9 +53,6 @@ const getCandidateBackendUrls = (): string[] => {
     list.push(`http://${dynamicHost}:5001`);
   }
 
-  // Known fallback LAN IPs
-  LOCAL_COMPUTER_IPS.forEach(ip => list.push(`http://${ip}:5001`));
-
   // Android Emulator loopback
   if (Platform.OS === 'android') {
     list.push('http://10.0.2.2:5001');
@@ -71,42 +66,15 @@ const getCandidateBackendUrls = (): string[] => {
 };
 
 let activeBackendUrl = getCandidateBackendUrls()[0];
-let lastDiscoveryTime = 0;
 
 export async function discoverBackendUrl(): Promise<string> {
-  const now = Date.now();
-  // If verified within the last 30 seconds, return cached URL
-  if (activeBackendUrl && now - lastDiscoveryTime < 30000) {
-    return activeBackendUrl;
-  }
-
   const candidates = getCandidateBackendUrls();
-
-  // Fast concurrent probe to all candidate URLs
-  try {
-    const reachable = await Promise.any(
-      candidates.map(async (url) => {
-        const res = await fetchWithTimeout(`${url}/api/health`, {}, 2000);
-        if (res.ok) return url;
-        throw new Error(`Unreachable: ${url}`);
-      })
-    );
-    if (reachable) {
-      activeBackendUrl = reachable;
-      lastDiscoveryTime = now;
-      console.log('[VoiceAssistantBackend] Verified reachable Backend URL:', activeBackendUrl);
-      return activeBackendUrl;
-    }
-  } catch (e) {}
-
-  // Sequential fallback if concurrent race fails
   for (const url of candidates) {
     try {
-      const res = await fetchWithTimeout(`${url}/api/health`, {}, 1500);
+      const res = await fetchWithTimeout(`${url}/api/health`, {}, 2500);
       if (res.ok) {
         activeBackendUrl = url;
-        lastDiscoveryTime = now;
-        console.log('[VoiceAssistantBackend] Verified reachable Backend URL (fallback):', activeBackendUrl);
+        console.log('[VoiceAssistantBackend] Verified reachable Backend URL:', activeBackendUrl);
         return activeBackendUrl;
       }
     } catch (e) {}
@@ -117,7 +85,7 @@ export async function discoverBackendUrl(): Promise<string> {
     : (candidates.find(u => !u.includes('localhost') && !u.includes('127.0.0.1')) || candidates[0]);
   
   activeBackendUrl = defaultFallback;
-  console.log('[VoiceAssistantBackend] Backend URL selected (default):', activeBackendUrl);
+  console.log('[VoiceAssistantBackend] Backend URL selected:', activeBackendUrl);
   return activeBackendUrl;
 }
 
@@ -182,11 +150,130 @@ export async function requestTranslation(text: string, targetLanguage: Supported
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, targetLanguage })
-    });
+    }, 5000);
     if (!res.ok) return text;
     const data = await res.json();
     return data.translatedText || text;
-  } catch (e) {
+  } catch (err) {
     return text;
   }
 }
+
+export async function queryAIAssistant(query: string, language: SupportedLanguageCode = 'en', context = {}): Promise<{ answer: string; intent?: any }> {
+  try {
+    const baseUrl = await discoverBackendUrl();
+    console.log(`[AI] Sending query to ${baseUrl}/api/chat: "${query}"`);
+    
+    const res = await fetchWithTimeout(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, language, context })
+    }, 60000);
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('[AI] /api/chat failed:', res.status, errorText);
+      throw new Error(`AI backend returned HTTP ${res.status}: ${errorText}`);
+    }
+
+    const data = await res.json();
+    if (!data.answer || !data.answer.trim()) {
+      throw new Error('AI backend returned an empty answer');
+    }
+
+    console.log('[AI] Received real LLM answer:', data.answer);
+    return {
+      answer: data.answer.trim(),
+      intent: data.intent || null
+    };
+  } catch (err: any) {
+    console.error('[AI Assistant Query Error]:', err.message || err);
+    throw err;
+  }
+}
+
+export const requestAIChat = queryAIAssistant;
+
+const uploadFormDataXHR = (url: string, formData: FormData, timeoutMs = 20000): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.timeout = timeoutMs;
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch (e) {
+          resolve({ transcription: xhr.responseText });
+        }
+      } else {
+        reject(new Error(`Server returned HTTP ${xhr.status}: ${xhr.responseText}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error uploading audio file'));
+    xhr.ontimeout = () => reject(new Error('Audio upload request timed out'));
+    xhr.send(formData as any);
+  });
+};
+
+export async function requestWhisperSTT(audioBlob: Blob | null, languageCode: SupportedLanguageCode = 'en', sourceUri: string = 'device_mic'): Promise<string | null> {
+  try {
+    const baseUrl = await discoverBackendUrl();
+    const formData = new FormData();
+    formData.append('language', languageCode);
+    formData.append('sourceUri', sourceUri);
+
+    if (Platform.OS !== 'web' && sourceUri && sourceUri !== 'device_mic' && sourceUri !== 'mic_recording') {
+      const filename = sourceUri.split('/').pop() || 'real_microphone_recording.m4a';
+      const ext = filename.includes('.') ? filename.split('.').pop() : 'm4a';
+      const mimeType = ext === 'wav' ? 'audio/wav' : (ext === 'mp4' || ext === 'm4a') ? 'audio/m4a' : 'audio/3gpp';
+
+      console.log(`[VoiceAssistantBackend] Native Mobile Upload (${ext}): ${sourceUri}`);
+      formData.append('audio', {
+        uri: sourceUri,
+        name: `real_microphone_recording.${ext}`,
+        type: mimeType
+      } as any);
+    } else if (audioBlob) {
+      console.log(`[VoiceAssistantBackend] Web Audio Blob Upload (${audioBlob.size} bytes)`);
+      formData.append('audio', audioBlob, 'real_microphone_recording.wav');
+    } else {
+      console.warn('[VoiceAssistantBackend] No audio blob or URI available to upload.');
+      return null;
+    }
+
+    console.log(`[VoiceAssistantBackend] Transmitting audio to ${baseUrl}/api/stt...`);
+
+    // Whisper may take longer than 20s on a CPU, especially on its first run.
+    const data = await uploadFormDataXHR(`${baseUrl}/api/stt`, formData, 90000);
+    console.log('[VoiceAssistantBackend] /api/stt transcription success:', data.transcription);
+    return data.transcription || null;
+  } catch (err) {
+    console.warn('[VoiceAssistantBackend] requestWhisperSTT error:', err);
+    return null;
+  }
+}
+
+// AI4Bharat IndicF5 Neural TTS: calls backend /api/tts and returns raw audio ArrayBuffer
+export async function requestIndicF5TTS(text: string, languageCode: SupportedLanguageCode = 'en'): Promise<ArrayBuffer | null> {
+  try {
+    const baseUrl = await discoverBackendUrl();
+    const res = await fetchWithTimeout(`${baseUrl}/api/tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, language: languageCode })
+    }, 15000);
+    
+    if (!res.ok) {
+      console.warn('[VoiceAssistantBackend] /api/tts response status:', res.status);
+      return null;
+    }
+    const audioBuffer = await res.arrayBuffer();
+    console.log(`[VoiceAssistantBackend] IndicF5 TTS audio received: ${audioBuffer.byteLength} bytes`);
+    return audioBuffer;
+  } catch (err) {
+    console.warn('[VoiceAssistantBackend] requestIndicF5TTS error:', err);
+    return null;
+  }
+}
+

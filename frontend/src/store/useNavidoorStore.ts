@@ -8,8 +8,11 @@ import {
   MedicineInfo, 
   EmergencyContact,
   ContextInsight,
-  SupportedLanguageCode
+  SupportedLanguageCode,
+  OCRCategory,
+  OCRLine
 } from '../types';
+import { ocrVisionService } from '../services/ocrVisionService';
 import { speakAnnouncement, stopSpeech, playObstacleBeep } from '../utils/speechUtils';
 import { getTranslation } from '../utils/translations';
 import { voiceCommandProcessor } from '../services/voiceCommandProcessor';
@@ -98,6 +101,14 @@ interface NavidoorState {
   activeReadText: string;
   isReadingAloud: boolean;
   toggleReadAloud: () => void;
+
+  // Module 5 — OCR Reading Assistant State
+  ocrLines: OCRLine[];
+  detectedOcrCategory: OCRCategory | null;
+  ocrStructuredData: any;
+  isOcrScanning: boolean;
+  runOcrScan: (mode?: 'glance' | 'deep', categoryHint?: string) => Promise<void>;
+  clearOcrResults: () => void;
 
   medicines: MedicineInfo[];
   detectedMedicine: MedicineInfo | null;
@@ -524,6 +535,9 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
         } else if (intent.action === 'setCameraFacing') {
           if (intent.cameraFacing) get().setCameraFacing(intent.cameraFacing);
           else get().toggleCameraFacing();
+        } else if (intent.action === 'runOcrScan' || (intent as any).action === 'readSign' || (intent as any).action === 'readDocument' || (intent as any).action === 'readMedicine' || (intent as any).action === 'readBusBoard') {
+          get().setActiveMode('read');
+          get().runOcrScan('glance', (intent as any).categoryHint);
         } else if (intent.action === 'runLiveYoloScan') {
           get().runLiveYoloScan();
         } else if (intent.action === 'capturePhoto') {
@@ -705,6 +719,10 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
       return;
     }
 
+    if (s.activeMode === 'read') {
+      get().runOcrScan('glance');
+      return;
+    }
     const fn = get().singleScanHandler;
     if (fn) {
       fn();
@@ -732,6 +750,11 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     }
 
     set({ capturedPhotoUri: photoUri, isCapturedPhotoModalOpen: true });
+
+    if (get().activeMode === 'read') {
+      await get().runOcrScan('deep');
+      return;
+    }
 
     // Send frame to YOLO AI Vision service
     if (base64Data) {
@@ -857,8 +880,88 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   toggleReadAloud: () => {
     const next = !get().isReadingAloud;
     set({ isReadingAloud: next });
-    if (next) speakAnnouncement(get().activeReadText);
+    if (next) speakAnnouncement(get().activeReadText || 'No text detected to read.');
     else get().stopVoice();
+  },
+
+  // Module 5 — OCR Reading Assistant Implementation
+  ocrLines: [] as OCRLine[],
+  detectedOcrCategory: null as OCRCategory | null,
+  ocrStructuredData: null as any,
+  isOcrScanning: false,
+
+  clearOcrResults: () => {
+    set({
+      ocrLines: [],
+      detectedOcrCategory: null,
+      ocrStructuredData: null,
+      activeReadText: ''
+    });
+  },
+
+  runOcrScan: async (mode = 'glance', categoryHint?: string) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (e) {}
+
+    const camera = get().cameraRef;
+    if (!camera || typeof camera.takePictureAsync !== 'function') {
+      const demoSummary = 'OCR Demo: Mahatma Gandhi Road sign detected. Central Junction ahead.';
+      set({
+        lastAnnouncement: demoSummary,
+        activeReadText: 'MAHATMA GANDHI ROAD\nCENTRAL JUNCTION',
+        detectedOcrCategory: 'signboard',
+        ocrLines: [
+          { text: 'MAHATMA GANDHI ROAD', confidence: 0.95, normalized_bbox: [0.1, 0.3, 0.9, 0.42] },
+          { text: 'CENTRAL JUNCTION', confidence: 0.91, normalized_bbox: [0.15, 0.48, 0.85, 0.6] }
+        ]
+      });
+      get().speak(demoSummary, true);
+      return;
+    }
+
+    try {
+      set({ isOcrScanning: true });
+      get().speak(mode === 'deep' ? 'Capturing high definition text...' : 'Scanning text...', false);
+      const quality = mode === 'deep' ? 0.65 : 0.4;
+      const photo = await camera.takePictureAsync({ base64: true, quality, shutterSound: false });
+      if (photo?.base64) {
+        const ocrResult = await ocrVisionService.analyzeFrame(
+          photo.base64,
+          get().activeLanguageCode,
+          mode,
+          categoryHint
+        );
+
+        if (ocrResult && ocrResult.success) {
+          const announcement = ocrResult.spokenSummary || 'No clear text detected.';
+          set({
+            ocrLines: ocrResult.lines || [],
+            detectedOcrCategory: ocrResult.category,
+            ocrStructuredData: ocrResult.structuredData,
+            activeReadText: ocrResult.text || '',
+            lastAnnouncement: announcement,
+            currentInsight: {
+              id: `ocr-${Date.now()}`,
+              text: announcement,
+              type: ocrResult.quality?.is_blurry ? 'warning' : 'info'
+            }
+          });
+          get().speak(announcement, true);
+        } else if (ocrResult?.quality?.is_blurry) {
+          const guidance = ocrResult.spokenSummary || 'Image blurry, please hold phone steady.';
+          set({ lastAnnouncement: guidance });
+          get().speak(guidance, true);
+        } else {
+          get().speak('No readable text found in frame.', true);
+        }
+      }
+    } catch (err: any) {
+      console.warn('[runOcrScan error]:', err);
+      get().speak('Could not complete text scan.', true);
+    } finally {
+      set({ isOcrScanning: false });
+    }
   },
 
   medicines: INITIAL_MEDICINES,

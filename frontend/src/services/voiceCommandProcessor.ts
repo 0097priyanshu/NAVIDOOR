@@ -30,7 +30,13 @@ export interface CommandParseResult {
     | 'repeatAnnouncement'
     | 'triggerSosAlert' 
     | 'toggleSpatialAudio' 
-    | 'voiceSearch';
+    | 'voiceSearch'
+    | 'runOcrScan'
+    | 'readSign'
+    | 'readDocument'
+    | 'readMedicine'
+    | 'readBusBoard';
+  categoryHint?: string;
   targetLanguage?: SupportedLanguageCode;
   targetLanguageName?: string;
   targetMode?: NavMode;

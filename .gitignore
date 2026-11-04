@@ -24,6 +24,7 @@ yarn-error.log*
 # Local AI Models, Binaries, Virtual Environments, and Temp Files
 backend/bin/
 backend/models/
+ocr/models/
 backend/temp/
 backend/uploads/
 backend/indicf5_env/
@@ -40,10 +41,12 @@ __pycache__/
 !yolo/models/yolo11n_pothole.pt
 !yolo/models/yolo11n_crosswalk.pt
 !yolo/models/yolo11n_elevator.pt
+*.pth
 
 # YOLO Training Datasets and Runs
 yolo/dataset/
 yolo/runs/
+
 *.exe
 *.dll
 *.wav
@@ -51,14 +54,3 @@ yolo/runs/
 # OS metadata
 .DS_Store
 Thumbs.db
-
-
- main
-
-
-
-
-# Rahull
-/run.md
-/sofar.md
-main

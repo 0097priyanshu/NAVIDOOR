@@ -9,6 +9,8 @@ export const CapturedPhotoPreviewModal: React.FC = () => {
     setIsCapturedPhotoModalOpen, 
     capturedPhotoUri, 
     activeMode,
+    activeReadText,
+    detectedOcrCategory,
     speak,
     stopVoice
   } = useNavidoorStore();
@@ -20,8 +22,10 @@ export const CapturedPhotoPreviewModal: React.FC = () => {
 
   const getAnalysisResultText = () => {
     switch (activeMode) {
-      case 'read':
-        return 'SCANNED DOCUMENT TEXT:\n"PHARMACY PRESCRIPTION - DR. SMITH.\nTAKE 1 TABLET DAILY WITH WATER AFTER MEAL.\nREFILLS: 3 • EXPIRY: 12/2027."';
+      case 'read': {
+        const cat = detectedOcrCategory ? detectedOcrCategory.toUpperCase().replace('_', ' ') : 'PRINTED TEXT';
+        return `SCANNED ${cat}:\n"${activeReadText || 'No text detected in photo. Please hold steady and try again.'}"`;
+      }
       case 'medicine':
         return 'MEDICINE BOTTLE SCANNED:\n"LISINOPRIL 10MG TABLETS.\nDOSAGE: 1 PILL AT 8:00 AM.\nWARNING: TAKE WITH FOOD."';
       case 'transport':

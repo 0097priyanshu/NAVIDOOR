@@ -13,6 +13,8 @@ const indicf5Service = require('./services/indicf5Service');
 const translationService = require('./services/translationService');
 const aiAssistantService = require('./services/aiAssistantService');
 const yoloClientService = require('./services/yoloClientService');
+const ocrClientService = require('./services/ocrClientService');
+const ocrSemanticService = require('./services/ocrSemanticService');
 const { setupSocketIO } = require('./services/socketService');
 
 const app = express();
@@ -53,6 +55,7 @@ setupSocketIO(io);
 app.get('/api/health', async (req, res) => {
   const indicf5Status = await indicf5Service.checkStatus();
   const yoloStatus = await yoloClientService.checkHealth();
+  const ocrStatus = await ocrClientService.checkHealth();
   res.json({
     status: 'online',
     system: 'NAVIDOOR Backend Engine',
@@ -61,7 +64,9 @@ app.get('/api/health', async (req, res) => {
     indicf5Online: indicf5Status.online,
     indicf5Device: indicf5Status.device || 'CPU',
     yoloOnline: yoloStatus.online,
-    yoloEngine: yoloStatus.engine || 'offline'
+    yoloEngine: yoloStatus.engine || 'offline',
+    ocrOnline: ocrStatus.online,
+    ocrEngine: ocrStatus.engine || 'offline'
   });
 });
 
@@ -105,6 +110,93 @@ app.post('/api/vision/detect-medicine', async (req, res) => {
     }
     const result = await yoloClientService.detectMedicine(image, language);
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 1.2 OCR Reading Assistant endpoints (Module 5)
+app.get('/api/ocr/health', async (req, res) => {
+  const status = await ocrClientService.checkHealth();
+  res.json(status);
+});
+
+app.post('/api/ocr/analyze', async (req, res) => {
+  try {
+    const { image, language = 'en', mode = 'glance', categoryHint = null, generateAudio = false } = req.body;
+    if (!image) {
+      return res.status(400).json({ success: false, error: 'Image base64 payload is required.' });
+    }
+
+    // Step 1: Run OCR through Python microservice (Port 5004)
+    const rawOcr = await ocrClientService.readFrame(image, mode, categoryHint);
+
+    // Step 2: Semantic LLM entity extraction & accessible announcement formulation
+    const semanticResult = await ocrSemanticService.processSemanticResult(rawOcr, language);
+
+    // Step 3: Optional Neural Speech Synthesis via IndicF5
+    let audioUrl = null;
+    let audioBase64 = null;
+    if (generateAudio && semanticResult.spokenSummary) {
+      try {
+        const ttsResult = await indicf5Service.synthesizeSpeech(semanticResult.spokenSummary, language);
+        if (ttsResult && ttsResult.audioBase64) {
+          audioBase64 = ttsResult.audioBase64;
+          audioUrl = ttsResult.audioUrl;
+        }
+      } catch (ttsErr) {
+        console.warn('[OCR TTS Error]:', ttsErr.message);
+      }
+    }
+
+    // Broadcast reading event to family companion / caregiver portal in real time
+    io.emit('ocr_reading_event', {
+      category: semanticResult.category,
+      spokenSummary: semanticResult.spokenSummary,
+      text: semanticResult.rawText,
+      timestamp: Date.now()
+    });
+
+    res.json({
+      success: true,
+      text: semanticResult.rawText,
+      lines: semanticResult.lines,
+      category: semanticResult.category,
+      structuredData: semanticResult.structuredData,
+      spokenSummary: semanticResult.spokenSummary,
+      quality: semanticResult.quality,
+      inferenceTimeMs: semanticResult.inferenceTimeMs,
+      audioBase64,
+      audioUrl
+    });
+  } catch (err) {
+    console.error('[API /api/ocr/analyze Error]:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/ocr/glance', async (req, res) => {
+  try {
+    const { image, language = 'en' } = req.body;
+    if (!image) {
+      return res.status(400).json({ success: false, error: 'Image base64 payload is required.' });
+    }
+    const rawOcr = await ocrClientService.glanceScan(image);
+    const result = await ocrSemanticService.processSemanticResult(rawOcr, language);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/ocr/read-aloud', async (req, res) => {
+  try {
+    const { text, language = 'en' } = req.body;
+    if (!text) {
+      return res.status(400).json({ success: false, error: 'Text is required for read-aloud.' });
+    }
+    const ttsResult = await indicf5Service.synthesizeSpeech(text, language);
+    res.json({ success: true, text, language, ...ttsResult });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
