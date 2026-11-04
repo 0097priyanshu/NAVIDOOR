@@ -11,34 +11,45 @@ The system features a cross-platform mobile client (React Native / Expo & Flutte
 1. **Camera as the Continuous Canvas**:
    - The camera remains active throughout the application. Changing navigation modes does **NOT** unmount or replace the camera stream.
    - Feature-specific floating overlays (Assist, Navigate, Read, Medicines, Location, Emergency, Medical ID, Settings) render directly over the live stream.
-2. **YOLOv11 Dual-Model Vision & Directional Staircase Hazard Avoidance**:
-   - Powered by official Ultralytics **YOLOv11** (`yolo11n.pt`) and a specialized fine-tuned **Directional Staircase Model** (`models/yolo11n_staircase.pt`, 5.4MB, 70.5% mAP@50).
-   - Accurately identifies `upstair` (ascending) and `downstair` (descending — critical fall risk) with localized voice announcements.
+2. **YOLOv11 5-Model Ensemble Vision & Hazard/Landmark Detection**:
+   - Powered by a concurrent **5-Model YOLOv11 Ensemble** running on local Python microservice (`http://0.0.0.0:5003`):
+     - **Base Model (`yolo11n.pt`)**: 80 standard COCO classes (pedestrians, vehicles, obstacles, furniture, doors).
+     - **Directional Staircases (`models/yolo11n_staircase.pt`)**: Detects ascending (`upstair`, 1.2m) and descending (`downstair`, 1.0m — critical fall risk) stairs.
+     - **Road Hazards (`models/yolo11n_pothole.pt`)**: Detects ground cavities and road potholes (`pothole`, 0.15m ground hazard ratio).
+     - **Pedestrian Crosswalks (`models/yolo11n_crosswalk.pt`)**: Detects zebra pedestrian crossings (`crosswalk`, 0.4m) for safe outdoor street navigation.
+     - **Indoor Elevators (`models/yolo11n_elevator.pt`)**: Detects elevator doors and lift lobbies (`elevator`, 2.2m) for indoor multi-floor accessibility.
    - **Invisible Background Processing**: Hazard detection, 3D distance estimation, and obstacle proximity beeps operate completely in the background without visual bounding box clutter on screen.
-   - **Unified Left `SCAN` Button**: A single tactile button triggers high-resolution scene capture, YOLOv11 inference, distance estimation, and spoken hazard guidance (eliminating redundant buttons).
+   - **Unified Left `SCAN` Button**: A single tactile button triggers high-resolution scene capture, concurrent 5-model inference, distance estimation, and spoken hazard guidance.
    - Real-time 3D pinhole distance estimation with categorized risk levels (`CRITICAL` < 1.2m, `WARNING` 1.2m–2.5m, `INFO` 2.5m–5.0m) and dynamic audio beeps.
-   - 3-corridor path clearance analysis (LEFT, CENTER, RIGHT) with directional spoken guidance.
-   - Powered by official Ultralytics **YOLOv11** (`yolo11n.pt`) running on local Python microservice (`http://0.0.0.0:5003`).
-   - **Invisible Background Processing**: Hazard detection, 3D distance estimation, and obstacle proximity beeps operate completely in the background without visual bounding box clutter on screen.
-   - **Unified Left `SCAN` Button**: A single tactile button triggers high-resolution scene capture, YOLOv11 inference, distance estimation, and spoken hazard guidance (eliminating redundant buttons).
-   - Real-time 3D pinhole distance estimation with categorized risk levels (`CRITICAL` < 1.2m, `WARNING` 1.2m–2.5m, `INFO` 2.5m–5.0m) and dynamic audio beeps.
-   - 3-corridor path clearance analysis (LEFT, CENTER, RIGHT) with directional spoken guidance.
+   - 3-corridor path clearance analysis (LEFT, CENTER, RIGHT) with directional spoken guidance across 10 Indian languages.
 3. **Family Companion Portal & Secure QR Pairing**:
    - Single-use 5-minute encrypted QR code pairing (`react-native-qrcode-svg` + `firebase` Firestore / Socket.IO dual-sync).
    - Allows remote caregivers to monitor real-time location, receive emergency SOS notifications, and check active journeys.
 4. **Universal Screen Triple-Tap Emergency SOS Trigger**:
    - Designed specifically for blind and visually impaired users who cannot pinpoint a small on-screen button during an emergency.
    - **Triple-tap anywhere on the screen** within an **850ms** window to immediately activate the Emergency SOS modal, play warning alert beeps, trigger tactile haptic feedback, and broadcast live GPS coordinates to family caregivers.
-4. **100% Privacy-First & Local AI (Zero Cloud API Keys Required)**:
+5. **100% Privacy-First & Local AI (Zero Cloud API Keys Required)**:
    - **Speech-to-Text (STT)**: Offline `Whisper.cpp` native binary (`ggml-base.bin` & `ggml-small.bin`) with clean 16kHz PCM resampling, natural bilingual code-switching, and suspicious script/gibberish rejection.
    - **General & Vision AI Engine**: Local **Ollama** open-source LLM (`llama3.2` / `qwen2.5-coder:7b`) for real-time scene perception reasoning and concise spoken Q&A on `http://127.0.0.1:11434`.
    - **Text-to-Speech (TTS)**: **AI4Bharat IndicF5** neural speech synthesis microservice supporting 10 regional Indian languages on port `5002`.
-5. **Mobile-Native Voice Activity Detection (VAD) & Hands-Free Audio**:
+6. **Mobile-Native Voice Activity Detection (VAD) & Hands-Free Audio**:
    - Mobile-native audio metering (`isMeteringEnabled: true`) with calibrated 2.2s silence threshold, -42 dB sensitivity, and 2.0s minimum recording window.
    - Prevents cutting off mid-sentence speech or natural pauses.
    - Accessible floating mic button with animated expanding aura, tactile haptic feedback, and spatial chimes.
-6. **Dynamic LAN Auto-Discovery (Zero Hardcoded IPs)**:
+7. **Dynamic LAN Auto-Discovery (Zero Hardcoded IPs)**:
    - Automatically resolves PC server IP across physical Android/iOS devices, emulators, and browsers via Expo `hostUri`.
+
+---
+
+## 📊 Research Benchmarks & Empirical Performance
+
+| Vision Model | Target Class(es) | Dataset Source | Total Dataset Images | Epochs | Precision (P) | Recall (R) | Test mAP@50 | Test mAP@50-95 | Weights Size |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`yolo11n_crosswalk.pt`** | `crosswalk` | Roboflow (`crossing-264hc`) | 173 (121 tr / 34 val / 18 te) | 20 | **94.1%** | **88.6%** | **91.6%** (0.9156) | **69.0%** (0.6896) | 5.50 MB |
+| **`yolo11n_elevator.pt`** | `elevator` | Roboflow (`elevator-awvus`) | 1,783 (1,468 tr / 157 val / 158 te) | 12 | **85.2%** | **80.6%** | **88.1%** (0.8809) | **53.5%** (0.5353) | 5.50 MB |
+| **`yolo11n_pothole.pt`** | `pothole` | Roboflow (`pothole-detection-using-yolov11-ipvd9`) | 665 (465 tr / 133 val / 67 te) | 20 | **82.9%** | **68.0%** | **78.0%** (0.7796) | **46.8%** (0.4681) | 5.50 MB |
+| **`yolo11n_staircase.pt`** | `upstair`, `downstair` | Custom Pascal VOC Staircase Dataset | 502 (402 tr / 100 val) | 25 | **75.2%** | **68.4%** | **70.5%** (0.7050) | **41.2%** (0.4120) | 5.46 MB |
+| **`yolo11n.pt`** (Base) | 80 COCO Classes | MS COCO 2017 Dataset | 118,287 images | Pretrained | **64.5%** | **53.8%** | **53.1%** (0.5310) | **39.5%** (0.3950) | 5.61 MB |
 
 ---
 
@@ -73,7 +84,7 @@ NAVIDOOR/
 | :--- | :--- | :--- | :--- |
 | **Mobile Frontend** | React Native 0.86.3 / Expo SDK 57 (TypeScript, React 19) | `8081` (Metro) | Continuous camera canvas & Caregiver Portal |
 | **Backend Server** | Node.js v22+ Express + Socket.IO | `5001` | REST APIs, Socket.IO gateway, Whisper STT wrapper |
-| **YOLOv11 Vision Server** | Python 3.10+ Flask + Ultralytics YOLOv11 | `5003` | Real-time object detection & 3D distance estimation |
+| **YOLOv11 Vision Server** | Python 3.10+ Flask + Ultralytics YOLOv11 | `5003` | Concurrent 5-model object detection & 3D distance estimation |
 | **Neural TTS Server** | AI4Bharat IndicF5 PyTorch microservice | `5002` | Neural speech synthesis across 10 Indian languages |
 | **Local LLM Engine** | Ollama (`llama3.2` / `qwen2.5-coder:7b`) | `11434` | Local conversational Q&A & scene interpretation |
 
@@ -111,7 +122,7 @@ npm run yolo
 # Or directly:
 py -3.10 yolo/yolo_server.py
 ```
-*(Verify test suite anytime with `npm run test:yolo`).*
+*(Loads all 5 models concurrently on CPU: `yolo11n.pt`, `yolo11n_staircase.pt`, `yolo11n_pothole.pt`, `yolo11n_crosswalk.pt`, and `yolo11n_elevator.pt`).*
 
 ### Step 3: Start the Backend Server (Port 5001)
 ```bash
@@ -208,10 +219,4 @@ node backend/test_5pass_marathi_verification.js
 
 # 3. Verify LLM response generation & clarification safety check
 node backend/test_response_generation_verification.js
-
-# 4. Verify YOLOv11 detection, distance estimation, and corridor clearance
-npm run test:yolo
-# Or directly:
-py -3.10 yolo/test_yolo.py
 ```
-

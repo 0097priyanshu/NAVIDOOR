@@ -1,8 +1,8 @@
 """
 NAVIDOOR YOLOv11 / YOLOv8 AI Vision Detection Engine
 Loads pre-trained YOLO weights, fine-tuned staircase models, fine-tuned pothole models,
-and fine-tuned crosswalk models, processes camera frames, estimates distances,
-and delivers structured bounding boxes and voice accessibility alerts.
+fine-tuned crosswalk models, and fine-tuned elevator models, processes camera frames,
+estimates distances, and delivers structured bounding boxes and voice accessibility alerts.
 """
 
 import os
@@ -21,6 +21,7 @@ class YOLODetector:
         staircase_model_name: str = "yolo11n_staircase.pt",
         pothole_model_name: str = "yolo11n_pothole.pt",
         crosswalk_model_name: str = "yolo11n_crosswalk.pt",
+        elevator_model_name: str = "yolo11n_elevator.pt",
         confidence_threshold: float = 0.28,
         models_dir: str = None
     ):
@@ -38,16 +39,18 @@ class YOLODetector:
         self.staircase_model_path = os.path.join(self.models_dir, staircase_model_name)
         self.pothole_model_path = os.path.join(self.models_dir, pothole_model_name)
         self.crosswalk_model_path = os.path.join(self.models_dir, crosswalk_model_name)
+        self.elevator_model_path = os.path.join(self.models_dir, elevator_model_name)
         
         self.model = None
         self.staircase_model = None
         self.pothole_model = None
         self.crosswalk_model = None
+        self.elevator_model = None
         self.is_ultralytics_loaded = False
-        self._initialize_models(model_name, staircase_model_name, pothole_model_name, crosswalk_model_name)
+        self._initialize_models(model_name, staircase_model_name, pothole_model_name, crosswalk_model_name, elevator_model_name)
 
-    def _initialize_models(self, model_name: str, staircase_model_name: str, pothole_model_name: str, crosswalk_model_name: str):
-        """Loads primary general model, fine-tuned staircase model, fine-tuned pothole model, and fine-tuned crosswalk model."""
+    def _initialize_models(self, model_name: str, staircase_model_name: str, pothole_model_name: str, crosswalk_model_name: str, elevator_model_name: str):
+        """Loads primary general model and specialized fine-tuned models."""
         try:
             from ultralytics import YOLO
             target = self.model_path if os.path.exists(self.model_path) else model_name
@@ -62,7 +65,6 @@ class YOLODetector:
                 print(f"[YOLO DIAG] Fine-tuned Staircase model loaded: {staircase_model_name} (classes: {self.staircase_model.names})")
             else:
                 self.staircase_model = None
-                print(f"[YOLO DIAG] Notice: Staircase model not found at {self.staircase_model_path}")
 
             # Load specialized fine-tuned pothole model
             if os.path.exists(self.pothole_model_path):
@@ -70,7 +72,6 @@ class YOLODetector:
                 print(f"[YOLO DIAG] Fine-tuned Pothole model loaded: {pothole_model_name} (classes: {self.pothole_model.names})")
             else:
                 self.pothole_model = None
-                print(f"[YOLO DIAG] Notice: Pothole model not found at {self.pothole_model_path}")
 
             # Load specialized fine-tuned crosswalk model
             if os.path.exists(self.crosswalk_model_path):
@@ -78,7 +79,13 @@ class YOLODetector:
                 print(f"[YOLO DIAG] Fine-tuned Crosswalk model loaded: {crosswalk_model_name} (classes: {self.crosswalk_model.names})")
             else:
                 self.crosswalk_model = None
-                print(f"[YOLO DIAG] Notice: Crosswalk model not found at {self.crosswalk_model_path}")
+
+            # Load specialized fine-tuned elevator model
+            if os.path.exists(self.elevator_model_path):
+                self.elevator_model = YOLO(self.elevator_model_path)
+                print(f"[YOLO DIAG] Fine-tuned Elevator model loaded: {elevator_model_name} (classes: {self.elevator_model.names})")
+            else:
+                self.elevator_model = None
 
         except Exception as e:
             print(f"[YOLO DIAG] Note: Ultralytics runtime error ({e}).")
@@ -127,10 +134,12 @@ class YOLODetector:
         language: str = "en"
     ) -> Dict[str, Any]:
         start_time = time.time()
-        if hasattr(image_input, "size"):
+        if hasattr(image_input, "shape"):
+            height, width = image_input.shape[:2]
+        elif hasattr(image_input, "size") and isinstance(image_input.size, tuple):
             width, height = image_input.size
         else:
-            height, width = image_input.shape[:2]
+            width, height = (640, 640)
 
         detections: List[Dict[str, Any]] = []
 
@@ -190,6 +199,20 @@ class YOLODetector:
                     self._extract_boxes(crosswalk_results, crosswalk_dets, width, height, source_tag="crosswalk")
                     if crosswalk_dets:
                         detections.extend(crosswalk_dets)
+
+                # 5. Fine-tuned Elevator detector
+                if self.elevator_model is not None:
+                    elevator_results = self.elevator_model(
+                        image_input,
+                        imgsz=320,
+                        conf=0.25,
+                        iou=0.45,
+                        verbose=False
+                    )
+                    elevator_dets = []
+                    self._extract_boxes(elevator_results, elevator_dets, width, height, source_tag="elevator")
+                    if elevator_dets:
+                        detections.extend(elevator_dets)
 
             except Exception as e:
                 print(f"[YOLO Inference Error]: {e}")

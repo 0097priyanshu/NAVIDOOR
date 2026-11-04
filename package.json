@@ -11,7 +11,6 @@
     "frontend": "npm --prefix frontend start",
     "frontend:tunnel": "npm --prefix frontend run tunnel",
     "yolo": "py -3.10 yolo/yolo_server.py",
-    "test:yolo": "py -3.10 yolo/test_yolo.py",
     "android": "npm --prefix frontend run android",
     "ios": "npm --prefix frontend run ios",
     "web": "npm --prefix frontend run web",
@@ -57,3 +56,4 @@
   },
   "private": true
 }
+
