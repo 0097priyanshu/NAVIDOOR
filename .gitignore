@@ -39,6 +39,7 @@ __pycache__/
 !yolo/models/yolo11n_staircase.pt
 !yolo/models/yolo11n_pothole.pt
 !yolo/models/yolo11n_crosswalk.pt
+!yolo/models/yolo11n_elevator.pt
 
 # YOLO Training Datasets and Runs
 yolo/dataset/
@@ -52,6 +53,12 @@ yolo/runs/
 Thumbs.db
 
 
+ main
+
+
+
+
 # Rahull
 /run.md
 /sofar.md
+main

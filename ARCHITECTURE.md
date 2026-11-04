@@ -10,7 +10,7 @@ It runs as a cross-platform mobile application (React Native / Expo with a paral
 It communicates with local microservices running on your PC over LAN (Wi-Fi):
 - Node.js Express server on port `5001`
 - AI4Bharat IndicF5 neural TTS microservice on port `5002`
-- YOLOv11 Quad-Model Computer Vision server on port `5003` (80 COCO classes + directional staircase + pothole hazard + pedestrian crosswalk models)
+- YOLOv11 5-Model Ensemble Computer Vision server on port `5003` (80 COCO classes + directional staircases + potholes + pedestrian crosswalks + indoor elevators)
 - Local Ollama LLM runtime on port `11434`
 
 ---
@@ -68,9 +68,15 @@ NAVIDOOR/
 │
 └── yolo/                    ← Python YOLOv11 Computer Vision Service (Port 5003)
     ├── yolo_server.py       ← Flask REST server with /detect, /detect/bus, /detect/medicine
-    ├── test_yolo.py         ← Automated detection & distance estimation test suite
     ├── requirements.txt     ← Python dependencies (ultralytics, torch, opencv-python, flask)
+    ├── models/              ← Production model weights (5 models: ~5.5MB each)
+    │   ├── yolo11n.pt           ← Base MS COCO model (80 classes)
+    │   ├── yolo11n_staircase.pt ← Directional stairs (upstair / downstair)
+    │   ├── yolo11n_pothole.pt   ← Road hazard (pothole)
+    │   ├── yolo11n_crosswalk.pt ← Outdoor landmark (crosswalk)
+    │   └── yolo11n_elevator.pt  ← Indoor landmark (elevator)
     └── core/
+        ├── detector.py           ← 5-model concurrent inference & detection fusion
         ├── distance_estimator.py ← Pinhole 3D distance & corridor clearance analyzer
         └── indian_labels.py      ← Indian contextual class mappings & multilingual prompts
 ```
@@ -209,7 +215,7 @@ Unified Left SCAN Button Pressed (CameraControlsOverlay)
    ▼ High-Resolution Frame Captured
 Python YOLOv11 Vision Server (Port 5003: POST /detect)
    │
-   ├── Ultralytics YOLOv11 Inference (yolo11n.pt ~28ms)
+   ├── Ultralytics YOLOv11 Concurrent Inference (5 models: Base + Stairs + Potholes + Crosswalks + Elevators)
    │
    ├── Pinhole Geometry 3D Distance Calculation:
    │   Distance = (H_real * focal_length) / h_bbox
@@ -219,7 +225,7 @@ Python YOLOv11 Vision Server (Port 5003: POST /detect)
    │
    ├── 3-Corridor Clearance Analysis:
    │   - LEFT, CENTER, RIGHT corridor evaluation
-   │   - Recommends path deviations ("Obstacle ahead. Step right.")
+   │   - Recommends path deviations ("Elevator 2.1m ahead. Step center.")
    │
    ▼ Return JSON Detections + Safe Path + Spoken Hints
 Invisible Background Processing:
@@ -277,32 +283,48 @@ The camera interface utilizes platform-specific safe-area insets (`Platform.OS =
 | [`backend/services/whisperService.js`](file:///c:/Users/Aadya/NAVIDOOR/backend/services/whisperService.js) | Whisper.cpp wrapper with clean 16kHz resampling, `--prompt` code-switching, and script validation |
 | [`backend/services/aiAssistantService.js`](file:///c:/Users/Aadya/NAVIDOOR/backend/services/aiAssistantService.js) | Direct native LLM reasoning engine with programmatic validation & clarification safety check |
 | [`yolo/yolo_server.py`](file:///c:/Users/Aadya/NAVIDOOR/yolo/yolo_server.py) | Python YOLOv11 server with pinhole distance estimation and corridor guidance |
+| [`yolo/core/detector.py`](file:///c:/Users/Aadya/NAVIDOOR/yolo/core/detector.py) | 5-Model ensemble detector loading weights, executing concurrent inference, and fusing detections |
 | [`yolo/core/distance_estimator.py`](file:///c:/Users/Aadya/NAVIDOOR/yolo/core/distance_estimator.py) | 3D pinhole distance calculator and left/center/right safe corridor analyzer |
-
+| [`yolo/core/indian_labels.py`](file:///c:/Users/Aadya/NAVIDOOR/yolo/core/indian_labels.py) | Multilingual translations for obstacles, hazards, and navigation landmarks across 10 Indian languages |
 
 ---
 
-## 7. YOLOv11 Quad-Model Architecture & Specialized Hazard & Landmark Detection
+## 7. YOLOv11 5-Model Ensemble Architecture & Specialized Hazard / Landmark Detection
 
-NAVIDOOR features a specialized **Quad-Model Vision Pipeline** running inside `yolo/core/detector.py`:
+NAVIDOOR incorporates a high-performance **5-Model YOLOv11 Ensemble** orchestrated concurrently inside `yolo/core/detector.py`:
 1. **Primary General Model (`yolo11n.pt`)**:
-   - Detects all 80 standard COCO classes (pedestrians, cars, buses, bicycles, furniture, doors, etc.) at native 640px resolution.
+   - Detects all 80 standard COCO classes (pedestrians, vehicles, obstacles, doors, furniture, etc.) at native 640px resolution.
 2. **Specialized Directional Staircase Model (`models/yolo11n_staircase.pt`)**:
    - Fine-tuned on 502 annotated staircase samples to detect:
      - `upstair`: Stairs ascending ahead (1.2m calibrated height)
-     - `downstair`: Stairs descending ahead (1.0m calibrated height � elevated hazard priority to prevent falls)
+     - `downstair`: Stairs descending ahead (1.0m calibrated height — elevated hazard priority to prevent falls)
    - Evaluated at **70.5% mAP@50** and ~14.9ms inference latency on CPU.
 3. **Specialized Pothole Road Hazard Model (`models/yolo11n_pothole.pt`)**:
    - Fine-tuned on 665 Roboflow annotated samples to detect:
-     - `pothole`: Road cavity, drain hole, or surface crater (0.15m ground plane calibrated height � critical trip & stumble hazard)
+     - `pothole`: Road cavity, drain hole, or surface crater (0.15m ground plane calibrated height — critical trip & stumble hazard)
    - Evaluated at **78.0% mAP@50** on the test split (82.9% precision) and runs concurrently on CPU.
 4. **Specialized Crosswalk Navigation Model (`models/yolo11n_crosswalk.pt`)**:
    - Fine-tuned on 173 Roboflow annotated samples (`crossing-264hc`) to detect:
-     - `crosswalk`: Pedestrian zebra crossings (0.40m calibrated ground dimension � key outdoor navigation landmark)
+     - `crosswalk`: Pedestrian zebra crossings (0.40m calibrated ground dimension — key outdoor navigation landmark)
    - Evaluated at **91.6% mAP@50** on the test split (94.1% precision, 99.2% val mAP@50) and runs concurrently on CPU.
-5. **Detection Fusion & Priority Sorting**:
-   - Models execute in parallel on the live camera frame.
-   - Ground hazards (potholes, descending stairs) receive immediate high-priority alerts, while navigation landmarks (crosswalks, ascending stairs, doors) receive structured spoken guidance across 10 Indian languages.
+5. **Specialized Elevator Indoor Navigation Model (`models/yolo11n_elevator.pt`)**:
+   - Fine-tuned on 1,783 Roboflow annotated samples (`elevator-awvus`) using balanced sub-sampling (`fraction=0.3`, 440 images/epoch) to detect:
+     - `elevator`: Elevator doors and lift lobbies (2.20m calibrated vertical height — critical indoor vertical transit landmark)
+   - Evaluated at **88.1% mAP@50** on the test split (85.2% precision, 53.5% mAP@50-95) and runs concurrently on CPU.
+6. **Detection Fusion & Priority Sorting**:
+   - Models execute in parallel on the live camera frame (~32–35ms total CPU latency).
+   - Ground hazards (potholes, descending stairs) receive immediate high-priority alerts with rapid warning beeps.
+   - Indoor & outdoor navigation landmarks (elevators, crosswalks, ascending stairs, doors) receive structured spoken guidance across 10 Indian languages.
+
+### Academic Benchmark & Research Paper Performance Metrics
+
+| Vision Model | Target Class(es) | Dataset Source | Total Dataset Images | Epochs | Precision (P) | Recall (R) | Test mAP@50 | Test mAP@50-95 | Weights Size |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`yolo11n_crosswalk.pt`** | `crosswalk` | Roboflow (`crossing-264hc`) | 173 (121 tr / 34 val / 18 te) | 20 | **94.1%** | **88.6%** | **91.6%** (0.9156) | **69.0%** (0.6896) | 5.50 MB |
+| **`yolo11n_elevator.pt`** | `elevator` | Roboflow (`elevator-awvus`) | 1,783 (1,468 tr / 157 val / 158 te) | 12 | **85.2%** | **80.6%** | **88.1%** (0.8809) | **53.5%** (0.5353) | 5.50 MB |
+| **`yolo11n_pothole.pt`** | `pothole` | Roboflow (`pothole-detection-using-yolov11-ipvd9`) | 665 (465 tr / 133 val / 67 te) | 20 | **82.9%** | **68.0%** | **78.0%** (0.7796) | **46.8%** (0.4681) | 5.50 MB |
+| **`yolo11n_staircase.pt`** | `upstair`, `downstair` | Custom Pascal VOC Staircase Dataset | 502 (402 tr / 100 val) | 25 | **75.2%** | **68.4%** | **70.5%** (0.7050) | **41.2%** (0.4120) | 5.46 MB |
+| **`yolo11n.pt`** (Base) | 80 COCO Classes | MS COCO 2017 Dataset | 118,287 images | Pretrained | **64.5%** | **53.8%** | **53.1%** (0.5310) | **39.5%** (0.3950) | 5.61 MB |
 
 ---
 
@@ -317,5 +339,3 @@ The Family Companion Mode connects visually impaired users with their family car
    - **Cloud Firestore**: Real-time cloud sync (`onSnapshot` on `pairing_tokens/{token}`) allowing caregivers to monitor their family member even when on separate networks (e.g. mobile 5G/LTE).
 3. **Caregiver Safety Controls**:
    - Live GPS location tracking, active journey route monitoring, battery telemetry, and instant audible Emergency SOS alerts.
-
-
