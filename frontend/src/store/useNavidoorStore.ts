@@ -16,8 +16,12 @@ import { voiceCommandProcessor } from '../services/voiceCommandProcessor';
 import { voiceSearchService } from '../services/voiceSearchService';
 import { voiceConversationService } from '../services/voiceConversationService';
 import * as Haptics from 'expo-haptics';
-import { requestTranslation } from '../services/voiceAssistantBackend';
+import { requestTranslation, requestWhisperSTT } from '../services/voiceAssistantBackend';
+import { voiceRecordingService } from '../services/voiceRecordingService';
+import { socketClient } from '../services/socketClient';
 import { yoloVisionService } from '../services/yoloVisionService';
+import { familyPairingService } from '../services/familyPairingService';
+import { isVoiceExitCommand } from '../utils/voiceExit';
 
 interface NavidoorState {
   // Voice System First
@@ -26,6 +30,8 @@ interface NavidoorState {
   lastAnnouncement: string;
   speak: (text: string, interrupt?: boolean) => Promise<void> | void;
   stopVoice: () => void;
+  startVoiceListening: () => Promise<void>;
+  stopVoiceListening: () => Promise<void>;
   speechRate: number;
   setSpeechRate: (rate: number) => void;
   processVoiceInput: (input: string) => Promise<void>;
@@ -108,6 +114,13 @@ interface NavidoorState {
 
   isFamilyCompanionOpen: boolean;
   setFamilyCompanionOpen: (open: boolean) => void;
+  isFamilyQrModalOpen: boolean;
+  setIsFamilyQrModalOpen: (open: boolean) => void;
+  isFamilyScannerModalOpen: boolean;
+  setIsFamilyScannerModalOpen: (open: boolean) => void;
+  activePairingConnection: any | null;
+  setActivePairingConnection: (conn: any | null) => void;
+  disconnectActivePairing: () => Promise<void>;
 
   isDesignSystemOpen: boolean;
   setDesignSystemOpen: (open: boolean) => void;
@@ -172,21 +185,88 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     set({ lastAnnouncement: finalSpeechText, voiceState: 'speaking' });
     console.log(`[VOICE] Audio playback started: ${new Date().toISOString()}`);
     speakAnnouncement(finalSpeechText, { rate: get().speechRate, interrupt, languageCode: activeLang });
-    
-    setTimeout(() => {
-      if (get().voiceState === 'speaking') {
-        set({ voiceState: 'idle' });
-      }
-    }, Math.max(2000, finalSpeechText.length * 55));
   },
   stopVoice: () => {
-    stopSpeech();
     set({ voiceState: 'idle' });
+    stopSpeech();
+  },
+
+  startVoiceListening: async () => {
+    if (get().voiceState === 'listening') return;
+    get().stopVoice();
+    set({ voiceState: 'listening', lastAnnouncement: '🎤 Listening... Speak now.' });
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (e) {}
+
+    const started = await voiceRecordingService.startRecording(get().activeLanguageCode, async (recordingResult) => {
+      console.log('[VOICE] Recording finalized; preparing transcription', {
+        hasUri: Boolean(recordingResult.uri),
+        hasBlob: Boolean(recordingResult.blob),
+        liveTranscriptLength: recordingResult.liveTranscript.length,
+      });
+      set({ voiceState: 'thinking', lastAnnouncement: 'Processing your voice...' });
+      try {
+        let autoText = recordingResult.liveTranscript ? recordingResult.liveTranscript.trim() : '';
+        if (!autoText && (recordingResult.blob || recordingResult.uri)) {
+          const text = await requestWhisperSTT(
+            recordingResult.blob,
+            get().activeLanguageCode,
+            recordingResult.uri || 'device_mic'
+          );
+          if (text) autoText = text.trim();
+        }
+        if (autoText) set({ lastAnnouncement: `You: ${autoText}` });
+        if (autoText) set({ lastAnnouncement: `You: ${autoText}` });
+        console.log(`[VOICE] Transcript received (${autoText.length} chars)`);
+        await get().processVoiceInput(autoText);
+      } catch (e) {
+        console.error('[VOICE] Failed to process recorded speech:', e);
+        set({ lastAnnouncement: 'I could not process that recording. Please try again.' });
+        set({ voiceState: 'idle' });
+      }
+    });
+    if (!started) {
+      set({ voiceState: 'idle', lastAnnouncement: 'Microphone unavailable. Check permission and try again.' });
+      return;
+    }
+  },
+
+  stopVoiceListening: async () => {
+    if (get().voiceState !== 'listening') return;
+    set({ voiceState: 'thinking', lastAnnouncement: '⚙️ Processing speech...' });
+    const result = await voiceRecordingService.stopRecording();
+    let textToProcess = result.liveTranscript ? result.liveTranscript.trim() : '';
+
+    if (!textToProcess && (result.blob || result.uri)) {
+      const text = await requestWhisperSTT(
+        result.blob,
+        get().activeLanguageCode,
+        result.uri || 'device_mic'
+      );
+      if (text) textToProcess = text.trim();
+    }
+
+    try {
+      await get().processVoiceInput(textToProcess);
+    } catch (e) {
+      set({ voiceState: 'idle' });
+    }
   },
 
   processVoiceInput: async (input: string) => {
     const cleanInput = (input || '').trim();
     const activeLang = get().activeLanguageCode;
+
+    if (cleanInput) set({ lastAnnouncement: `You: ${cleanInput}` });
+
+    if (isVoiceExitCommand(cleanInput)) {
+      get().stopVoiceListening().catch((error) => {
+        console.warn('[NavidoorStore] Voice exit cleanup failed:', error);
+      });
+      get().stopVoice();
+      return;
+    }
 
     if (!cleanInput || cleanInput.length < 2) {
       console.log(`[VOICE] Empty/Invalid STT transcription received.`);
@@ -195,7 +275,7 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
         en: "I didn't catch that. Please repeat.",
         hi: 'मैं समझ नहीं पाया। कृपया फिर से बोलें।',
         mr: 'मला समजले नाही. कृपया पुन्हा बोला.',
-        gu: 'હું સમજી શક્યો નથી. કૃપા કરીને ફરી બોલો.',
+        gu: 'હું સમજી શક્યો નથી. કૃપા કરીને ફરી બોलो.',
         pa: 'ਮੈਂ ਸਮਝ ਨਹੀਂ ਸਕਿਆ। ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਬੋਲੋ।',
         bn: 'আমি বুঝতে পারিনি। দয়া করে আবার বলুন।',
         ta: 'எனக்கு புரியவில்லை. தயவுசெய்து மீண்டும் சொல்லவும்.',
@@ -459,6 +539,10 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
       }
 
       if (answer) {
+        if (isVoiceExitCommand(answer)) {
+          get().stopVoice();
+          return;
+        }
         get().speak(answer);
       }
     } catch (err: any) {
@@ -606,8 +690,27 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   singleScanHandler: null as ((() => void) | null),
   setSingleScanHandler: (fn: (() => void) | null) => set({ singleScanHandler: fn }),
   triggerYoloScan: () => {
+    const s = get();
+    const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(s.activeMode);
+    const isProfileOrModalActive = 
+      s.isFirstTimeUser || 
+      s.isProfileModalOpen || 
+      s.isSosModalOpen || 
+      s.isFamilyCompanionOpen || 
+      s.isDesignSystemOpen || 
+      s.userRole !== 'navidoor_user';
+
+    if (!isVisionMode || isProfileOrModalActive) {
+      console.log('[Store] triggerYoloScan ignored: perception not needed or profile setup is active.');
+      return;
+    }
+
     const fn = get().singleScanHandler;
-    if (fn) fn();
+    if (fn) {
+      fn();
+    } else {
+      get().runLiveYoloScan();
+    }
   },
   capturePhotoAndAnalyze: async () => {
     try {
@@ -666,6 +769,21 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   },
 
   runLiveYoloScan: async () => {
+    const s = get();
+    const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(s.activeMode);
+    const isProfileOrModalActive = 
+      s.isFirstTimeUser || 
+      s.isProfileModalOpen || 
+      s.isSosModalOpen || 
+      s.isFamilyCompanionOpen || 
+      s.isDesignSystemOpen || 
+      s.userRole !== 'navidoor_user';
+
+    if (!isVisionMode || isProfileOrModalActive) {
+      console.log('[Store] runLiveYoloScan ignored: perception not needed or profile setup is active.');
+      return;
+    }
+
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (e) {}
@@ -770,13 +888,40 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   setSosModalOpen: (open) => set({ isSosModalOpen: open }),
   emergencyContacts: INITIAL_EMERGENCY_CONTACTS,
   triggerSosAlert: () => {
+    if (get().userRole === 'undecided') {
+      set({ userRole: 'navidoor_user' });
+    }
     set({ isSosModalOpen: true });
     speakAnnouncement('Emergency alert activated. Location broadcasting to Sunita Sharma.');
     playObstacleBeep(1200, 400);
+    try {
+      socketClient.emitEmergencySOS('Live GPS Location broadcasted via Emergency SOS');
+    } catch (e) {}
   },
 
   isFamilyCompanionOpen: false,
   setFamilyCompanionOpen: (open) => set({ isFamilyCompanionOpen: open }),
+  isFamilyQrModalOpen: false,
+  setIsFamilyQrModalOpen: (open) => set({ isFamilyQrModalOpen: open }),
+  isFamilyScannerModalOpen: false,
+  setIsFamilyScannerModalOpen: (open) => set({ isFamilyScannerModalOpen: open }),
+  activePairingConnection: null,
+  setActivePairingConnection: (conn) => set({ activePairingConnection: conn }),
+  disconnectActivePairing: async () => {
+    const conn = get().activePairingConnection;
+    if (conn && conn.id) {
+      try {
+        await familyPairingService.disconnectConnection(conn.id);
+      } catch (e) {}
+    }
+    set({
+      activePairingConnection: null,
+      familyConnectionStatus: 'idle',
+      familyConnectedUserPhone: null,
+      familyConnectedUserData: null,
+    });
+    get().speak('Family companion disconnected.');
+  },
 
   isDesignSystemOpen: false,
   setDesignSystemOpen: (open) => set({ isDesignSystemOpen: open }),

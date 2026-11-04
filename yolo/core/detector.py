@@ -1,7 +1,8 @@
 """
 NAVIDOOR YOLOv11 / YOLOv8 AI Vision Detection Engine
-Loads pre-trained YOLO weights, processes camera frames, estimates distances,
-and delivers structured bounding boxes and voice accessibility alerts.
+Loads pre-trained YOLO weights, fine-tuned staircase models, fine-tuned pothole models,
+fine-tuned crosswalk models, and fine-tuned elevator models, processes camera frames,
+estimates distances, and delivers structured bounding boxes and voice accessibility alerts.
 """
 
 import os
@@ -17,7 +18,11 @@ class YOLODetector:
     def __init__(
         self,
         model_name: str = "yolo11n.pt",
-        confidence_threshold: float = 0.45,
+        staircase_model_name: str = "yolo11n_staircase.pt",
+        pothole_model_name: str = "yolo11n_pothole.pt",
+        crosswalk_model_name: str = "yolo11n_crosswalk.pt",
+        elevator_model_name: str = "yolo11n_elevator.pt",
+        confidence_threshold: float = 0.28,
         models_dir: str = None
     ):
         self.confidence_threshold = confidence_threshold
@@ -31,99 +36,191 @@ class YOLODetector:
         os.makedirs(self.models_dir, exist_ok=True)
 
         self.model_path = os.path.join(self.models_dir, model_name)
+        self.staircase_model_path = os.path.join(self.models_dir, staircase_model_name)
+        self.pothole_model_path = os.path.join(self.models_dir, pothole_model_name)
+        self.crosswalk_model_path = os.path.join(self.models_dir, crosswalk_model_name)
+        self.elevator_model_path = os.path.join(self.models_dir, elevator_model_name)
+        
         self.model = None
+        self.staircase_model = None
+        self.pothole_model = None
+        self.crosswalk_model = None
+        self.elevator_model = None
         self.is_ultralytics_loaded = False
-        self._initialize_model(model_name)
+        self._initialize_models(model_name, staircase_model_name, pothole_model_name, crosswalk_model_name, elevator_model_name)
 
-    def _initialize_model(self, model_name: str):
-        """Attempts to load model via Ultralytics; enables fallback if missing."""
+    def _initialize_models(self, model_name: str, staircase_model_name: str, pothole_model_name: str, crosswalk_model_name: str, elevator_model_name: str):
+        """Loads primary general model and specialized fine-tuned models."""
         try:
             from ultralytics import YOLO
-            # Check local models dir or let Ultralytics cache
             target = self.model_path if os.path.exists(self.model_path) else model_name
             self.model = YOLO(target)
             self.is_ultralytics_loaded = True
-            print(f"[YOLO DIAG] Model loaded successfully: {model_name}")
-            print(f"[YOLO DIAG] Total model classes: {len(self.model.names)} (Sample IDs: 0={self.model.names.get(0)}, 56={self.model.names.get(56, 'N/A')}, 67={self.model.names.get(67, 'N/A')})")
+            print(f"[YOLO DIAG] Primary model loaded successfully: {model_name}")
+            print(f"[YOLO DIAG] Total primary classes: {len(self.model.names)}")
+
+            # Load specialized fine-tuned staircase model
+            if os.path.exists(self.staircase_model_path):
+                self.staircase_model = YOLO(self.staircase_model_path)
+                print(f"[YOLO DIAG] Fine-tuned Staircase model loaded: {staircase_model_name} (classes: {self.staircase_model.names})")
+            else:
+                self.staircase_model = None
+
+            # Load specialized fine-tuned pothole model
+            if os.path.exists(self.pothole_model_path):
+                self.pothole_model = YOLO(self.pothole_model_path)
+                print(f"[YOLO DIAG] Fine-tuned Pothole model loaded: {pothole_model_name} (classes: {self.pothole_model.names})")
+            else:
+                self.pothole_model = None
+
+            # Load specialized fine-tuned crosswalk model
+            if os.path.exists(self.crosswalk_model_path):
+                self.crosswalk_model = YOLO(self.crosswalk_model_path)
+                print(f"[YOLO DIAG] Fine-tuned Crosswalk model loaded: {crosswalk_model_name} (classes: {self.crosswalk_model.names})")
+            else:
+                self.crosswalk_model = None
+
+            # Load specialized fine-tuned elevator model
+            if os.path.exists(self.elevator_model_path):
+                self.elevator_model = YOLO(self.elevator_model_path)
+                print(f"[YOLO DIAG] Fine-tuned Elevator model loaded: {elevator_model_name} (classes: {self.elevator_model.names})")
+            else:
+                self.elevator_model = None
+
         except Exception as e:
             print(f"[YOLO DIAG] Note: Ultralytics runtime error ({e}).")
             self.is_ultralytics_loaded = False
 
+    def _extract_boxes(self, results, detections: List[Dict[str, Any]], width: int, height: int, source_tag: str = "primary"):
+        for r in results:
+            boxes = r.boxes
+            if boxes is None or len(boxes) == 0:
+                continue
+
+            for box in boxes:
+                cls_id = int(box.cls[0].item())
+                cls_name = r.names.get(cls_id, f"obj_{cls_id}").lower()
+                conf = float(box.conf[0].item())
+                coords = box.xyxy[0].tolist()
+                x1, y1, x2, y2 = [int(v) for v in coords]
+
+                norm_bbox = [
+                    round(x1 / width, 3),
+                    round(y1 / height, 3),
+                    round(x2 / width, 3),
+                    round(y2 / height, 3)
+                ]
+
+                dist_info = self.distance_estimator.estimate_distance(
+                    cls_name, (x1, y1, x2, y2), width, height
+                )
+                zone = self.scene_analyzer.get_zone((x1, y1, x2, y2), width)
+
+                detections.append({
+                    "class": cls_name,
+                    "class_id": cls_id,
+                    "confidence": round(conf, 2),
+                    "bbox": [x1, y1, x2, y2],
+                    "normalized_bbox": norm_bbox,
+                    "distance_meters": dist_info["distance_meters"],
+                    "risk_level": dist_info["risk_level"],
+                    "zone": zone,
+                    "source": source_tag
+                })
+
     def detect_frame(
         self,
-        image_np: np.ndarray,
+        image_input: Union[np.ndarray, Any],
         language: str = "en"
     ) -> Dict[str, Any]:
-        """
-        Runs object detection on a BGR or RGB numpy image frame.
-        Returns:
-            - detections: list of objects with bbox [x1, y1, x2, y2], confidence, distance_meters, risk_level, zone
-            - safe_path: recommended walking direction and corridor status
-            - voice_guidance: localized spoken guidance string
-            - latency_ms: inference time
-        """
         start_time = time.time()
-        height, width = image_np.shape[:2]
-        channels = image_np.shape[2] if image_np.ndim > 2 else 1
-
-        print(f"\n--- [YOLO DIAG] DETECT FRAME INITIATED ---")
-        print(f"[YOLO DIAG] Preprocessing input shape: height={height}, width={width}, channels={channels}")
+        if hasattr(image_input, "shape"):
+            height, width = image_input.shape[:2]
+        elif hasattr(image_input, "size") and isinstance(image_input.size, tuple):
+            width, height = image_input.size
+        else:
+            width, height = (640, 640)
 
         detections: List[Dict[str, Any]] = []
 
         if self.is_ultralytics_loaded and self.model is not None:
             try:
-                # Run inference with conf=0.10 first to log raw count before NMS thresholding
-                raw_results_unfiltered = self.model(image_np, conf=0.10, verbose=False)
-                raw_box_count = sum(len(r.boxes) for r in raw_results_unfiltered)
-                print(f"[YOLO DIAG] Raw detections before conf thresholding (conf >= 0.10): {raw_box_count}")
+                # 1. Primary COCO detector (persons, vehicles, furniture, etc.)
+                primary_results = self.model(
+                    image_input,
+                    imgsz=640,
+                    conf=self.confidence_threshold,
+                    iou=0.45,
+                    verbose=False
+                )
+                self._extract_boxes(primary_results, detections, width, height, source_tag="primary")
 
-                # Run inference with active conf threshold
-                results = self.model(image_np, conf=self.confidence_threshold, verbose=False)
-                for r in results:
-                    boxes = r.boxes
-                    print(f"[YOLO DIAG] Raw tensor output shape: {boxes.data.shape if hasattr(boxes, 'data') else 'N/A'}")
-                    print(f"[YOLO DIAG] Detections after conf threshold ({self.confidence_threshold}): {len(boxes)}")
+                # 2. Fine-tuned Staircase detector (upstair / downstair)
+                if self.staircase_model is not None:
+                    stair_results = self.staircase_model(
+                        image_input,
+                        imgsz=320,
+                        conf=0.25,
+                        iou=0.45,
+                        verbose=False
+                    )
+                    stair_dets = []
+                    self._extract_boxes(stair_results, stair_dets, width, height, source_tag="staircase")
                     
-                    for i, box in enumerate(boxes):
-                        cls_id = int(box.cls[0].item())
-                        cls_name = self.model.names.get(cls_id, f"obj_{cls_id}").lower()
-                        conf = float(box.conf[0].item())
-                        coords = box.xyxy[0].tolist() # [x1, y1, x2, y2]
-                        x1, y1, x2, y2 = [int(v) for v in coords]
+                    if stair_dets:
+                        # If directional stairs detected, suppress any generic lower-confidence stairs
+                        detections = [d for d in detections if d["class"] != "stairs"]
+                        detections.extend(stair_dets)
 
-                        norm_bbox = [
-                            round(x1 / width, 3),
-                            round(y1 / height, 3),
-                            round(x2 / width, 3),
-                            round(y2 / height, 3)
-                        ]
+                # 3. Fine-tuned Pothole detector
+                if self.pothole_model is not None:
+                    pothole_results = self.pothole_model(
+                        image_input,
+                        imgsz=320,
+                        conf=0.25,
+                        iou=0.45,
+                        verbose=False
+                    )
+                    pothole_dets = []
+                    self._extract_boxes(pothole_results, pothole_dets, width, height, source_tag="pothole")
+                    if pothole_dets:
+                        detections.extend(pothole_dets)
 
-                        print(f"[YOLO DIAG] Box {i+1}: class_id={cls_id}, name='{cls_name}', conf={conf:.2f}, pixel_bbox=[{x1}, {y1}, {x2}, {y2}], norm_bbox={norm_bbox}")
+                # 4. Fine-tuned Crosswalk detector
+                if self.crosswalk_model is not None:
+                    crosswalk_results = self.crosswalk_model(
+                        image_input,
+                        imgsz=320,
+                        conf=0.25,
+                        iou=0.45,
+                        verbose=False
+                    )
+                    crosswalk_dets = []
+                    self._extract_boxes(crosswalk_results, crosswalk_dets, width, height, source_tag="crosswalk")
+                    if crosswalk_dets:
+                        detections.extend(crosswalk_dets)
 
-                        # Calculate distance and risk
-                        dist_info = self.distance_estimator.estimate_distance(
-                            cls_name, (x1, y1, x2, y2), width, height
-                        )
+                # 5. Fine-tuned Elevator detector
+                if self.elevator_model is not None:
+                    elevator_results = self.elevator_model(
+                        image_input,
+                        imgsz=320,
+                        conf=0.25,
+                        iou=0.45,
+                        verbose=False
+                    )
+                    elevator_dets = []
+                    self._extract_boxes(elevator_results, elevator_dets, width, height, source_tag="elevator")
+                    if elevator_dets:
+                        detections.extend(elevator_dets)
 
-                        # Determine spatial zone
-                        zone = self.scene_analyzer.get_zone((x1, y1, x2, y2), width)
-
-                        detections.append({
-                            "class": cls_name,
-                            "class_id": cls_id,
-                            "confidence": round(conf, 2),
-                            "bbox": [x1, y1, x2, y2],
-                            "normalized_bbox": norm_bbox,
-                            "distance_meters": dist_info["distance_meters"],
-                            "risk_level": dist_info["risk_level"],
-                            "zone": zone
-                        })
             except Exception as e:
-                print(f"[YOLO DIAG] Inference exception: {e}")
+                print(f"[YOLO Inference Error]: {e}")
 
         # Analyze scene corridors
-        safe_path = self.scene_analyzer.analyze_clearance(detections, width, height)
+        safe_path = self.scene_analyzer.analyze_clearance(
+            detections, width, height, image_input=image_input
+        )
 
         # Generate spoken guidance
         voice_guidance = self.guidance_generator.generate_spoken_guidance(
@@ -131,6 +228,10 @@ class YOLODetector:
         )
 
         latency_ms = round((time.time() - start_time) * 1000, 1)
+
+        if len(detections) > 0 or safe_path.get("path_state") != "UNKNOWN":
+            det_summary = [(d["class"], d["confidence"], f"{d['distance_meters']}m") for d in detections]
+            print(f"[YOLO DIAG] Dets: {det_summary} | State: {safe_path.get('path_state')} | Guidance: '{voice_guidance}'")
 
         return {
             "success": True,

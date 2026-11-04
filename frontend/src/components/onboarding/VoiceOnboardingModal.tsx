@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Platform, StatusBar, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Platform, ScrollView } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { SUPPORTED_LANGUAGES_META } from '../../services/voiceAssistantBackend';
@@ -136,7 +137,7 @@ export const VoiceOnboardingModal: React.FC = () => {
       }
     } else {
       setIsListening(true);
-      await voiceRecordingService.startRecording(activeLanguageCode, async (autoText) => {
+      await voiceRecordingService.startRecording(activeLanguageCode, async ({ liveTranscript: autoText }) => {
         if (autoText && autoText.trim()) {
           setIsListening(false);
           const answer = autoText.trim().toLowerCase();
@@ -237,7 +238,7 @@ export const VoiceOnboardingModal: React.FC = () => {
   return (
     <Modal visible={isFirstTimeUser} transparent statusBarTranslucent animationType="fade">
       <View style={styles.fullScreenWrapper}>
-        <StatusBar barStyle="light-content" backgroundColor="#64748B" />
+        <StatusBar style="light" />
         <SafeAreaView style={styles.safeArea}>
           <ScrollView
             style={styles.scroll}
@@ -637,4 +638,3 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 });
-

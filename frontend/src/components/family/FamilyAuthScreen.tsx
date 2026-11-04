@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { BACKEND_URL } from '../../services/voiceAssistantBackend';
@@ -124,7 +125,7 @@ export const FamilyAuthScreen: React.FC = () => {
 
   return (
     <View style={styles.fullScreenWrapper}>
-      <StatusBar barStyle="light-content" backgroundColor="#64748B" />
+      <StatusBar style="light" />
       <SafeAreaView style={styles.safeArea}>
         <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           

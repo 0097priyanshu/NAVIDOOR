@@ -1,6 +1,12 @@
 import { Platform } from 'react-native';
 import { stopSpeech } from '../utils/speechUtils';
 
+export interface VoiceRecordingResult {
+  blob: Blob | null;
+  uri: string | null;
+  liveTranscript: string;
+}
+
 const LANG_BCP47_MAP: Record<string, string> = {
   en: 'en-US',
   hi: 'hi-IN',
@@ -14,7 +20,7 @@ const LANG_BCP47_MAP: Record<string, string> = {
   ml: 'ml-IN',
 };
 
-function getExpoAudio(): any {
+export function getExpoAudio(): any {
   if (Platform.OS === 'web') return null;
 
   // 1. Try modern expo-audio first (Expo SDK 57+)
@@ -25,27 +31,17 @@ function getExpoAudio(): any {
       AudioModule = require('expo-audio/build/AudioModule').default;
     } catch (e) {}
 
-    const AudioRecorder = (AudioModule && AudioModule.AudioRecorder) || expoAudio.AudioRecorder || (expoAudio.default && expoAudio.default.AudioRecorder);
-    if (expoAudio && (expoAudio.requestRecordingPermissionsAsync || AudioRecorder)) {
+    const Recorder = (AudioModule && AudioModule.AudioRecorder) || expoAudio.AudioRecorder || (expoAudio.default && expoAudio.default.AudioRecorder);
+    if (expoAudio && (expoAudio.requestRecordingPermissionsAsync || Recorder)) {
       return {
         isExpoAudio: true,
         getPermissionsAsync: expoAudio.getRecordingPermissionsAsync,
         requestPermissionsAsync: expoAudio.requestRecordingPermissionsAsync,
-        AudioRecorder,
+        setAudioModeAsync: expoAudio.setAudioModeAsync,
+        AudioRecorder: Recorder,
         RecordingPresets: expoAudio.RecordingPresets,
         expoAudio,
       };
-    }
-  } catch (e) {}
-
-  // 2. Fallback to legacy expo-av (older Expo SDKs) if ExponentAV native module exists
-  try {
-    const { NativeModules } = require('react-native');
-    if (NativeModules?.ExponentAV) {
-      const expoAv = require('expo-av');
-      if (expoAv && (expoAv.Audio || expoAv.default?.Audio)) {
-        return expoAv.Audio || expoAv.default?.Audio;
-      }
     }
   } catch (e) {}
 
@@ -57,7 +53,7 @@ export class VoiceRecordingService {
   private isRecording: boolean = false;
   private speechRecognition: any = null;
   private lastLiveTranscript: string = '';
-  private onAutoResultCallback: ((text: string) => void) | null = null;
+  private onAutoResultCallback: ((result: VoiceRecordingResult) => void) | null = null;
   private mobileStatusInterval: any = null;
 
   private mediaRecorder: MediaRecorder | null = null;
@@ -120,7 +116,7 @@ export class VoiceRecordingService {
     return true;
   }
 
-  async startRecording(langCode: string = 'en', onAutoResult?: (text: string) => void): Promise<boolean> {
+  async startRecording(langCode: string = 'en', onAutoResult?: (result: VoiceRecordingResult) => void): Promise<boolean> {
     stopSpeech();
 
     const hasPerm = await this.requestMicrophonePermission();
@@ -144,7 +140,24 @@ export class VoiceRecordingService {
       if (Audio) {
         try {
           if (Audio.isExpoAudio) {
-            const { AudioRecorder, RecordingPresets, expoAudio } = Audio;
+            const { AudioRecorder, RecordingPresets, expoAudio, setAudioModeAsync } = Audio;
+
+            // Configure audio mode for iOS recording permission on Expo SDK 57 (expo-audio)
+            try {
+              const setMode = setAudioModeAsync || (expoAudio && expoAudio.setAudioModeAsync);
+              if (typeof setMode === 'function') {
+                await setMode({
+                  allowsRecording: true,
+                  playsInSilentMode: true,
+                  shouldPlayInBackground: false,
+                  shouldRouteThroughEarpiece: false,
+                });
+                console.log('[VoiceRecordingService] Configured expo-audio setAudioModeAsync (allowsRecording: true)');
+              }
+            } catch (modeErr) {
+              console.warn('[VoiceRecordingService] expo-audio setAudioModeAsync note:', modeErr);
+            }
+
             if (!AudioRecorder) {
               throw new Error('AudioRecorder constructor unavailable on expo-audio module');
             }
@@ -157,28 +170,70 @@ export class VoiceRecordingService {
               bitRate: 128000,
               android: { outputFormat: 'mpeg4', audioEncoder: 'aac' },
             };
+            const meteredOptions = { ...options, isMeteringEnabled: true };
 
             if (this.recording) {
               try { await this.recording.stop(); } catch (e) {}
               this.recording = null;
             }
 
-            const recorder = new AudioRecorder(options);
+            const recorder = new AudioRecorder(meteredOptions);
             if (typeof recorder.prepareToRecordAsync === 'function') {
               await recorder.prepareToRecordAsync();
             }
             recorder.record();
             this.recording = recorder;
+            let hasSpoken = false;
+            let lastSpeechAt = Date.now();
+            const recordingStartedAt = Date.now();
+            let lastMeteringLogAt = 0;
+            this.mobileStatusInterval = setInterval(() => {
+              if (!this.isRecording || !this.recording) return;
+              try {
+                const status = typeof this.recording.getStatus === 'function'
+                  ? this.recording.getStatus()
+                  : null;
+                const now = Date.now();
+                const metering = typeof status?.metering === 'number' ? status.metering : null;
+                if (now - lastMeteringLogAt >= 2000) {
+                  console.log(`[VoiceRecordingService] Recorder status: recording=${Boolean(status?.isRecording)} metering=${metering ?? 'unavailable'} uri=${this.recording.uri || 'pending'}`);
+                  lastMeteringLogAt = now;
+                }
+                // Android handset input often peaks below -45 dBFS; use a
+                // lower threshold so ordinary conversational speech is seen.
+                if (metering !== null && metering > -55) {
+                  if (!hasSpoken) console.log(`[VOICE] Mobile speech detected (dB: ${metering.toFixed(1)})`);
+                  hasSpoken = true;
+                  lastSpeechAt = now;
+                } else if ((hasSpoken && now - lastSpeechAt >= 1800) || (!hasSpoken && now - recordingStartedAt >= 10000)) {
+                  const callback = this.onAutoResultCallback;
+                  this.onAutoResultCallback = null;
+                  if (this.mobileStatusInterval) clearInterval(this.mobileStatusInterval);
+                  this.mobileStatusInterval = null;
+                  if (callback) {
+                    console.log(`[VOICE] Finalizing mobile recording (${hasSpoken ? 'silence after speech' : '10s no-speech fallback'})`);
+                    void this.stopRecording().then(callback).catch((error) => {
+                      console.error('[VoiceRecordingService] Failed to finalize recording:', error);
+                      callback({ blob: null, uri: null, liveTranscript: this.lastLiveTranscript });
+                    });
+                  }
+                }
+              } catch (error) {
+                // Some platform builds do not expose metering; retain manual stop in that case.
+              }
+            }, 120);
             console.log('[VoiceRecordingService] Mobile expo-audio recording active');
             return true;
           } else if (Audio.Recording) {
-            await Audio.setAudioModeAsync({
-              allowsRecordingIOS: true,
-              playsInSilentModeIOS: true,
-              staysActiveInBackground: false,
-              shouldDuckAndroid: true,
-              playThroughEarpieceAndroid: false,
-            });
+            if (typeof Audio.setAudioModeAsync === 'function') {
+              await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true,
+                playsInSilentModeIOS: true,
+                staysActiveInBackground: false,
+                shouldDuckAndroid: true,
+                playThroughEarpieceAndroid: false,
+              });
+            }
 
             if (this.recording) {
               try { await this.recording.stopAndUnloadAsync(); } catch (e) {}
@@ -208,15 +263,15 @@ export class VoiceRecordingService {
               const metering = typeof status.metering === 'number' ? status.metering : -160;
               const currentDuration = Date.now() - recordingStartTimeMobile;
 
-              // Metering ranges from -160 (silence) to 0 (max dB). Voice threshold: > -42 dB
-              if (metering > -42) {
+              // Metering ranges from -160 (silence) to 0 (max dB).
+              if (metering > -45) {
                 if (!hasSpokenMobile) {
                   hasSpokenMobile = true;
                   console.log(`[VOICE] Mobile speech detected (dB: ${metering.toFixed(1)}): ${new Date().toISOString()}`);
                 }
                 lastSpeechTimeMobile = Date.now();
-              } else if (hasSpokenMobile && currentDuration > 2000 && Date.now() - lastSpeechTimeMobile > 2200) {
-                // 2.2s of silence after speech (with min 2.0s recording window) -> auto stop & process
+              } else if (hasSpokenMobile && currentDuration > 2000 && Date.now() - lastSpeechTimeMobile > 1800) {
+                // 1.8s of silence after speech -> auto stop & process
                 console.log(`[VOICE] Mobile silence detected after speech (${currentDuration}ms total), auto-stopping...`);
                 hasSpokenMobile = false;
                 if (this.mobileStatusInterval) {
@@ -227,8 +282,7 @@ export class VoiceRecordingService {
                   const cb = this.onAutoResultCallback;
                   this.onAutoResultCallback = null;
                   this.stopRecording().then((res) => {
-                    const txt = res.liveTranscript || '';
-                    cb(txt);
+                    cb(res);
                   });
                 }
               } else if (!hasSpokenMobile && currentDuration > 10000) {
@@ -242,8 +296,7 @@ export class VoiceRecordingService {
                   const cb = this.onAutoResultCallback;
                   this.onAutoResultCallback = null;
                   this.stopRecording().then((res) => {
-                    const txt = res.liveTranscript || '';
-                    cb(txt);
+                    cb(res);
                   });
                 }
               }
@@ -328,16 +381,15 @@ export class VoiceRecordingService {
                   console.log(`[VOICE] Speech detected: ${new Date().toISOString()}`);
                 }
                 lastSpeechTime = Date.now();
-              } else if (hasSpoken && webRecDuration > 2000 && Date.now() - lastSpeechTime > 2200) {
-                // 2.2s of silence detected after speech (min 2.0s recording window) -> auto finalize
+              } else if (hasSpoken && webRecDuration > 2000 && Date.now() - lastSpeechTime > 1800) {
+                // 1.8s of silence detected after speech -> auto finalize
                 hasSpoken = false;
                 console.log(`[VOICE] Silence detected after speech (${webRecDuration}ms total), auto-stopping...`);
                 if (this.onAutoResultCallback) {
                   const cb = this.onAutoResultCallback;
                   this.onAutoResultCallback = null;
                   this.stopRecording().then((res) => {
-                    const txt = res.liveTranscript || '';
-                    cb(txt);
+                    cb(res);
                   });
                 }
               }
@@ -387,13 +439,8 @@ export class VoiceRecordingService {
           };
 
           this.speechRecognition.onend = () => {
-            if (this.onAutoResultCallback) {
-              const text = this.lastLiveTranscript;
-              this.lastLiveTranscript = '';
-              const cb = this.onAutoResultCallback;
-              this.onAutoResultCallback = null;
-              cb(text ? text.trim() : '');
-            }
+            // VAD owns finalization. SpeechRecognition may end its interim
+            // session before the user's silence window has elapsed.
           };
 
           this.speechRecognition.start();
@@ -472,7 +519,7 @@ export class VoiceRecordingService {
     }
   }
 
-  async stopRecording(): Promise<{ blob: Blob | null; uri: string | null; liveTranscript: string }> {
+  async stopRecording(): Promise<VoiceRecordingResult> {
     console.log(`[VOICE] Recording stopped: ${new Date().toISOString()}`);
     const liveTranscript = this.lastLiveTranscript;
     this.lastLiveTranscript = '';

@@ -7,7 +7,7 @@ function downloadFile(url, destPath) {
   return new Promise((resolve, reject) => {
     console.log(`[Downloading]: ${url} -> ${destPath}`);
     const file = fs.createWriteStream(destPath);
-    
+
     const request = (targetUrl) => {
       https.get(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (response) => {
         if ([301, 302, 307, 308].includes(response.statusCode) && response.headers.location) {
@@ -29,7 +29,7 @@ function downloadFile(url, destPath) {
           });
         });
       }).on('error', (err) => {
-        fs.unlink(destPath, () => {});
+        fs.unlink(destPath, () => { });
         reject(err);
       });
     };
@@ -57,20 +57,27 @@ async function main() {
     console.log(`[Whisper Model] Verified at ${whisperModelPath} (${fs.statSync(whisperModelPath).size} bytes)`);
   }
 
-  // 2. Download Whisper.cpp Windows CLI Executable Release
+  // 2. Download Whisper.cpp CLI Executable Release
+  const whisperMacBin = path.join(binDir, 'main');
   const whisperExePath = path.join(binDir, 'main.exe');
-  if (!fs.existsSync(whisperExePath)) {
-    const whisperZipPath = path.join(binDir, 'whisper_windows.zip');
-    await downloadFile('https://github.com/ggerganov/whisper.cpp/releases/download/v1.5.4/whisper-bin-x64.zip', whisperZipPath);
-    try {
-      execSync(`powershell -Command "Expand-Archive -Path '${whisperZipPath}' -DestinationPath '${binDir}' -Force"`);
-      if (fs.existsSync(whisperZipPath)) fs.unlinkSync(whisperZipPath);
-      console.log('[Whisper CLI] Extracted main.exe successfully to backend/bin/');
-    } catch (e) {
-      console.warn('[Whisper CLI] Extraction note:', e.message);
+  const activeBin = fs.existsSync(whisperMacBin) ? whisperMacBin : whisperExePath;
+
+  if (!fs.existsSync(activeBin)) {
+    if (process.platform === 'win32') {
+      const whisperZipPath = path.join(binDir, 'whisper_windows.zip');
+      await downloadFile('https://github.com/ggerganov/whisper.cpp/releases/download/v1.5.4/whisper-bin-x64.zip', whisperZipPath);
+      try {
+        execSync(`powershell -Command "Expand-Archive -Path '${whisperZipPath}' -DestinationPath '${binDir}' -Force"`);
+        if (fs.existsSync(whisperZipPath)) fs.unlinkSync(whisperZipPath);
+        console.log('[Whisper CLI] Extracted main.exe successfully to backend/bin/');
+      } catch (e) {
+        console.warn('[Whisper CLI] Extraction note:', e.message);
+      }
+    } else {
+      console.log('[Whisper CLI] Executable missing for macOS/Linux. Please place the compiled `main` binary into backend/bin/');
     }
   } else {
-    console.log(`[Whisper CLI] Verified at ${whisperExePath}`);
+    console.log(`[Whisper CLI] Verified executable at ${activeBin}`);
   }
 
   console.log('\n=== All Models & Executables Ready ===');

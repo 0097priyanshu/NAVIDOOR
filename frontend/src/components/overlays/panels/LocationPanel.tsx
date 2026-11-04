@@ -116,7 +116,7 @@ export const LocationPanel = () => {
     setVoiceState('listening');
     useNavidoorStore.setState({ lastAnnouncement: '🎤 Listening... Who to share with?' });
     
-    await voiceRecordingService.startRecording(activeLanguageCode, async (autoText) => {
+    await voiceRecordingService.startRecording(activeLanguageCode, async ({ liveTranscript: autoText }) => {
       if (autoText && autoText.trim()) {
         setVoiceState('thinking');
         setTimeout(() => {
@@ -144,7 +144,7 @@ export const LocationPanel = () => {
     setVoiceState('listening');
     useNavidoorStore.setState({ lastAnnouncement: '🎤 Listening... Say Yes or No' });
     
-    await voiceRecordingService.startRecording(activeLanguageCode, async (autoText) => {
+    await voiceRecordingService.startRecording(activeLanguageCode, async ({ liveTranscript: autoText }) => {
       setVoiceState('thinking');
       const text = (autoText || '').toLowerCase().trim();
       if (text.includes('yes') || text.includes('yup') || text.includes('yeah') || text.includes('हाँ') || text.includes('हो')) {

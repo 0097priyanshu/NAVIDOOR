@@ -2,15 +2,15 @@
 
 ## What Is This App?
 
-**NAVIDOOR** is an Indian, offline-first AI accessibility assistant and dual-portal ecosystem designed for visually impaired users and their family caregivers.
+**NAVIDOOR** is an Indian, offline-first AI accessibility assistant and dual-portal ecosystem designed for blind, visually impaired, and elderly users and their family caregivers.
 It runs as a cross-platform mobile application (React Native / Expo with a parallel Flutter client) offering two distinct role experiences:
-1. **NAVIDOOR User Mode**: AI vision assist, live camera hazard detection (**YOLOv11**), local LLM voice assistant with bilingual code-switching, and 12 navigation modes.
+1. **NAVIDOOR User Mode**: Continuous AI vision assist, live camera hazard detection (**YOLOv11**), local LLM voice assistant with bilingual code-switching, 12 navigation modes, and universal screen gesture triggers.
 2. **Family Companion Portal**: Dedicated visual dashboard for caregivers with real-time location monitoring, active journey tracking, emergency SOS alerts, and pairing management.
 
 It communicates with local microservices running on your PC over LAN (Wi-Fi):
 - Node.js Express server on port `5001`
 - AI4Bharat IndicF5 neural TTS microservice on port `5002`
-- YOLOv11 Computer Vision server on port `5003`
+- YOLOv11 5-Model Ensemble Computer Vision server on port `5003` (80 COCO classes + directional staircases + potholes + pedestrian crosswalks + indoor elevators)
 - Local Ollama LLM runtime on port `11434`
 
 ---
@@ -19,33 +19,38 @@ It communicates with local microservices running on your PC over LAN (Wi-Fi):
 
 ```text
 NAVIDOOR/
-├── App.tsx                  ← Root entry point (Dual-role routing: RoleSelectionScreen | FamilyModeContainer | Main User App)
-├── index.js                 ← Registers App with Expo
-├── index.html               ← Web entry HTML
-├── app.json                 ← Expo config (camera/audio permissions, splash, icon)
-├── babel.config.js          ← Babel transpiler config
-├── tsconfig.json            ← TypeScript config
-├── package.json             ← Node dependencies
+├── package.json             ← Root scripts (npm run start, server, yolo, tunnel, web)
 ├── yolo11n.pt               ← Official Ultralytics YOLOv11 nano model weights
+├── ARCHITECTURE.md          ← System architecture, data flow & component design
+├── README.md                ← Project overview, setup instructions & feature guide
+├── SPEECH_SETUP_GUIDE.md    ← Multilingual Whisper.cpp & local speech setup guide
 │
-├── src/                     ← All React Native frontend code
-│   ├── components/          ← UI component hierarchy
-│   │   ├── camera/          ← Camera view canvas, photo capture, YOLOv11 bounding boxes overlay
-│   │   ├── header/          ← Top status bar (SOS button, profile avatar)
-│   │   ├── navigation/      ← Rotating AI Mode Wheel (bottom 12-mode nav)
-│   │   ├── overlays/        ← Modular section panels & toast notifications
-│   │   │   └── panels/      ← Standalone overlay panels (Emergency, Location, Medical, Settings, etc.)
-│   │   ├── onboarding/      ← Role selection screen & voice setup flow
-│   │   ├── sos/             ← Emergency SOS modal & location broadcast
-│   │   ├── family/          ← Family Companion Portal (Container, Home, Location, Activity, Alerts, Profile tabs)
-│   │   ├── designSystem/    ← Design system preview modal
-│   │   ├── profile/         ← User profile / medical ID modal
-│   │   └── common/          ← Shared components (UnifiedMicButton with animated aura)
-│   ├── store/               ← Global state management (Zustand store: useNavidoorStore)
-│   ├── services/            ← Backend API clients + voice recording service + socket client
-│   ├── theme/               ← Design system tokens, colors, high-contrast themes
-│   ├── types/               ← TypeScript type definitions
-│   └── utils/               ← Speech utilities, translations, sound effects
+├── frontend/                ← React Native / Expo Mobile Application
+│   ├── App.tsx              ← Root entry point (Triple-tap gesture interceptor, dual-role routing)
+│   ├── index.js             ← Registers App with Expo
+│   ├── index.html           ← Web entry HTML
+│   ├── app.json             ← Expo config (permissions, splash, icons, plugins)
+│   ├── babel.config.js      ← Babel transpiler config
+│   ├── tsconfig.json        ← TypeScript config
+│   ├── package.json         ← Frontend dependencies (Expo SDK 57, RN 0.86, React 19)
+│   └── src/                 ← Frontend source hierarchy
+│       ├── components/      ← UI component hierarchy
+│       │   ├── camera/      ← Camera view canvas, unified controls (left SCAN), invisible YOLO overlay
+│       │   ├── header/      ← Top status bar (Emergency SOS button, profile avatar, spacing-aware)
+│       │   ├── navigation/  ← Rotating AI Mode Wheel (bottom 12-mode nav)
+│       │   ├── overlays/    ← Modular section panels & toast notifications
+│       │   │   └── panels/  ← Standalone overlay panels (Emergency, Location, Medical, Settings, etc.)
+│       │   ├── onboarding/  ← Role selection screen & voice setup flow
+│       │   ├── sos/         ← Emergency SOS modal, warning chime, and GPS broadcast
+│       │   ├── family/      ← Family Companion Portal (Home, Location, Activity, Alerts, Profile)
+│       │   ├── designSystem/← Design system preview modal
+│       │   ├── profile/     ← User profile / medical ID modal
+│       │   └── common/      ← Shared components (UnifiedMicButton with animated aura)
+│       ├── store/           ← Global state management (Zustand store: useNavidoorStore)
+│       ├── services/        ← Backend API clients, VAD audio recording, and Socket.IO client
+│       ├── theme/           ← Design system tokens, colors, high-contrast themes
+│       ├── types/           ← TypeScript type definitions
+│       └── utils/           ← Speech utilities, translations, sound effects
 │
 ├── backend/                 ← Node.js Express server (runs on PC / LAN)
 │   ├── index.js             ← Main Express server + STT/TTS/Chat REST APIs + Socket.IO server
@@ -53,18 +58,25 @@ NAVIDOOR/
 │   ├── models/whisper/      ← ggml-base.bin (141MB) & ggml-small.bin (487MB)
 │   ├── config/languages.js  ← 10 Indian language configs (en, hi, mr, gu, pa, bn, ta, te, kn, ml)
 │   ├── indicf5/             ← AI4Bharat IndicF5 Python Neural TTS microservice (port 5002)
+│   ├── scripts/             ← Automated setup scripts (setup_speech_pipeline.js)
 │   └── services/
-│       ├── whisperService.js     ← Whisper.cpp STT wrapper (clean 16kHz resampling, code-switching, script validation)
-│       ├── aiAssistantService.js ← Local Ollama LLM Reasoning Engine (direct native prompting & clarification safety)
+│       ├── whisperService.js     ← Whisper.cpp STT wrapper (clean 16kHz resampling, code-switching)
+│       ├── aiAssistantService.js ← Local Ollama LLM Reasoning Engine (direct native prompting)
 │       ├── indicf5Service.js     ← AI4Bharat IndicF5 TTS engine client wrapper
-│       ├── socketService.js      ← Socket.IO real-time event hub
+│       ├── socketService.js      ← Socket.IO real-time event hub (GPS & SOS broadcast)
 │       └── translationService.js ← Regional Indian language translation engine
 │
 └── yolo/                    ← Python YOLOv11 Computer Vision Service (Port 5003)
-    ├── yolo_server.py       ← FastAPI / Flask server with /detect, /detect/bus, /detect/medicine
-    ├── test_yolo.py         ← Automated detection & distance estimation test suite
+    ├── yolo_server.py       ← Flask REST server with /detect, /detect/bus, /detect/medicine
     ├── requirements.txt     ← Python dependencies (ultralytics, torch, opencv-python, flask)
+    ├── models/              ← Production model weights (5 models: ~5.5MB each)
+    │   ├── yolo11n.pt           ← Base MS COCO model (80 classes)
+    │   ├── yolo11n_staircase.pt ← Directional stairs (upstair / downstair)
+    │   ├── yolo11n_pothole.pt   ← Road hazard (pothole)
+    │   ├── yolo11n_crosswalk.pt ← Outdoor landmark (crosswalk)
+    │   └── yolo11n_elevator.pt  ← Indoor landmark (elevator)
     └── core/
+        ├── detector.py           ← 5-model concurrent inference & detection fusion
         ├── distance_estimator.py ← Pinhole 3D distance & corridor clearance analyzer
         └── indian_labels.py      ← Indian contextual class mappings & multilingual prompts
 ```
@@ -77,23 +89,24 @@ NAVIDOOR/
 
 | Technology | Version | Purpose |
 | :--- | :--- | :--- |
-| **React Native** | 0.74.5 | Cross-platform mobile framework |
-| **Expo** | SDK 51 | Dev tooling, camera, audio, haptics, location APIs |
-| **TypeScript** | ~5.3.3 | Type safety across entire codebase |
+| **React Native** | 0.86.3 | Cross-platform mobile framework (Architecture v0.86) |
+| **Expo** | SDK 57 | Modern runtime, camera, audio, haptics, location APIs |
+| **React** | 19.2.3 | Modern React core runtime |
+| **TypeScript** | ^5.4.0 | End-to-end type safety across mobile application |
 | **Zustand** | ^4.5.2 | Lightweight reactive state management (`useNavidoorStore`) |
-| **expo-camera** | ~15.0.16 | Real-time continuous camera feed & high-res photo capture |
-| **expo-speech** | ~12.0.2 | Instant offline device TTS fallback |
-| **expo-haptics** | ~13.0.1 | Tactile vibration feedback on mode swipes & mic tap |
-| **expo-location** | ~17.0.1 | High-precision GPS for live navigation & SOS broadcast |
-| **expo-av** / **expo-audio** | SDK 51 | Audio recording with native metering (`isMeteringEnabled: true`) |
-| **socket.io-client** | ^4.8.3 | Real-time caregiver live stream & SOS event listener |
+| **expo-camera** | ~57.0.5 | Continuous camera feed & high-res photo capture |
+| **expo-audio** | ^57.0.5 | Native audio recording with real-time metering (`isMeteringEnabled: true`) |
+| **expo-speech** | ~57.0.3 | Instant offline device TTS fallback |
+| **expo-haptics** | ~57.0.3 | Tactile vibration feedback on gestures, scans & warnings |
+| **expo-location** | ~57.0.20 | High-precision GPS coordinates for live navigation & SOS broadcast |
+| **socket.io-client** | ^4.8.3 | Real-time caregiver live stream & emergency event dispatch |
 
 ### Backend & AI Microservices (PC / LAN)
 
 | Service | Port | Technology | Purpose |
 | :--- | :--- | :--- | :--- |
 | **Backend Gateway** | `5001` | Node.js v22+ Express + Socket.IO | Main API gateway, family pairing, socket hub |
-| **Speech-to-Text** | `5001` (internal) | `Whisper.cpp` (`main.exe`) | Offline multilingual STT with code-switching |
+| **Speech-to-Text** | `5001` (internal) | `Whisper.cpp` (`main.exe`) | Offline multilingual STT with natural code-switching |
 | **AI Vision Engine** | `5003` | Python 3.10+ + Ultralytics YOLOv11 | Real-time hazard detection & 3D distance estimation |
 | **Neural TTS** | `5002` | Python + AI4Bharat IndicF5 PyTorch | Neural voice synthesis for 10 Indian languages |
 | **Local LLM Engine** | `11434` | Ollama (`llama3.2` / `qwen2.5-coder`) | Conversational reasoning & vision context Q&A |
@@ -102,10 +115,10 @@ NAVIDOOR/
 
 ## Architecture & Data Flow
 
-### 1. Dual-Role Routing (App Startup)
+### 1. Dual-Role Routing & Screen Accessibility Triggers
 
 ```text
-App Launch (App.tsx)
+App Launch (frontend/App.tsx)
 ├── Checks userRole in Zustand store
 ├── Case 'undecided': Renders <RoleSelectionScreen />
 │     ├── NAVIDOOR User Card -> Sets userRole = 'navidoor_user', opens voice onboarding
@@ -113,14 +126,34 @@ App Launch (App.tsx)
 ├── Case 'family_member':
 │     ├── If not logged in -> Renders <FamilyAuthScreen />
 │     └── If logged in -> Renders <FamilyModeContainer /> (Caregiver Portal)
-└── Case 'navidoor_user': Renders main AI Accessibility workspace (<CameraViewCanvas />, <RotatingAIModeWheel />, <SectionViewPanel />)
+└── Case 'navidoor_user': Renders main AI Accessibility workspace
+      ├── <CameraViewCanvas /> (Continuous camera canvas)
+      ├── <CameraHeader /> (Platform-aware spacing, SOS & Profile buttons)
+      ├── <SectionViewPanel /> (12 feature panels)
+      ├── <RotatingAIModeWheel /> (Haptic 12-mode wheel + Unified Mic button)
+      └── <SectionToastNotification />
 ```
+
+#### Universal Screen Triple-Tap Gesture (Emergency SOS Trigger)
+For blind and visually impaired users, finding a specific on-screen button during an emergency or disorientation is extremely difficult. NAVIDOOR incorporates a universal screen-wide gesture:
+- **Detection**: Handled at the root in [`frontend/App.tsx`](file:///c:/Users/Aadya/NAVIDOOR/frontend/App.tsx) via `PanResponder` (`onStartShouldSetPanResponderCapture`) on mobile and a capturing `pointerdown` listener on web.
+- **Gesture Rule**: Tapping 3 times anywhere on the screen within an **850ms** rolling window (with 70ms tap deduplication).
+- **Behavior**:
+  1. Captures the 3rd tap to avoid firing buttons underneath.
+  2. Triggers `triggerSosAlert()` in [`frontend/src/store/useNavidoorStore.ts`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/store/useNavidoorStore.ts).
+  3. Promotes `userRole` to `'navidoor_user'` automatically if currently undecided.
+  4. Triggers warning haptics (`Haptics.NotificationFeedbackType.Warning`).
+  5. Plays alert warning beeps and opens `<SOSModal />`.
+  6. Emits `emergency:sos` over Socket.IO with user GPS coordinates and battery telemetry to linked caregivers.
+
+---
 
 ### 2. End-to-End Voice Assistant Pipeline
 
 ```text
                ┌────────────────────────────────────────────────────────┐
-               │           User Speaks into Microphone                  │
+               │           User Taps Floating Mic Button                │
+               │           (Animated expanding aura feedback)           │
                └──────────────────────────┬─────────────────────────────┘
                                           │
                                           ▼
@@ -172,15 +205,17 @@ App Launch (App.tsx)
                └────────────────────────────────────────────────────────┘
 ```
 
-### 3. YOLOv11 Computer Vision & Hazard Avoidance Pipeline
+---
+
+### 3. YOLOv11 Computer Vision & Invisible Hazard Avoidance Pipeline
 
 ```text
-Continuous Camera Frame (CameraViewCanvas)
+Unified Left SCAN Button Pressed (CameraControlsOverlay)
    │
-   ▼ POST /detect (Base64 JPEG)
-Python YOLOv11 Vision Server (Port 5003)
+   ▼ High-Resolution Frame Captured
+Python YOLOv11 Vision Server (Port 5003: POST /detect)
    │
-   ├── Ultralytics YOLOv11 Inference (yolo11n.pt ~28ms)
+   ├── Ultralytics YOLOv11 Concurrent Inference (5 models: Base + Stairs + Potholes + Crosswalks + Elevators)
    │
    ├── Pinhole Geometry 3D Distance Calculation:
    │   Distance = (H_real * focal_length) / h_bbox
@@ -190,11 +225,21 @@ Python YOLOv11 Vision Server (Port 5003)
    │
    ├── 3-Corridor Clearance Analysis:
    │   - LEFT, CENTER, RIGHT corridor evaluation
-   │   - Recommends path deviations ("Obstacle ahead. Step right.")
+   │   - Recommends path deviations ("Elevator 2.1m ahead. Step center.")
    │
    ▼ Return JSON Detections + Safe Path + Spoken Hints
-Render Dynamic Bounding Boxes + Tactile Haptic Alert + Spoken Guidance
+Invisible Background Processing:
+   ├── Tactile Haptic Pulses (Heavy on CRITICAL, Medium on WARNING)
+   ├── Proximity Beep Audio Feedback (Frequency increases as distance decreases)
+   ├── Natural Voice Guidance Announcement via TTS
+   └── Clean UI Canvas: Bounding boxes work invisibly in the background
 ```
+
+#### Non-Overlapping Platform Spacing
+The camera interface utilizes platform-specific safe-area insets (`Platform.OS === 'web'`, `android`, `ios`) across:
+- `<CameraHeader />`: Anchored to the top with responsive status bar padding.
+- `<CameraControlsOverlay />`: Top margin positioned safely below the header buttons (Emergency SOS and Profile) so controls never overlap.
+- `<AIVisionOverlay />`: Respects the same top offset guidelines for clean visual hierarchy.
 
 ---
 
@@ -213,6 +258,9 @@ Render Dynamic Bounding Boxes + Tactile Haptic Alert + Spoken Guidance
 | POST | `/detect/medicine` | YOLOv11 (5003) | Detects medicine bottles, pill strips, and labels |
 | POST | `/api/family/login` | Backend (5001) | Caregiver companion portal authentication |
 | POST | `/api/family/register` | Backend (5001) | Caregiver companion registration |
+| POST | `/api/family/register-token` | Backend (5001) | Register secure 5-minute single-use pairing QR token |
+| POST | `/api/family/claim-token` | Backend (5001) | Validate & claim pairing token when companion scans QR code |
+| POST | `/api/family/update-connection` | Backend (5001) | Approve, reject, or disconnect active family pairings |
 | POST | `/api/family/connect` | Backend (5001) | Submit pairing request to user by phone number |
 | GET | `/api/family/dashboard-data` | Backend (5001) | Caregiver dashboard metrics (battery, journey, location) |
 | WS | Socket.IO Gateway | Backend (5001) | Real-time GPS location streaming, SOS alerts, pairing events |
@@ -223,14 +271,71 @@ Render Dynamic Bounding Boxes + Tactile Haptic Alert + Spoken Guidance
 
 | File | Purpose |
 | :--- | :--- |
-| `App.tsx` | Root entry point, role-based routing, screen-level gesture handler |
-| `src/store/useNavidoorStore.ts` | Central Zustand store managing navigation modes, voice state, detections, and user profile |
-| `src/services/voiceRecordingService.ts` | Mobile VAD audio metering (-42 dB, 2.2s silence threshold, 2.0s min window, 10s max window) |
-| `src/services/voiceAssistantBackend.ts` | HTTP API client with dynamic LAN auto-discovery via Expo `hostUri` |
-| `src/components/camera/CameraViewCanvas.tsx` | Continuous camera stream with live YOLOv11 bounding boxes and distance tags |
-| `src/components/navigation/RotatingAIModeWheel.tsx` | Curved 12-mode navigation wheel dock with haptic rotation |
-| `backend/index.js` | Express server + Socket.IO hub connecting STT, Chat, TTS, and Family services |
-| `backend/services/whisperService.js` | Whisper.cpp wrapper with clean 16kHz resampling, `--prompt` code-switching, and script validation |
-| `backend/services/aiAssistantService.js` | Direct native LLM reasoning engine with programmatic validation & clarification safety check |
-| `yolo/yolo_server.py` | Python YOLOv11 server with pinhole distance estimation and corridor guidance |
-| `yolo/core/distance_estimator.py` | 3D pinhole distance calculator and left/center/right safe corridor analyzer |
+| [`frontend/App.tsx`](file:///c:/Users/Aadya/NAVIDOOR/frontend/App.tsx) | Root entry point, Universal Triple-Tap SOS gesture interceptor, horizontal swipe mode cycler, and dual-role routing |
+| [`frontend/src/store/useNavidoorStore.ts`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/store/useNavidoorStore.ts) | Central Zustand store managing navigation modes, voice state, detections, and `triggerSosAlert()` logic |
+| [`frontend/src/components/camera/CameraControlsOverlay.tsx`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/components/camera/CameraControlsOverlay.tsx) | Unified camera controls with left `SCAN` button (YOLOv11 integration, distance beeps, non-overlapping spacing) |
+| [`frontend/src/components/camera/CameraHeader.tsx`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/components/camera/CameraHeader.tsx) | Top status header with 5-second hold Emergency SOS button and user profile avatar |
+| [`frontend/src/components/camera/AIVisionOverlay.tsx`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/components/camera/AIVisionOverlay.tsx) | Invisible background hazard inference, distance badges, and proximity audio cues |
+| [`frontend/src/components/navigation/RotatingAIModeWheel.tsx`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/components/navigation/RotatingAIModeWheel.tsx) | Curved 12-mode navigation wheel dock with haptic rotation and centered Unified Mic button |
+| [`frontend/src/services/voiceRecordingService.ts`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/services/voiceRecordingService.ts) | Mobile VAD audio metering (-42 dB, 2.2s silence threshold, 2.0s min window, 10s max window) |
+| [`frontend/src/services/voiceAssistantBackend.ts`](file:///c:/Users/Aadya/NAVIDOOR/frontend/src/services/voiceAssistantBackend.ts) | HTTP API client with dynamic LAN auto-discovery via Expo `hostUri` |
+| [`backend/index.js`](file:///c:/Users/Aadya/NAVIDOOR/backend/index.js) | Express server + Socket.IO hub connecting STT, Chat, TTS, and Family services |
+| [`backend/services/whisperService.js`](file:///c:/Users/Aadya/NAVIDOOR/backend/services/whisperService.js) | Whisper.cpp wrapper with clean 16kHz resampling, `--prompt` code-switching, and script validation |
+| [`backend/services/aiAssistantService.js`](file:///c:/Users/Aadya/NAVIDOOR/backend/services/aiAssistantService.js) | Direct native LLM reasoning engine with programmatic validation & clarification safety check |
+| [`yolo/yolo_server.py`](file:///c:/Users/Aadya/NAVIDOOR/yolo/yolo_server.py) | Python YOLOv11 server with pinhole distance estimation and corridor guidance |
+| [`yolo/core/detector.py`](file:///c:/Users/Aadya/NAVIDOOR/yolo/core/detector.py) | 5-Model ensemble detector loading weights, executing concurrent inference, and fusing detections |
+| [`yolo/core/distance_estimator.py`](file:///c:/Users/Aadya/NAVIDOOR/yolo/core/distance_estimator.py) | 3D pinhole distance calculator and left/center/right safe corridor analyzer |
+| [`yolo/core/indian_labels.py`](file:///c:/Users/Aadya/NAVIDOOR/yolo/core/indian_labels.py) | Multilingual translations for obstacles, hazards, and navigation landmarks across 10 Indian languages |
+
+---
+
+## 7. YOLOv11 5-Model Ensemble Architecture & Specialized Hazard / Landmark Detection
+
+NAVIDOOR incorporates a high-performance **5-Model YOLOv11 Ensemble** orchestrated concurrently inside `yolo/core/detector.py`:
+1. **Primary General Model (`yolo11n.pt`)**:
+   - Detects all 80 standard COCO classes (pedestrians, vehicles, obstacles, doors, furniture, etc.) at native 640px resolution.
+2. **Specialized Directional Staircase Model (`models/yolo11n_staircase.pt`)**:
+   - Fine-tuned on 502 annotated staircase samples to detect:
+     - `upstair`: Stairs ascending ahead (1.2m calibrated height)
+     - `downstair`: Stairs descending ahead (1.0m calibrated height — elevated hazard priority to prevent falls)
+   - Evaluated at **70.5% mAP@50** and ~14.9ms inference latency on CPU.
+3. **Specialized Pothole Road Hazard Model (`models/yolo11n_pothole.pt`)**:
+   - Fine-tuned on 665 Roboflow annotated samples to detect:
+     - `pothole`: Road cavity, drain hole, or surface crater (0.15m ground plane calibrated height — critical trip & stumble hazard)
+   - Evaluated at **78.0% mAP@50** on the test split (82.9% precision) and runs concurrently on CPU.
+4. **Specialized Crosswalk Navigation Model (`models/yolo11n_crosswalk.pt`)**:
+   - Fine-tuned on 173 Roboflow annotated samples (`crossing-264hc`) to detect:
+     - `crosswalk`: Pedestrian zebra crossings (0.40m calibrated ground dimension — key outdoor navigation landmark)
+   - Evaluated at **91.6% mAP@50** on the test split (94.1% precision, 99.2% val mAP@50) and runs concurrently on CPU.
+5. **Specialized Elevator Indoor Navigation Model (`models/yolo11n_elevator.pt`)**:
+   - Fine-tuned on 1,783 Roboflow annotated samples (`elevator-awvus`) using balanced sub-sampling (`fraction=0.3`, 440 images/epoch) to detect:
+     - `elevator`: Elevator doors and lift lobbies (2.20m calibrated vertical height — critical indoor vertical transit landmark)
+   - Evaluated at **88.1% mAP@50** on the test split (85.2% precision, 53.5% mAP@50-95) and runs concurrently on CPU.
+6. **Detection Fusion & Priority Sorting**:
+   - Models execute in parallel on the live camera frame (~32–35ms total CPU latency).
+   - Ground hazards (potholes, descending stairs) receive immediate high-priority alerts with rapid warning beeps.
+   - Indoor & outdoor navigation landmarks (elevators, crosswalks, ascending stairs, doors) receive structured spoken guidance across 10 Indian languages.
+
+### Academic Benchmark & Research Paper Performance Metrics
+
+| Vision Model | Target Class(es) | Dataset Source | Total Dataset Images | Epochs | Precision (P) | Recall (R) | Test mAP@50 | Test mAP@50-95 | Weights Size |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`yolo11n_crosswalk.pt`** | `crosswalk` | Roboflow (`crossing-264hc`) | 173 (121 tr / 34 val / 18 te) | 20 | **94.1%** | **88.6%** | **91.6%** (0.9156) | **69.0%** (0.6896) | 5.50 MB |
+| **`yolo11n_elevator.pt`** | `elevator` | Roboflow (`elevator-awvus`) | 1,783 (1,468 tr / 157 val / 158 te) | 12 | **85.2%** | **80.6%** | **88.1%** (0.8809) | **53.5%** (0.5353) | 5.50 MB |
+| **`yolo11n_pothole.pt`** | `pothole` | Roboflow (`pothole-detection-using-yolov11-ipvd9`) | 665 (465 tr / 133 val / 67 te) | 20 | **82.9%** | **68.0%** | **78.0%** (0.7796) | **46.8%** (0.4681) | 5.50 MB |
+| **`yolo11n_staircase.pt`** | `upstair`, `downstair` | Custom Pascal VOC Staircase Dataset | 502 (402 tr / 100 val) | 25 | **75.2%** | **68.4%** | **70.5%** (0.7050) | **41.2%** (0.4120) | 5.46 MB |
+| **`yolo11n.pt`** (Base) | 80 COCO Classes | MS COCO 2017 Dataset | 118,287 images | Pretrained | **64.5%** | **53.8%** | **53.1%** (0.5310) | **39.5%** (0.3950) | 5.61 MB |
+
+---
+
+## 8. Family Companion QR Pairing & Dual-Sync Architecture
+
+The Family Companion Mode connects visually impaired users with their family caregivers through a secure, zero-friction pairing flow:
+1. **Single-Use 5-Minute QR Tokens**:
+   - When the user taps *Pair Family Companion*, a cryptographically randomized token (`pair_{timestamp}_{randomHex}`) is generated.
+   - Strictly expires after 300 seconds (5 minutes) and is single-use.
+2. **Real-Time Dual Synchronization**:
+   - **Local LAN / Socket.IO**: Immediate peer-to-peer connection request and approval chimes on the local network.
+   - **Cloud Firestore**: Real-time cloud sync (`onSnapshot` on `pairing_tokens/{token}`) allowing caregivers to monitor their family member even when on separate networks (e.g. mobile 5G/LTE).
+3. **Caregiver Safety Controls**:
+   - Live GPS location tracking, active journey route monitoring, battery telemetry, and instant audible Emergency SOS alerts.

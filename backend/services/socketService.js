@@ -114,6 +114,28 @@ function setupSocketIO(io) {
       }
     });
 
+    // 6. Real-time Family Companion QR Pairing & Connection Events
+    socket.on('family:connectionRequest', (data) => {
+      console.log('[Socket.IO] Real-time family:connectionRequest received:', data);
+      // Broadcast to all clients or specific phone
+      io.emit('family:connectionRequest', data);
+    });
+
+    socket.on('family:connectionApproved', (data) => {
+      console.log('[Socket.IO] Real-time family:connectionApproved received:', data);
+      io.emit('family:connectionResponse', { approved: true, ...data });
+    });
+
+    socket.on('family:connectionRejected', (data) => {
+      console.log('[Socket.IO] Real-time family:connectionRejected received:', data);
+      io.emit('family:connectionResponse', { approved: false, ...data });
+    });
+
+    socket.on('family:disconnected', (data) => {
+      console.log('[Socket.IO] Real-time family:disconnected received:', data);
+      io.emit('family:connectionRevoked', data);
+    });
+
     socket.on('disconnect', () => {
       const phone = io.socketPhones[socket.id];
       if (phone) {

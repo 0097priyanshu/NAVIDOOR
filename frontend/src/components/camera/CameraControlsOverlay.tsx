@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Dimensions, Platform } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
-import { Zap, ZapOff, RefreshCw, Volume2, Camera, Eye } from 'lucide-react-native';
+import { Zap, ZapOff, RefreshCw, Volume2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -16,19 +16,24 @@ export const CameraControlsOverlay: React.FC = () => {
     activeMode, 
     speak,
     lastAnnouncement,
-    triggerYoloScan,
+    isFirstTimeUser,
+    isProfileModalOpen,
+    isSosModalOpen,
+    isFamilyCompanionOpen,
+    isDesignSystemOpen,
+    userRole,
   } = useNavidoorStore();
 
   const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(activeMode);
-  if (!isVisionMode) return null;
+  const isProfileOrModalActive = 
+    isFirstTimeUser || 
+    isProfileModalOpen || 
+    isSosModalOpen || 
+    isFamilyCompanionOpen || 
+    isDesignSystemOpen || 
+    userRole !== 'navidoor_user';
 
-  const handleScanPress = () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch (e) {}
-    speak('Scanning surroundings...', true);
-    triggerYoloScan();
-  };
+  if (!isVisionMode || isProfileOrModalActive) return null;
 
   const handleTorchPress = () => {
     try {
@@ -55,25 +60,13 @@ export const CameraControlsOverlay: React.FC = () => {
     }
   };
 
-  const iconSize = isNarrowScreen ? 15 : 18;
+  const iconSize = isNarrowScreen ? 16 : 19;
 
   return (
     <View style={styles.accessibleOverlayContainer} pointerEvents="box-none">
       {/* UBER CYAN MONOCHROME TOP UTILITY ACTION BAR */}
       <View style={styles.topUtilityBar} pointerEvents="box-none">
-        {/* 1. Manual AI Vision Scan Button */}
-        <TouchableOpacity
-          style={[styles.utilityPill, styles.scanPill]}
-          onPress={handleScanPress}
-          accessibilityLabel="Scan surroundings for objects and obstacles"
-          accessibilityHint="Scans the camera view and speaks detected objects out loud"
-          accessibilityRole="button"
-        >
-          <Eye size={iconSize} color="#FFFFFF" />
-          <Text style={styles.utilityPillText}>SCAN</Text>
-        </TouchableOpacity>
-
-        {/* 2. Flashlight Light Mode Toggle */}
+        {/* 1. Flashlight Light Mode Toggle */}
         <TouchableOpacity
           style={[styles.utilityPill, torchOn && styles.utilityPillActiveTorch]}
           onPress={handleTorchPress}
@@ -83,11 +76,11 @@ export const CameraControlsOverlay: React.FC = () => {
         >
           {torchOn ? <Zap size={iconSize} color="#F59E0B" /> : <ZapOff size={iconSize} color="#FFFFFF" />}
           <Text style={[styles.utilityPillText, torchOn && styles.utilityPillTextTorch]}>
-            {torchOn ? 'LIGHT' : 'LIGHT'}
+            LIGHT
           </Text>
         </TouchableOpacity>
 
-        {/* 3. Rear / Front Camera Facing Toggle */}
+        {/* 2. Rear / Front Camera Facing Toggle */}
         <TouchableOpacity
           style={styles.utilityPill}
           onPress={handleCameraFlipPress}
@@ -99,7 +92,7 @@ export const CameraControlsOverlay: React.FC = () => {
           <Text style={styles.utilityPillText}>FLIP</Text>
         </TouchableOpacity>
 
-        {/* 4. Repeat Speech / Read Out Loud */}
+        {/* 3. Repeat Speech / Read Out Loud */}
         <TouchableOpacity
           style={styles.utilityPill}
           onPress={handleRepeatSpeechPress}
@@ -109,23 +102,6 @@ export const CameraControlsOverlay: React.FC = () => {
         >
           <Volume2 size={iconSize} color="#FFFFFF" />
           <Text style={styles.utilityPillText}>REPEAT</Text>
-        </TouchableOpacity>
-
-        {/* 5. YOLO AI Vision Scan Button */}
-        <TouchableOpacity
-          style={[styles.utilityPill, styles.utilityPillYolo]}
-          onPress={() => {
-            try {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-            } catch (e) {}
-            useNavidoorStore.getState().runLiveYoloScan();
-          }}
-          accessibilityLabel="Run YOLO AI Vision Scan"
-          accessibilityHint="Scans the camera view for obstacles and announces distances"
-          accessibilityRole="button"
-        >
-          <Camera size={iconSize} color="#FFFFFF" />
-          <Text style={styles.utilityPillTextYolo}>{isNarrowScreen ? 'YOLO' : 'YOLO SCAN'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -141,20 +117,20 @@ const styles = StyleSheet.create({
     bottom: 0,
     zIndex: 25,
     paddingHorizontal: isNarrowScreen ? 8 : 14,
-    paddingTop: Platform.OS === 'ios' ? 56 : (Platform.OS === 'android' ? 48 : 36),
+    paddingTop: Platform.OS === 'ios' ? 112 : (Platform.OS === 'android' ? 94 : 74),
   },
   topUtilityBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: isNarrowScreen ? 4 : 6,
+    gap: isNarrowScreen ? 6 : 8,
   },
   utilityPill: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: isNarrowScreen ? 3 : 5,
+    gap: isNarrowScreen ? 4 : 6,
     height: isNarrowScreen ? 42 : 46,
     borderRadius: 23,
     backgroundColor: '#0284C7',
@@ -168,27 +144,13 @@ const styles = StyleSheet.create({
   utilityPillActiveTorch: {
     backgroundColor: '#F59E0B',
   },
-  scanPill: {
-    backgroundColor: '#0D9488',
-  },
-  utilityPillYolo: {
-    backgroundColor: '#10B981',
-    borderWidth: 1.5,
-    borderColor: '#34D399',
-  },
   utilityPillText: {
     color: '#FFFFFF',
-    fontSize: isNarrowScreen ? 10 : 11,
+    fontSize: isNarrowScreen ? 10.5 : 12,
     fontWeight: '900',
     letterSpacing: 0.3,
   },
   utilityPillTextTorch: {
     color: '#FFFFFF',
-  },
-  utilityPillTextYolo: {
-    color: '#FFFFFF',
-    fontSize: isNarrowScreen ? 10 : 10.5,
-    fontWeight: '900',
-    letterSpacing: 0.3,
   },
 });

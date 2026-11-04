@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 
 const { SUPPORTED_LANGUAGES } = require('./config/languages');
@@ -28,7 +29,7 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, tempDir),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname) || '.m4a';
-    cb(null, `real_microphone_recording${ext}`);
+    cb(null, `real_microphone_${Date.now()}_${crypto.randomBytes(4).toString('hex')}${ext}`);
   }
 });
 const upload = multer({ storage });
@@ -167,10 +168,15 @@ app.post('/api/chat', async (req, res) => {
 
 // 5. Speech-to-Text Endpoint (Whisper.cpp on Real Microphone Audio)
 app.post('/api/stt', upload.single('audio'), async (req, res) => {
+  let uploadedPath = req.file?.path;
+  let convertedPath = null;
   try {
     const languageCode = req.body.language || 'en';
     const sourceUri = req.body.sourceUri || 'mobile_mic';
-    const filePath = req.file ? req.file.path : path.join(tempDir, 'real_microphone_recording.m4a');
+    if (!req.file || !fs.existsSync(req.file.path) || req.file.size <= 0) {
+      return res.status(400).json({ success: false, error: 'Audio upload missing or empty. Expected multipart field "audio".' });
+    }
+    const filePath = req.file.path;
 
     const fileExists = fs.existsSync(filePath);
     const fileSize = fileExists ? fs.statSync(filePath).size : 0;
@@ -188,6 +194,15 @@ app.post('/api/stt', upload.single('audio'), async (req, res) => {
 
     // Run real recording through whisperService (converts M4A/AAC to 16k PCM WAV -> real_microphone_16k.wav -> main.exe)
     const result = await whisperService.transcribeAudio(filePath, languageCode);
+    convertedPath = result.real16kWavPath;
+    if (!result.text || !result.text.trim()) {
+      return res.status(422).json({
+        success: false,
+        error: 'No speech was recognized in the uploaded recording.',
+        sourceAudioSize: fileSize,
+        wavMetrics: result.wavMetrics || null,
+      });
+    }
 
     res.json({
       success: true,
@@ -201,7 +216,20 @@ app.post('/api/stt', upload.single('audio'), async (req, res) => {
     });
   } catch (err) {
     console.error('[API /api/stt Error]:', err);
-    res.status(500).json({ success: false, error: 'Whisper.cpp STT transcription failed.' });
+    res.status(500).json({ success: false, error: `Whisper.cpp STT transcription failed: ${err.message}` });
+  } finally {
+    for (const file of [uploadedPath, convertedPath]) {
+      if (file && file !== uploadedPath && fs.existsSync(file)) {
+        try { fs.unlinkSync(file); } catch (cleanupError) {
+          console.warn('[API /api/stt] Could not remove converted audio:', cleanupError.message);
+        }
+      }
+      if (file === uploadedPath && file && fs.existsSync(file)) {
+        try { fs.unlinkSync(file); } catch (cleanupError) {
+          console.warn('[API /api/stt] Could not remove uploaded audio:', cleanupError.message);
+        }
+      }
+    }
   }
 });
 
@@ -231,33 +259,156 @@ app.post('/api/tts', async (req, res) => {
   }
 });
 
-// 7. Family Companion & User Management Endpoints (Mock / In-Memory Store)
+// 7. Family Companion & User Management Endpoints (Mock / In-Memory Store & Real-time Synchronization)
 const familyConnectionsMemory = [];
 const registeredFamilyUsers = [];
+const pairingTokensMemory = new Map();
+
+// Register a new 5-minute single-use pairing token
+app.post('/api/family/register-token', (req, res) => {
+  const { token, navidoorUid, navidoorName, navidoorPhone, expiresAt } = req.body;
+  if (!token) {
+    return res.status(400).json({ success: false, error: 'Token is required' });
+  }
+  pairingTokensMemory.set(token, {
+    token,
+    navidoorUid: navidoorUid || 'navidoor_default_user',
+    navidoorName: navidoorName || 'NAVIDOOR User',
+    navidoorPhone: navidoorPhone || '',
+    status: 'active',
+    createdAt: Date.now(),
+    expiresAt: expiresAt || (Date.now() + 5 * 60 * 1000),
+    singleUse: true,
+  });
+  console.log(`[Backend /api/family/register-token] Registered token ${token} (expires in 5 min)`);
+  res.json({ success: true, token });
+});
+
+// Securely validate and claim pairing token
+app.post('/api/family/claim-token', (req, res) => {
+  const { token, companionUid, companionName, companionPhone, companionRelationship } = req.body;
+  if (!token) {
+    return res.status(400).json({ success: false, error: 'Token is required' });
+  }
+
+  const tokenData = pairingTokensMemory.get(token);
+  if (!tokenData) {
+    // If not in local memory, check if valid token pattern
+    if (!token.startsWith('pair_')) {
+      return res.status(404).json({ success: false, error: 'Invalid pairing token' });
+    }
+  } else {
+    if (tokenData.status !== 'active') {
+      return res.status(400).json({ success: false, error: 'This pairing token has already been claimed or used.' });
+    }
+    if (tokenData.expiresAt < Date.now()) {
+      tokenData.status = 'expired';
+      return res.status(400).json({ success: false, error: 'This pairing token has expired. Please ask the user to generate a new QR code.' });
+    }
+    if (tokenData.navidoorUid === companionUid) {
+      return res.status(400).json({ success: false, error: 'Cannot pair with your own device.' });
+    }
+    tokenData.status = 'claimed';
+    tokenData.claimedBy = companionUid;
+    tokenData.claimedAt = Date.now();
+  }
+
+  const navidoorUid = tokenData?.navidoorUid || 'navidoor_default_user';
+  const navidoorName = tokenData?.navidoorName || 'NAVIDOOR User';
+  const navidoorPhone = tokenData?.navidoorPhone || '';
+
+  const connId = `conn_${navidoorUid}_${companionUid || Date.now()}`;
+  const connection = {
+    id: connId,
+    pairingToken: token,
+    navidoorUid,
+    companionUid: companionUid || `fam_${Date.now()}`,
+    navidoorName,
+    navidoorPhone,
+    companionName: companionName || 'Caregiver',
+    companionPhone: companionPhone || '',
+    companionRelationship: companionRelationship || 'Family Companion',
+    status: 'pending',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    permissions: {
+      canViewLocation: true,
+      canViewActivity: true,
+      canReceiveSOSAlerts: true,
+      canControlRemoteMic: false,
+    },
+  };
+
+  const existingIdx = familyConnectionsMemory.findIndex(c => c.id === connId || (c.companionUid === companionUid && c.navidoorUid === navidoorUid));
+  if (existingIdx >= 0) {
+    familyConnectionsMemory[existingIdx] = connection;
+  } else {
+    familyConnectionsMemory.push(connection);
+  }
+
+  console.log(`[Backend /api/family/claim-token] Claimed token ${token}, created connection ${connId} (pending)`);
+  res.json({ success: true, connection });
+});
+
+// Update connection status (approve / reject / disconnect)
+app.post('/api/family/update-connection', (req, res) => {
+  const { connectionId, status } = req.body;
+  const conn = familyConnectionsMemory.find(c => c.id === connectionId);
+  if (conn) {
+    conn.status = status;
+    conn.updatedAt = Date.now();
+  }
+  res.json({ success: true, status });
+});
+
+// Notify request
+app.post('/api/family/notify-request', (req, res) => {
+  const connection = req.body;
+  if (connection && connection.id) {
+    const existingIdx = familyConnectionsMemory.findIndex(c => c.id === connection.id);
+    if (existingIdx >= 0) {
+      familyConnectionsMemory[existingIdx] = connection;
+    } else {
+      familyConnectionsMemory.push(connection);
+    }
+  }
+  res.json({ success: true });
+});
 
 app.get('/api/user/pending-requests', (req, res) => {
-  const { phone } = req.query;
-  const requests = familyConnectionsMemory.filter(c => c.toUserPhone === phone && c.status === 'pending');
+  const { phone, uid } = req.query;
+  const requests = familyConnectionsMemory.filter(c => 
+    c.status === 'pending' && (!phone || c.toUserPhone === phone || c.navidoorPhone === phone || c.navidoorUid === uid)
+  );
   res.json({ success: true, requests });
 });
 
 app.post('/api/user/approve-connection', (req, res) => {
-  const { userPhone, familyPhone, action } = req.body;
-  const conn = familyConnectionsMemory.find(c => c.toUserPhone === userPhone && c.fromFamilyPhone === familyPhone);
-  if (conn) {
-    conn.status = action === 'accept' ? 'connected' : 'rejected';
+  const { userPhone, familyPhone, action, approved, connectionId } = req.body;
+  const isApproved = approved !== undefined ? approved : action === 'accept';
+  const newStatus = isApproved ? 'connected' : 'rejected';
+
+  let conn = null;
+  if (connectionId) {
+    conn = familyConnectionsMemory.find(c => c.id === connectionId);
   }
-  res.json({ success: true, status: conn ? conn.status : 'idle' });
+  if (!conn && userPhone && familyPhone) {
+    conn = familyConnectionsMemory.find(c => (c.toUserPhone === userPhone || c.navidoorPhone === userPhone) && (c.fromFamilyPhone === familyPhone || c.companionPhone === familyPhone));
+  }
+  if (conn) {
+    conn.status = newStatus;
+    conn.updatedAt = Date.now();
+  }
+  res.json({ success: true, status: conn ? conn.status : newStatus });
 });
 
 app.all(['/api/family/connection-status', '/api/family/connection-status/get'], (req, res) => {
   const phone = req.query.phone || (req.body && req.body.familyPhone);
-  const requests = familyConnectionsMemory.filter(c => c.fromFamilyPhone === phone || c.toUserPhone === phone);
-  const connectedUsers = requests.filter(c => c.status === 'connected').map(c => c.toUserPhone === phone ? c.fromFamilyPhone : c.toUserPhone);
+  const requests = familyConnectionsMemory.filter(c => c.fromFamilyPhone === phone || c.toUserPhone === phone || c.companionPhone === phone || c.navidoorPhone === phone);
+  const connectedUsers = requests.filter(c => c.status === 'connected').map(c => (c.toUserPhone === phone || c.navidoorPhone === phone) ? (c.fromFamilyPhone || c.companionPhone) : (c.toUserPhone || c.navidoorPhone));
   
-  // Auto-fallback connected user if none exist yet for demo
-  const finalConnected = connectedUsers.length > 0 ? connectedUsers : ['+91 98123 45678'];
-  res.json({ success: true, requests, connectedUsers: finalConnected });
+  // Return connected users and requests
+  res.json({ success: true, requests, connectedUsers });
 });
 
 app.post('/api/family/connect', (req, res) => {

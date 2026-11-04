@@ -6,7 +6,13 @@ const { getLanguageMeta } = require('../config/languages');
 
 class WhisperService {
   constructor() {
-    this.binPath = process.env.WHISPER_BIN_PATH || path.join(__dirname, '../bin/main.exe');
+    const macBin = path.join(__dirname, '../bin/main');
+    const winBin = path.join(__dirname, '../bin/main.exe');
+    this.binPath = process.env.WHISPER_BIN_PATH || (
+      process.platform === 'win32'
+        ? (fs.existsSync(winBin) ? winBin : macBin)
+        : (fs.existsSync(macBin) ? macBin : winBin)
+    );
     this.previousLanguageContext = 'mr';
   }
 
@@ -167,7 +173,10 @@ class WhisperService {
       return { text: '', language: languageCode, confidence: 0, engine: 'whisper.cpp' };
     }
 
-    const real16kWavPath = path.join(__dirname, '../temp/real_microphone_16k.wav');
+    // Keep conversion artifacts isolated per request so simultaneous phone
+    // turns cannot overwrite one another's input while Whisper is reading it.
+    const recordingId = path.parse(audioFilePath).name;
+    const real16kWavPath = path.join(__dirname, '../temp', `${recordingId}_16k.wav`);
     const wav16kPath = this.convertTo16kMonoWav(audioFilePath, real16kWavPath);
     const wavMetrics = this.validateWav(wav16kPath);
 

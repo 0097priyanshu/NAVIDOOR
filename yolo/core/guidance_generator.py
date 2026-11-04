@@ -19,22 +19,46 @@ class GuidanceGenerator:
         """
         Creates a high-priority voice prompt for the blind user.
         Prioritizes the closest, highest-priority hazard.
+        Respects the 5-state navigation model and never asserts false clear paths.
         """
         lang = language.split("-")[0].lower() if language else "en"
         if lang not in self.translations:
             lang = "en"
         tr = self.translations[lang]
 
+        path_state = safe_path.get("path_state", "UNKNOWN")
+        guidance_hint = safe_path.get("guidance_hint", "")
+
+        # When no recognized obstacles are present:
         if not detections:
-            return tr.get("safe_path", "Clear walking path directly ahead.")
+            if path_state == "VISIBILITY_REDUCED":
+                if lang == "hi":
+                    return "कम रोशनी। रास्ता स्पष्ट नहीं दिख रहा है।"
+                elif lang == "mr":
+                    return "कमी प्रकाश. वाट स्पष्ट दिसत नाही."
+                else:
+                    return "Visibility reduced. Lighting is too low to verify path."
+            elif path_state == "PATH_OBSTRUCTED":
+                if lang == "hi":
+                    return "सामने दीवार या रुकावट है। कृपया रुकें।"
+                elif lang == "mr":
+                    return "समोर भिंत किंवा अडथळा आहे. कृपया थांबा."
+                else:
+                    return "Surface directly ahead. Possible wall or closed door. Please stop."
+            else:
+                # UNKNOWN state: Never declare the path clear!
+                # For continuous background detection, stay silent to avoid repetitive noise.
+                return ""
 
         # Sort detections by:
-        # 1. High-priority object class (laptops, phones, bottles, people > background tables)
-        # 2. Risk level (CRITICAL > WARNING > INFO)
-        # 3. Proximity (closest distance)
+        # 1. Hazard status in center corridor (distance <= 2.5m)
+        # 2. High-priority object class
+        # 3. Risk level (CRITICAL > WARNING > INFO)
+        # 4. Proximity (closest distance)
         sorted_dets = sorted(
             detections,
             key=lambda d: (
+                0 if d.get("zone") == "CENTER" and d.get("distance_meters", 10.0) <= 2.8 else 1,
                 -CLASS_PRIORITY.get(d.get("class", ""), 1),
                 0 if d.get("risk_level") == "CRITICAL" else (1 if d.get("risk_level") == "WARNING" else 2),
                 d.get("distance_meters", 10.0)
@@ -55,16 +79,12 @@ class GuidanceGenerator:
         else:
             dir_str = tr.get("directly_ahead", "directly ahead")
 
-        # Actionable avoidance guidance
-        rec_dir = safe_path.get("recommended_direction", "FORWARD")
+        # Avoidance guidance: only advise stopping if directly obstructed; never issue blind step right/left
+        rec_dir = safe_path.get("recommended_direction", "CAUTION")
         unit = tr.get("meters", "m")
         
         action_str = ""
-        if rec_dir == "RIGHT":
-            action_str = " " + tr.get("turn_right", "Step right.")
-        elif rec_dir == "LEFT":
-            action_str = " " + tr.get("turn_left", "Step left.")
-        elif rec_dir == "STOP":
+        if rec_dir == "STOP" or path_state == "PATH_OBSTRUCTED":
             action_str = " " + tr.get("please_stop", "Please stop.")
 
         if lang == "hi":
@@ -89,3 +109,4 @@ class GuidanceGenerator:
             msg = f"{localized_name} {dist}{unit} {dir_str}.{action_str}"
 
         return msg
+

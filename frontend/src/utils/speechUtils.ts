@@ -4,6 +4,12 @@ import { SupportedLanguageCode } from '../types';
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let currentAudioElement: HTMLAudioElement | null = null;
+type SpeechCompletionHandler = (event: 'done' | 'error' | 'stopped') => void;
+let speechCompletionHandler: SpeechCompletionHandler | null = null;
+
+export const setSpeechCompletionHandler = (handler: SpeechCompletionHandler | null) => {
+  speechCompletionHandler = handler;
+};
 
 const LANG_CODE_MAP: Record<SupportedLanguageCode, string> = {
   en: 'en-US',
@@ -46,7 +52,10 @@ export const speakAnnouncement = async (
         if (match) {
           currentUtterance.voice = match;
         }
+
       }
+      currentUtterance.onend = () => speechCompletionHandler?.('done');
+      currentUtterance.onerror = () => speechCompletionHandler?.('error');
 
       window.speechSynthesis.speak(currentUtterance);
     }
@@ -58,29 +67,15 @@ export const speakAnnouncement = async (
     
     // Ensure iOS plays in silent mode without being muted by iOS physical silent switch
     try {
-      try {
-        const { setAudioModeAsync } = require('expo-audio');
-        if (setAudioModeAsync) {
-          await setAudioModeAsync({
-            playsInSilentMode: true,
-          });
-        }
-      } catch (err) {}
-
-      const { NativeModules } = require('react-native');
-      if ((Platform.OS as string) !== 'web' && NativeModules?.ExponentAV) {
-        const expoAv = require('expo-av');
-        if (expoAv?.Audio?.setAudioModeAsync) {
-          await expoAv.Audio.setAudioModeAsync({
-            allowsRecordingIOS: true,
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-            shouldDuckAndroid: true,
-            playThroughEarpieceAndroid: false,
-          });
-        }
+      const { setAudioModeAsync } = require('expo-audio');
+      if (setAudioModeAsync) {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: false,
+          shouldRouteThroughEarpiece: false,
+        });
       }
-    } catch (e) {}
+    } catch (err) {}
 
     try {
       const voices = await Speech.getAvailableVoicesAsync();
@@ -92,12 +87,18 @@ export const speakAnnouncement = async (
         pitch,
         language: targetLang,
         voice: match ? match.identifier : undefined,
+        onDone: () => speechCompletionHandler?.('done'),
+        onError: () => speechCompletionHandler?.('error'),
+        onStopped: () => speechCompletionHandler?.('stopped'),
       });
     } catch (e) {
       Speech.speak(text, {
         rate: effectiveRate,
         pitch,
         language: targetLang,
+        onDone: () => speechCompletionHandler?.('done'),
+        onError: () => speechCompletionHandler?.('error'),
+        onStopped: () => speechCompletionHandler?.('stopped'),
       });
     }
   }
