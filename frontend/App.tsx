@@ -17,6 +17,7 @@ import { RoleSelectionScreen } from './src/components/onboarding/RoleSelectionSc
 import { FamilyAuthScreen } from './src/components/family/FamilyAuthScreen';
 import { FamilyModeContainer } from './src/components/family/FamilyModeContainer';
 import { FamilyRequestReceivedModal } from './src/components/family/FamilyRequestReceivedModal';
+import { VoiceMicOverlay } from './src/components/common/VoiceMicOverlay';
 import * as Haptics from 'expo-haptics';
 
 export default function App() {
@@ -77,9 +78,9 @@ export default function App() {
   // 3. Full-Screen Horizontal Swipe Gesture Handler & Triple-Tap Interceptor
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponderCapture: () => {
-        return handleGlobalScreenTap('panresponder-capture');
-      },
+      // Never capture a control's initial touch. Triple-tap SOS remains
+      // available on web via pointerdown; native controls keep their taps.
+      onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponderCapture: (_, gestureState) => {
         // If user is swiping horizontally, cancel tap sequence so swipe isn't counted as taps
         if (Math.abs(gestureState.dx) > 15) {
@@ -152,6 +153,8 @@ export default function App() {
 
         {/* Real-time family caregiver connection request approval popup */}
         <FamilyRequestReceivedModal />
+        {/* Keep the voice button above every non-modal screen layer on mobile. */}
+        <VoiceMicOverlay />
       </SafeAreaView>
     );
   };

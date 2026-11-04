@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 
 const { SUPPORTED_LANGUAGES } = require('./config/languages');
@@ -28,7 +29,7 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, tempDir),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname) || '.m4a';
-    cb(null, `real_microphone_recording${ext}`);
+    cb(null, `real_microphone_${Date.now()}_${crypto.randomBytes(4).toString('hex')}${ext}`);
   }
 });
 const upload = multer({ storage });
@@ -167,10 +168,15 @@ app.post('/api/chat', async (req, res) => {
 
 // 5. Speech-to-Text Endpoint (Whisper.cpp on Real Microphone Audio)
 app.post('/api/stt', upload.single('audio'), async (req, res) => {
+  let uploadedPath = req.file?.path;
+  let convertedPath = null;
   try {
     const languageCode = req.body.language || 'en';
     const sourceUri = req.body.sourceUri || 'mobile_mic';
-    const filePath = req.file ? req.file.path : path.join(tempDir, 'real_microphone_recording.m4a');
+    if (!req.file || !fs.existsSync(req.file.path) || req.file.size <= 0) {
+      return res.status(400).json({ success: false, error: 'Audio upload missing or empty. Expected multipart field "audio".' });
+    }
+    const filePath = req.file.path;
 
     const fileExists = fs.existsSync(filePath);
     const fileSize = fileExists ? fs.statSync(filePath).size : 0;
@@ -188,6 +194,15 @@ app.post('/api/stt', upload.single('audio'), async (req, res) => {
 
     // Run real recording through whisperService (converts M4A/AAC to 16k PCM WAV -> real_microphone_16k.wav -> main.exe)
     const result = await whisperService.transcribeAudio(filePath, languageCode);
+    convertedPath = result.real16kWavPath;
+    if (!result.text || !result.text.trim()) {
+      return res.status(422).json({
+        success: false,
+        error: 'No speech was recognized in the uploaded recording.',
+        sourceAudioSize: fileSize,
+        wavMetrics: result.wavMetrics || null,
+      });
+    }
 
     res.json({
       success: true,
@@ -201,7 +216,20 @@ app.post('/api/stt', upload.single('audio'), async (req, res) => {
     });
   } catch (err) {
     console.error('[API /api/stt Error]:', err);
-    res.status(500).json({ success: false, error: 'Whisper.cpp STT transcription failed.' });
+    res.status(500).json({ success: false, error: `Whisper.cpp STT transcription failed: ${err.message}` });
+  } finally {
+    for (const file of [uploadedPath, convertedPath]) {
+      if (file && file !== uploadedPath && fs.existsSync(file)) {
+        try { fs.unlinkSync(file); } catch (cleanupError) {
+          console.warn('[API /api/stt] Could not remove converted audio:', cleanupError.message);
+        }
+      }
+      if (file === uploadedPath && file && fs.existsSync(file)) {
+        try { fs.unlinkSync(file); } catch (cleanupError) {
+          console.warn('[API /api/stt] Could not remove uploaded audio:', cleanupError.message);
+        }
+      }
+    }
   }
 });
 

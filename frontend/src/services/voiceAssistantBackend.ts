@@ -244,7 +244,8 @@ export async function requestWhisperSTT(audioBlob: Blob | null, languageCode: Su
 
     console.log(`[VoiceAssistantBackend] Transmitting audio to ${baseUrl}/api/stt...`);
 
-    const data = await uploadFormDataXHR(`${baseUrl}/api/stt`, formData, 20000);
+    // Whisper may take longer than 20s on a CPU, especially on its first run.
+    const data = await uploadFormDataXHR(`${baseUrl}/api/stt`, formData, 90000);
     console.log('[VoiceAssistantBackend] /api/stt transcription success:', data.transcription);
     return data.transcription || null;
   } catch (err) {

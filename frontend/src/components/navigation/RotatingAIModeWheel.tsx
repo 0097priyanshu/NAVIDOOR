@@ -122,7 +122,9 @@ export const RotatingAIModeWheel: React.FC = () => {
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      // Let child buttons (including TALK and the mode buttons) receive taps.
+      // This responder only owns deliberate horizontal swipes.
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 10,
       onPanResponderMove: (_, gestureState) => {
         const dx = gestureState.dx;
@@ -157,33 +159,6 @@ export const RotatingAIModeWheel: React.FC = () => {
     rotateWheelToMode(WHEEL_ITEMS[index].id);
   };
 
-  const isMicProcessingLockRef = useRef(false);
-
-  const handleMicPress = async () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch (e) {}
-
-    // Prevent duplicate overlapping operations
-    if (isMicProcessingLockRef.current) return;
-
-    // Barge-in Interruption: If TTS is currently speaking, immediately halt speech
-    if (voiceState === 'speaking') {
-      stopVoice();
-    }
-
-    isMicProcessingLockRef.current = true;
-    try {
-      if (voiceState === 'listening') {
-        await stopVoiceListening();
-      } else {
-        await startVoiceListening();
-      }
-    } finally {
-      isMicProcessingLockRef.current = false;
-    }
-  };
-
   const handlePhotoSnapPress = async () => {
     await capturePhotoAndAnalyze();
   };
@@ -196,33 +171,13 @@ export const RotatingAIModeWheel: React.FC = () => {
     visibleIndices.push(idx);
   }
 
-  const isMicActive = voiceState === 'listening' || voiceState === 'thinking';
-
   if (isFirstTimeUser) return null;
 
   const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(activeMode);
 
   return (
     <View style={styles.wheelRootContainer} pointerEvents="box-none">
-      {/* 1. PRIMARY ACTION DOCK - CLEAN MIC FAB */}
-      {!isProfileModalOpen && (
-        <View 
-          style={[styles.dualActionDockContainer, { justifyContent: 'center' }]} 
-          pointerEvents="box-none"
-        >
-          {/* Voice Assistant Mic FAB */}
-          <View style={styles.actionItemCol}>
-            <UnifiedMicButton
-              voiceState={voiceState}
-              onPress={handleMicPress}
-              showLabel={true}
-              size={68}
-            />
-          </View>
-        </View>
-      )}
-
-      {/* 2. HIGH-CLARITY GRAY AI MODE WHEEL NAVBAR DOCK */}
+      {/* HIGH-CLARITY GRAY AI MODE WHEEL NAVBAR DOCK */}
       <View style={styles.bottomCurvedDock} {...panResponder.panHandlers}>
         {visibleIndices.map((idx, posIndex) => {
           const item = WHEEL_ITEMS[idx];
@@ -292,7 +247,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 230,
-    zIndex: 35,
+    // Keep the mic hit target above section panels, which can extend into
+    // the mic's vertical area on smaller devices.
+    zIndex: 110,
+    elevation: 110,
     justifyContent: 'flex-end',
     alignItems: 'center',
   },
