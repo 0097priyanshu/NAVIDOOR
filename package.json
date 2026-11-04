@@ -14,7 +14,9 @@
     "ios": "npm --prefix frontend run ios",
     "web": "npm --prefix frontend run web",
     "build:web": "npm --prefix frontend run build:web",
-    "lint": "npm --prefix frontend run lint"
+    "lint": "npm --prefix frontend run lint",
+    "ocr": "python ocr/ocr_server.py",
+    "test:ocr": "python ocr/tests/test_ocr.py"
   },
   "dependencies": {
     "@expo/html-elements": "^0.9.0",

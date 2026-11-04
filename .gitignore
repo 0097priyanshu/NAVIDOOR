@@ -24,6 +24,7 @@ yarn-error.log*
 # Local AI Models, Binaries, Virtual Environments, and Temp Files
 backend/bin/
 backend/models/
+ocr/models/
 backend/temp/
 backend/uploads/
 backend/indicf5_env/
@@ -36,6 +37,7 @@ __pycache__/
 *.bin
 *.onnx
 *.pt
+*.pth
 *.exe
 *.dll
 *.wav
