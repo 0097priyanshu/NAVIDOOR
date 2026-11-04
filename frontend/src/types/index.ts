@@ -86,3 +86,40 @@ export interface ContextInsight {
   text: string;
   type: 'info' | 'warning' | 'hazard' | 'success';
 }
+
+export type OCRCategory =
+  | 'signboard'
+  | 'door_label'
+  | 'hospital_department'
+  | 'bus_board'
+  | 'medicine_label'
+  | 'document'
+  | 'notice'
+  | 'menu'
+  | 'product_label'
+  | 'unknown';
+
+export interface OCRLine {
+  text: string;
+  confidence: number;
+  normalized_bbox: [number, number, number, number]; // [x1, y1, x2, y2]
+  line_text?: string;
+}
+
+export interface OCRResult {
+  success: boolean;
+  text: string;
+  lines: OCRLine[];
+  category: OCRCategory;
+  structuredData?: any;
+  spokenSummary: string;
+  quality?: {
+    is_blurry: boolean;
+    score?: number;
+    user_guidance?: string;
+  };
+  inferenceTimeMs?: number;
+  audioBase64?: string | null;
+  audioUrl?: string | null;
+  error?: string;
+}
