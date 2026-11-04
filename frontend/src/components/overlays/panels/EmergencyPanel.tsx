@@ -18,7 +18,7 @@ export const EmergencyPanel = () => {
       setVoiceState('listening');
       useNavidoorStore.setState({ lastAnnouncement: `🎤 Listening... Say Yes to call ${name}` });
 
-      await voiceRecordingService.startRecording(activeLanguageCode, async (autoText) => {
+      await voiceRecordingService.startRecording(activeLanguageCode, async ({ liveTranscript: autoText }) => {
         setVoiceState('thinking');
         const text = (autoText || '').toLowerCase().trim();
         if (text.includes('yes') || text.includes('yup') || text.includes('yeah') || text.includes('हाँ') || text.includes('हो')) {
@@ -52,7 +52,7 @@ export const EmergencyPanel = () => {
     setVoiceState('listening');
     useNavidoorStore.setState({ lastAnnouncement: '🎤 Listening... Say a contact name' });
     
-    voiceRecordingService.startRecording(activeLanguageCode, async (autoText) => {
+    voiceRecordingService.startRecording(activeLanguageCode, async ({ liveTranscript: autoText }) => {
       setVoiceState('thinking');
       const name = (autoText || '').trim();
       if (name) {

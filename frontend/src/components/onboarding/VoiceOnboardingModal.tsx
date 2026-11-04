@@ -137,7 +137,7 @@ export const VoiceOnboardingModal: React.FC = () => {
       }
     } else {
       setIsListening(true);
-      await voiceRecordingService.startRecording(activeLanguageCode, async (autoText) => {
+      await voiceRecordingService.startRecording(activeLanguageCode, async ({ liveTranscript: autoText }) => {
         if (autoText && autoText.trim()) {
           setIsListening(false);
           const answer = autoText.trim().toLowerCase();
@@ -638,4 +638,3 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 });
-

@@ -4,6 +4,12 @@ import { SupportedLanguageCode } from '../types';
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let currentAudioElement: HTMLAudioElement | null = null;
+type SpeechCompletionHandler = (event: 'done' | 'error' | 'stopped') => void;
+let speechCompletionHandler: SpeechCompletionHandler | null = null;
+
+export const setSpeechCompletionHandler = (handler: SpeechCompletionHandler | null) => {
+  speechCompletionHandler = handler;
+};
 
 const LANG_CODE_MAP: Record<SupportedLanguageCode, string> = {
   en: 'en-US',
@@ -46,7 +52,10 @@ export const speakAnnouncement = async (
         if (match) {
           currentUtterance.voice = match;
         }
+
       }
+      currentUtterance.onend = () => speechCompletionHandler?.('done');
+      currentUtterance.onerror = () => speechCompletionHandler?.('error');
 
       window.speechSynthesis.speak(currentUtterance);
     }
@@ -78,12 +87,18 @@ export const speakAnnouncement = async (
         pitch,
         language: targetLang,
         voice: match ? match.identifier : undefined,
+        onDone: () => speechCompletionHandler?.('done'),
+        onError: () => speechCompletionHandler?.('error'),
+        onStopped: () => speechCompletionHandler?.('stopped'),
       });
     } catch (e) {
       Speech.speak(text, {
         rate: effectiveRate,
         pitch,
         language: targetLang,
+        onDone: () => speechCompletionHandler?.('done'),
+        onError: () => speechCompletionHandler?.('error'),
+        onStopped: () => speechCompletionHandler?.('stopped'),
       });
     }
   }

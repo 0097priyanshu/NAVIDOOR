@@ -158,26 +158,30 @@ class YoloVisionService {
 
     try {
       const host = getBackendUrl();
-      const yoloDirectHost = host.includes(':5001') 
-        ? host.replace(':5001', ':5003') 
-        : `${host.split(':')[0]}:${host.split(':')[1]}:5003`;
-
-      let directEndpoint = `${yoloDirectHost}/detect`;
+      // Try the Python YOLO host exposed alongside the backend first. If port
+      // 5003 is unavailable on the device network, fall back to the Node proxy.
+      let directEndpoint = host.replace(/:5001(?=\/|$)/, ':5003');
+      if (directEndpoint === host) {
+        const url = new URL(host);
+        directEndpoint = `${url.protocol}//${url.hostname}:5003`;
+      }
       let fallbackEndpoint = `${host}/api/vision/detect`;
 
       if (mode === 'transport') {
-        directEndpoint = `${yoloDirectHost}/detect/bus`;
+        directEndpoint += '/detect/bus';
         fallbackEndpoint = `${host}/api/vision/detect-bus`;
       } else if (mode === 'medicine') {
-        directEndpoint = `${yoloDirectHost}/detect/medicine`;
+        directEndpoint += '/detect/medicine';
         fallbackEndpoint = `${host}/api/vision/detect-medicine`;
+      } else {
+        directEndpoint += '/detect';
       }
 
       // Explicitly communicate client orientation to assist sensor rotation
       const orientation = 'portrait';
       const payload = JSON.stringify({ image: imageBase64, language, orientation });
 
-      let response: Response | null = null;
+      let response: Response;
       try {
         response = await fetch(directEndpoint, {
           method: 'POST',
@@ -185,25 +189,14 @@ class YoloVisionService {
           body: payload,
           signal: timeoutController.signal,
         });
-      } catch (directErr: any) {
-        // Direct Python connection failed or aborted; try Node.js backend proxy
-        if (timeoutController.signal.aborted) {
-          throw directErr;
-        }
-        try {
-          response = await fetch(fallbackEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: payload,
-            signal: timeoutController.signal,
-          });
-        } catch (fbErr: any) {
-          throw fbErr;
-        }
-      }
-
-      if (!response) {
-        throw new Error('No response received from YOLO endpoints');
+      } catch (directError) {
+        if (timeoutController.signal.aborted) throw directError;
+        response = await fetch(fallbackEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          signal: timeoutController.signal,
+        });
       }
 
       if (response.status === 429) {
