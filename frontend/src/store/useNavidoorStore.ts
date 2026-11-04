@@ -21,6 +21,7 @@ import { voiceRecordingService } from '../services/voiceRecordingService';
 import { socketClient } from '../services/socketClient';
 import { yoloVisionService } from '../services/yoloVisionService';
 import { familyPairingService } from '../services/familyPairingService';
+import { isVoiceExitCommand } from '../utils/voiceExit';
 
 interface NavidoorState {
   // Voice System First
@@ -184,16 +185,10 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     set({ lastAnnouncement: finalSpeechText, voiceState: 'speaking' });
     console.log(`[VOICE] Audio playback started: ${new Date().toISOString()}`);
     speakAnnouncement(finalSpeechText, { rate: get().speechRate, interrupt, languageCode: activeLang });
-    
-    setTimeout(() => {
-      if (get().voiceState === 'speaking') {
-        set({ voiceState: 'idle' });
-      }
-    }, Math.max(2000, finalSpeechText.length * 55));
   },
   stopVoice: () => {
-    stopSpeech();
     set({ voiceState: 'idle' });
+    stopSpeech();
   },
 
   startVoiceListening: async () => {
@@ -204,14 +199,37 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (e) {}
 
-    await voiceRecordingService.startRecording(get().activeLanguageCode, async (autoText) => {
-      set({ voiceState: 'thinking' });
+    const started = await voiceRecordingService.startRecording(get().activeLanguageCode, async (recordingResult) => {
+      console.log('[VOICE] Recording finalized; preparing transcription', {
+        hasUri: Boolean(recordingResult.uri),
+        hasBlob: Boolean(recordingResult.blob),
+        liveTranscriptLength: recordingResult.liveTranscript.length,
+      });
+      set({ voiceState: 'thinking', lastAnnouncement: 'Processing your voice...' });
       try {
-        await get().processVoiceInput(autoText ? autoText.trim() : '');
+        let autoText = recordingResult.liveTranscript ? recordingResult.liveTranscript.trim() : '';
+        if (!autoText && (recordingResult.blob || recordingResult.uri)) {
+          const text = await requestWhisperSTT(
+            recordingResult.blob,
+            get().activeLanguageCode,
+            recordingResult.uri || 'device_mic'
+          );
+          if (text) autoText = text.trim();
+        }
+        if (autoText) set({ lastAnnouncement: `You: ${autoText}` });
+        if (autoText) set({ lastAnnouncement: `You: ${autoText}` });
+        console.log(`[VOICE] Transcript received (${autoText.length} chars)`);
+        await get().processVoiceInput(autoText);
       } catch (e) {
+        console.error('[VOICE] Failed to process recorded speech:', e);
+        set({ lastAnnouncement: 'I could not process that recording. Please try again.' });
         set({ voiceState: 'idle' });
       }
     });
+    if (!started) {
+      set({ voiceState: 'idle', lastAnnouncement: 'Microphone unavailable. Check permission and try again.' });
+      return;
+    }
   },
 
   stopVoiceListening: async () => {
@@ -239,6 +257,16 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   processVoiceInput: async (input: string) => {
     const cleanInput = (input || '').trim();
     const activeLang = get().activeLanguageCode;
+
+    if (cleanInput) set({ lastAnnouncement: `You: ${cleanInput}` });
+
+    if (isVoiceExitCommand(cleanInput)) {
+      get().stopVoiceListening().catch((error) => {
+        console.warn('[NavidoorStore] Voice exit cleanup failed:', error);
+      });
+      get().stopVoice();
+      return;
+    }
 
     if (!cleanInput || cleanInput.length < 2) {
       console.log(`[VOICE] Empty/Invalid STT transcription received.`);
@@ -511,6 +539,10 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
       }
 
       if (answer) {
+        if (isVoiceExitCommand(answer)) {
+          get().stopVoice();
+          return;
+        }
         get().speak(answer);
       }
     } catch (err: any) {
