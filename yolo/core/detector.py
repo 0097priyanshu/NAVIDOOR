@@ -145,6 +145,7 @@ class YOLODetector:
 
         if self.is_ultralytics_loaded and self.model is not None:
             try:
+                print(f"[YOLO DIAG] Running primary inference despite lighting; frame={width}x{height} threshold={self.confidence_threshold:.2f}")
                 # 1. Primary COCO detector (persons, vehicles, furniture, etc.)
                 primary_results = self.model(
                     image_input,
@@ -231,7 +232,8 @@ class YOLODetector:
 
         if len(detections) > 0 or safe_path.get("path_state") != "UNKNOWN":
             det_summary = [(d["class"], d["confidence"], f"{d['distance_meters']}m") for d in detections]
-            print(f"[YOLO DIAG] Dets: {det_summary} | State: {safe_path.get('path_state')} | Guidance: '{voice_guidance}'")
+            metrics = safe_path.get("scene_metrics", {})
+            print(f"[YOLO DIAG] Dets: {det_summary} | State: {safe_path.get('path_state')} | brightness={metrics.get('mean_brightness', 'n/a')} darkThreshold={self.scene_analyzer.min_brightness} | Guidance: '{voice_guidance}'")
 
         return {
             "success": True,
