@@ -5,6 +5,8 @@ export interface VoiceRecordingResult {
   blob: Blob | null;
   uri: string | null;
   liveTranscript: string;
+  speechDetected: boolean;
+  durationMs: number;
 }
 
 const LANG_BCP47_MAP: Record<string, string> = {
@@ -66,6 +68,66 @@ export class VoiceRecordingService {
   private audioSampleRate: number = 44100;
 
   private activeLangCode: string = 'en';
+  private recordingStartedAt: number = 0;
+  private speechDetected: boolean = false;
+  private vadSamples: number[] = [];
+  private vadStartedAt: number = 0;
+  private noiseFloorDb: number = -55;
+  private speechThresholdDb: number = -45;
+  private lastSpeechAt: number = 0;
+  private autoStopTimer: any = null;
+  private autoStopInProgress: boolean = false;
+
+  private resetVad(): void {
+    this.vadSamples = [];
+    this.vadStartedAt = 0;
+    this.noiseFloorDb = -55;
+    this.speechThresholdDb = -45;
+    this.lastSpeechAt = 0;
+    this.autoStopInProgress = false;
+    if (this.autoStopTimer) clearTimeout(this.autoStopTimer);
+    this.autoStopTimer = null;
+  }
+
+  private observeMetering(value: number | null, now: number): boolean {
+    if (value === null || !Number.isFinite(value) || value <= -159 || value > 0) return false;
+    if (!this.vadStartedAt) this.vadStartedAt = now;
+    const elapsed = now - this.vadStartedAt;
+    if (elapsed <= 500) {
+      this.vadSamples.push(value);
+      const sorted = [...this.vadSamples].sort((a, b) => a - b);
+      this.noiseFloorDb = sorted[Math.floor((sorted.length - 1) * 0.5)] ?? -55;
+      this.speechThresholdDb = this.noiseFloorDb + 10;
+      if (elapsed >= 480) console.log(`[VOICE] VAD calibrated: noiseFloor=${this.noiseFloorDb.toFixed(1)}dB threshold=${this.speechThresholdDb.toFixed(1)}dB`);
+      return false;
+    }
+    if (value > this.speechThresholdDb) {
+      if (!this.speechDetected) console.log(`[VOICE] Speech detected: ${new Date(now).toISOString()} | metering=${value.toFixed(1)}dB noiseFloor=${this.noiseFloorDb.toFixed(1)}dB threshold=${this.speechThresholdDb.toFixed(1)}dB`);
+      this.speechDetected = true;
+      this.lastSpeechAt = now;
+      return true;
+    }
+    return false;
+  }
+
+  private finalizeAutomatically(reason: 'silence' | 'max-length'): void {
+    if (this.autoStopInProgress || !this.isRecording) return;
+    this.autoStopInProgress = true;
+    const callback = this.onAutoResultCallback;
+    this.onAutoResultCallback = null;
+    console.log(`[VOICE] Auto-stop reason=${reason} noiseFloor=${this.noiseFloorDb.toFixed(1)}dB threshold=${this.speechThresholdDb.toFixed(1)}dB speechDetected=${this.speechDetected} timeSinceLastSpeech=${this.lastSpeechAt ? Date.now() - this.lastSpeechAt : 'n/a'}ms`);
+    void this.stopRecording(reason).then((result) => callback?.(result)).catch((error) => {
+      console.error('[VOICE] Auto-stop finalization error:', error);
+      callback?.({ blob: null, uri: null, liveTranscript: '', speechDetected: false, durationMs: Date.now() - this.recordingStartedAt });
+    });
+  }
+
+  private armMaxRecordingTimer(): void {
+    if (this.onAutoResultCallback) {
+      if (this.autoStopTimer) clearTimeout(this.autoStopTimer);
+      this.autoStopTimer = setTimeout(() => this.finalizeAutomatically('max-length'), 9000);
+    }
+  }
 
   async requestMicrophonePermission(): Promise<boolean> {
     console.log('[VoiceRecordingService]: Requesting microphone permission...');
@@ -126,6 +188,9 @@ export class VoiceRecordingService {
     }
 
     this.activeLangCode = langCode;
+    this.recordingStartedAt = Date.now();
+    this.resetVad();
+    this.speechDetected = false;
     this.lastLiveTranscript = '';
     this.isRecording = true;
     this.audioChunks = [];
@@ -183,9 +248,7 @@ export class VoiceRecordingService {
             }
             recorder.record();
             this.recording = recorder;
-            let hasSpoken = false;
-            let lastSpeechAt = Date.now();
-            const recordingStartedAt = Date.now();
+            this.armMaxRecordingTimer();
             let lastMeteringLogAt = 0;
             this.mobileStatusInterval = setInterval(() => {
               if (!this.isRecording || !this.recording) return;
@@ -199,27 +262,10 @@ export class VoiceRecordingService {
                   console.log(`[VoiceRecordingService] Recorder status: recording=${Boolean(status?.isRecording)} metering=${metering ?? 'unavailable'} uri=${this.recording.uri || 'pending'}`);
                   lastMeteringLogAt = now;
                 }
-                // Android handset input often peaks below -45 dBFS; use a
-                // lower threshold so ordinary conversational speech is seen.
-                if (metering !== null && metering > -55) {
-                  if (!hasSpoken) console.log(`[VOICE] Mobile speech detected (dB: ${metering.toFixed(1)})`);
-                  hasSpoken = true;
-                  lastSpeechAt = now;
-                } else if ((hasSpoken && now - lastSpeechAt >= 1800) || (!hasSpoken && now - recordingStartedAt >= 10000)) {
-                  const callback = this.onAutoResultCallback;
-                  this.onAutoResultCallback = null;
-                  if (this.mobileStatusInterval) clearInterval(this.mobileStatusInterval);
-                  this.mobileStatusInterval = null;
-                  if (callback) {
-                    console.log(`[VOICE] Finalizing mobile recording (${hasSpoken ? 'silence after speech' : '10s no-speech fallback'})`);
-                    void this.stopRecording().then(callback).catch((error) => {
-                      console.error('[VoiceRecordingService] Failed to finalize recording:', error);
-                      callback({ blob: null, uri: null, liveTranscript: this.lastLiveTranscript });
-                    });
-                  }
-                }
+                if (this.observeMetering(metering, now)) return;
+                if (this.speechDetected && this.lastSpeechAt && now - this.lastSpeechAt >= 1700) this.finalizeAutomatically('silence');
               } catch (error) {
-                // Some platform builds do not expose metering; retain manual stop in that case.
+                console.error('[VoiceRecordingService] Metering sample error:', error);
               }
             }, 120);
             console.log('[VoiceRecordingService] Mobile expo-audio recording active');
@@ -253,53 +299,11 @@ export class VoiceRecordingService {
               },
             };
 
-            let hasSpokenMobile = false;
-            let lastSpeechTimeMobile = Date.now();
-            const recordingStartTimeMobile = Date.now();
-
             const processMobileStatus = (status: any) => {
               if (!this.isRecording || !status) return;
-
-              const metering = typeof status.metering === 'number' ? status.metering : -160;
-              const currentDuration = Date.now() - recordingStartTimeMobile;
-
-              // Metering ranges from -160 (silence) to 0 (max dB).
-              if (metering > -45) {
-                if (!hasSpokenMobile) {
-                  hasSpokenMobile = true;
-                  console.log(`[VOICE] Mobile speech detected (dB: ${metering.toFixed(1)}): ${new Date().toISOString()}`);
-                }
-                lastSpeechTimeMobile = Date.now();
-              } else if (hasSpokenMobile && currentDuration > 2000 && Date.now() - lastSpeechTimeMobile > 1800) {
-                // 1.8s of silence after speech -> auto stop & process
-                console.log(`[VOICE] Mobile silence detected after speech (${currentDuration}ms total), auto-stopping...`);
-                hasSpokenMobile = false;
-                if (this.mobileStatusInterval) {
-                  clearInterval(this.mobileStatusInterval);
-                  this.mobileStatusInterval = null;
-                }
-                if (this.onAutoResultCallback) {
-                  const cb = this.onAutoResultCallback;
-                  this.onAutoResultCallback = null;
-                  this.stopRecording().then((res) => {
-                    cb(res);
-                  });
-                }
-              } else if (!hasSpokenMobile && currentDuration > 10000) {
-                // 10.0s total safety timeout with no speech on Mobile -> auto stop
-                console.log(`[VOICE FAILURE] reason=recording duration timeout (no speech detected after ${currentDuration}ms)`);
-                if (this.mobileStatusInterval) {
-                  clearInterval(this.mobileStatusInterval);
-                  this.mobileStatusInterval = null;
-                }
-                if (this.onAutoResultCallback) {
-                  const cb = this.onAutoResultCallback;
-                  this.onAutoResultCallback = null;
-                  this.stopRecording().then((res) => {
-                    cb(res);
-                  });
-                }
-              }
+              const now = Date.now();
+              const metering = typeof status.metering === 'number' ? status.metering : null;
+              if (!this.observeMetering(metering, now) && this.speechDetected && this.lastSpeechAt && now - this.lastSpeechAt >= 1700) this.finalizeAutomatically('silence');
             };
 
             const { recording } = await Audio.Recording.createAsync(
@@ -308,6 +312,7 @@ export class VoiceRecordingService {
               100
             );
             this.recording = recording;
+            this.armMaxRecordingTimer();
 
             if (this.mobileStatusInterval) clearInterval(this.mobileStatusInterval);
             this.mobileStatusInterval = setInterval(async () => {
@@ -348,9 +353,6 @@ export class VoiceRecordingService {
           });
         }
 
-        let hasSpoken = false;
-        let lastSpeechTime = Date.now();
-
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioContextClass) {
           this.audioCtx = new AudioContextClass();
@@ -361,7 +363,6 @@ export class VoiceRecordingService {
           this.sourceNode = this.audioCtx.createMediaStreamSource(this.activeStream);
           this.scriptNode = this.audioCtx.createScriptProcessor(4096, 1, 1);
 
-          const webRecStart = Date.now();
           this.scriptNode.onaudioprocess = (e) => {
             if (this.isRecording) {
               const input = e.inputBuffer.getChannelData(0);
@@ -374,25 +375,9 @@ export class VoiceRecordingService {
               }
               const rms = Math.sqrt(sum / input.length);
 
-              const webRecDuration = Date.now() - webRecStart;
-              if (rms > 0.010) {
-                if (!hasSpoken) {
-                  hasSpoken = true;
-                  console.log(`[VOICE] Speech detected: ${new Date().toISOString()}`);
-                }
-                lastSpeechTime = Date.now();
-              } else if (hasSpoken && webRecDuration > 2000 && Date.now() - lastSpeechTime > 1800) {
-                // 1.8s of silence detected after speech -> auto finalize
-                hasSpoken = false;
-                console.log(`[VOICE] Silence detected after speech (${webRecDuration}ms total), auto-stopping...`);
-                if (this.onAutoResultCallback) {
-                  const cb = this.onAutoResultCallback;
-                  this.onAutoResultCallback = null;
-                  this.stopRecording().then((res) => {
-                    cb(res);
-                  });
-                }
-              }
+              const now = Date.now();
+              const db = rms > 0 ? 20 * Math.log10(rms) : null;
+              if (!this.observeMetering(db, now) && this.speechDetected && this.lastSpeechAt && now - this.lastSpeechAt >= 1700) this.finalizeAutomatically('silence');
             }
           };
 
@@ -408,6 +393,7 @@ export class VoiceRecordingService {
           }
         };
         this.mediaRecorder.start(100);
+        this.armMaxRecordingTimer();
         console.log('[VoiceRecordingService] Web MediaRecorder started.');
       } catch (err) {
         console.warn('[VoiceRecordingService] Web MediaRecorder error:', err);
@@ -434,6 +420,7 @@ export class VoiceRecordingService {
             }
             if (transcript && transcript.trim()) {
               this.lastLiveTranscript = transcript.trim();
+              this.speechDetected = true;
               console.log(`[VOICE] Speech detected: ${new Date().toISOString()} | "${this.lastLiveTranscript}"`);
             }
           };
@@ -519,12 +506,15 @@ export class VoiceRecordingService {
     }
   }
 
-  async stopRecording(): Promise<VoiceRecordingResult> {
-    console.log(`[VOICE] Recording stopped: ${new Date().toISOString()}`);
+  async stopRecording(stopReason: 'silence' | 'max-length' | 'manual' = 'manual'): Promise<VoiceRecordingResult> {
+    const durationMs = this.recordingStartedAt ? Date.now() - this.recordingStartedAt : 0;
+    console.log(`[VOICE] Recording stopped: reason=${stopReason} duration=${durationMs}ms speechDetected=${this.speechDetected} noiseFloor=${this.noiseFloorDb.toFixed(1)}dB threshold=${this.speechThresholdDb.toFixed(1)}dB timeSinceLastSpeech=${this.lastSpeechAt ? Date.now() - this.lastSpeechAt : 'n/a'}ms`);
     const liveTranscript = this.lastLiveTranscript;
     this.lastLiveTranscript = '';
     this.isRecording = false;
     this.onAutoResultCallback = null;
+    if (this.autoStopTimer) clearTimeout(this.autoStopTimer);
+    this.autoStopTimer = null;
 
     if (this.mobileStatusInterval) {
       clearInterval(this.mobileStatusInterval);
@@ -607,7 +597,16 @@ export class VoiceRecordingService {
       this.activeStream = null;
     }
 
-    return { blob, uri: recordedUri, liveTranscript };
+    const bytes = blob?.size || 0;
+    console.log(`[VOICE] Recording finalized: duration=${durationMs}ms bytes=${bytes} uri=${recordedUri || '<none>'}`);
+
+    return {
+      blob,
+      uri: recordedUri,
+      liveTranscript,
+      speechDetected: this.speechDetected,
+      durationMs,
+    };
   }
 
   getRecordingStatus(): boolean {
