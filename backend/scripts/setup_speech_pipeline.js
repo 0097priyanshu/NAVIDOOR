@@ -67,11 +67,16 @@ async function main() {
       const whisperZipPath = path.join(binDir, 'whisper_windows.zip');
       await downloadFile('https://github.com/ggerganov/whisper.cpp/releases/download/v1.5.4/whisper-bin-x64.zip', whisperZipPath);
       try {
-        execSync(`powershell -Command "Expand-Archive -Path '${whisperZipPath}' -DestinationPath '${binDir}' -Force"`);
-        if (fs.existsSync(whisperZipPath)) fs.unlinkSync(whisperZipPath);
+        const escapedZipPath = whisperZipPath.replace(/'/g, "''");
+        const escapedBinDir = binDir.replace(/'/g, "''");
+        const extractionCommand = `Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('${escapedZipPath}', '${escapedBinDir}')`;
+        execSync(`powershell -NoProfile -Command "${extractionCommand}"`, { stdio: 'inherit' });
+        if (!fs.existsSync(whisperExePath)) throw new Error('Archive extraction completed without creating main.exe');
+        fs.unlinkSync(whisperZipPath);
         console.log('[Whisper CLI] Extracted main.exe successfully to backend/bin/');
       } catch (e) {
-        console.warn('[Whisper CLI] Extraction note:', e.message);
+        console.error('[Whisper CLI] Extraction failed:', e.message);
+        throw e;
       }
     } else {
       console.log('[Whisper CLI] Executable missing for macOS/Linux. Please place the compiled `main` binary into backend/bin/');

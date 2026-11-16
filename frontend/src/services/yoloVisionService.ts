@@ -5,7 +5,7 @@
  * Includes single-flight concurrency guard, timeout handling, and live performance diagnostics.
  */
 
-import { getBackendUrl } from './voiceAssistantBackend';
+import { getBackendUrl, getVoiceSessionId } from './voiceAssistantBackend';
 import { SupportedLanguageCode } from '../types';
 
 export interface YoloDetection {
@@ -74,6 +74,8 @@ class YoloVisionService {
   private failedRequests: number = 0;
   private lastPayloadKb: number = 0;
   private continuousActive: boolean = false;
+  private lastSnapshotPublishAt: number = 0;
+  private lastFailureLogAt: number = 0;
 
   get isBusy(): boolean {
     return this.isProcessing;
@@ -109,6 +111,30 @@ class YoloVisionService {
 
   recordDroppedFrame() {
     this.droppedFrames++;
+  }
+
+  private async fetchVisionEndpoint(
+    endpoint: string,
+    payload: string,
+    timeoutMs: number,
+    externalSignal?: AbortSignal
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const abortFromSession = () => controller.abort();
+    if (externalSignal?.aborted) controller.abort();
+    else externalSignal?.addEventListener('abort', abortFromSession, { once: true });
+    try {
+      return await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+      externalSignal?.removeEventListener('abort', abortFromSession);
+    }
   }
 
   resetDiagnostics() {
@@ -147,15 +173,6 @@ class YoloVisionService {
     const startTime = Date.now();
     this.lastPayloadKb = Math.round((imageBase64.length * 0.75) / 1024);
 
-    // Timeout controller (3500ms max to prevent permanently locked scheduler)
-    const timeoutController = new AbortController();
-    const timerId = setTimeout(() => timeoutController.abort(), 3500);
-
-    const onExternalAbort = () => timeoutController.abort();
-    if (externalSignal) {
-      externalSignal.addEventListener('abort', onExternalAbort, { once: true });
-    }
-
     try {
       const host = getBackendUrl();
       // Try the Python YOLO host exposed alongside the backend first. If port
@@ -179,24 +196,21 @@ class YoloVisionService {
 
       // Explicitly communicate client orientation to assist sensor rotation
       const orientation = 'portrait';
-      const payload = JSON.stringify({ image: imageBase64, language, orientation });
+      const sessionId = getVoiceSessionId();
+      const payload = JSON.stringify({ image: imageBase64, language, orientation, sessionId });
 
       let response: Response;
       try {
-        response = await fetch(directEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: payload,
-          signal: timeoutController.signal,
-        });
+        response = await this.fetchVisionEndpoint(directEndpoint, payload, 6000, externalSignal);
       } catch (directError) {
-        if (timeoutController.signal.aborted) throw directError;
-        response = await fetch(fallbackEndpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: payload,
-          signal: timeoutController.signal,
-        });
+        if (externalSignal?.aborted) throw directError;
+        console.warn(`[YOLO] Direct endpoint failed (${directEndpoint}); retrying through backend proxy:`, directError);
+        try {
+          response = await this.fetchVisionEndpoint(fallbackEndpoint, payload, 12000, externalSignal);
+        } catch (proxyError) {
+          if (externalSignal?.aborted) throw proxyError;
+          throw new Error(`Direct endpoint failed: ${String(directError)}; backend proxy failed: ${String(proxyError)}`);
+        }
       }
 
       if (response.status === 429) {
@@ -222,6 +236,7 @@ class YoloVisionService {
 
       const result: YoloAnalysisResult = await response.json();
       const elapsed = Date.now() - startTime;
+      this.publishLatestSnapshot(result, sessionId);
 
       // Update metrics
       this.recentCompletionTimestamps.push(Date.now());
@@ -234,6 +249,10 @@ class YoloVisionService {
       return result;
     } catch (err: any) {
       this.failedRequests++;
+      if (Date.now() - this.lastFailureLogAt >= 5000) {
+        console.error('[YOLO] Vision request failed:', err);
+        this.lastFailureLogAt = Date.now();
+      }
       return {
         success: false,
         error: err.name === 'AbortError' ? 'Request timed out' : err.message,
@@ -247,12 +266,38 @@ class YoloVisionService {
         latency_ms: 0,
       };
     } finally {
-      clearTimeout(timerId);
-      if (externalSignal) {
-        externalSignal.removeEventListener('abort', onExternalAbort);
-      }
       this.isProcessing = false;
     }
+  }
+
+  private publishLatestSnapshot(result: YoloAnalysisResult, sessionId: string) {
+    const now = Date.now();
+    if (!result.success || now - this.lastSnapshotPublishAt < 1200) return;
+    this.lastSnapshotPublishAt = now;
+    const snapshot = {
+      capturedAt: now,
+      objects: (result.detections || []).map((detection) => ({
+        label: detection.class,
+        confidence: detection.confidence,
+        bbox: detection.normalized_bbox || detection.bbox,
+        position: detection.zone?.toLowerCase() || 'center',
+        distanceMeters: detection.distance_meters,
+      })),
+      guidance: result.voice_guidance || '',
+      pathState: result.safe_path?.path_state || 'UNKNOWN',
+      visibilityIssue: result.safe_path?.scene_metrics?.visibility_issue || null,
+    };
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1800);
+    void fetch(`${getBackendUrl()}/api/vision/snapshot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, snapshot }),
+      signal: controller.signal,
+    }).then((response) => {
+      if (!response.ok) console.warn(`[VISION] Snapshot cache rejected: HTTP ${response.status}`);
+    }).catch((error) => console.warn('[VISION] Snapshot cache update failed:', error))
+      .finally(() => clearTimeout(timeoutId));
   }
 
   async detectBus(imageBase64: string, language: SupportedLanguageCode = 'en') {

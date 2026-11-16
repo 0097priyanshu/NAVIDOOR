@@ -4,11 +4,29 @@ import { SupportedLanguageCode } from '../types';
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let currentAudioElement: HTMLAudioElement | null = null;
-type SpeechCompletionHandler = (event: 'done' | 'error' | 'stopped') => void;
-let speechCompletionHandler: SpeechCompletionHandler | null = null;
+export type SpeechCompletionEvent = 'done' | 'error' | 'stopped';
+type SpeechCompletionHandler = (event: SpeechCompletionEvent, speechId: number) => void;
+const speechCompletionHandlers = new Set<SpeechCompletionHandler>();
+let activeSpeechId = 0;
+export const getActiveSpeechId = () => activeSpeechId;
 
 export const setSpeechCompletionHandler = (handler: SpeechCompletionHandler | null) => {
-  speechCompletionHandler = handler;
+	speechCompletionHandlers.clear();
+	if (handler) speechCompletionHandlers.add(handler);
+};
+
+export const addSpeechCompletionListener = (handler: SpeechCompletionHandler) => {
+	speechCompletionHandlers.add(handler);
+	return () => speechCompletionHandlers.delete(handler);
+};
+
+const notifySpeechCompletion = (speechId: number, event: SpeechCompletionEvent) => {
+	if (speechId !== activeSpeechId) return;
+	activeSpeechId = 0;
+	console.log(`[VOICE] TTS ${event === 'done' ? 'onDone' : event === 'stopped' ? 'onStopped' : 'onError'}`);
+	for (const handler of speechCompletionHandlers) {
+		try { handler(event, speechId); } catch (error) { console.error('[VOICE] TTS completion listener failed:', error); }
+	}
 };
 
 const LANG_CODE_MAP: Record<SupportedLanguageCode, string> = {
@@ -28,6 +46,7 @@ export const speakAnnouncement = async (
   text: string, 
   options: { rate?: number; pitch?: number; interrupt?: boolean; languageCode?: SupportedLanguageCode } = {}
 ) => {
+	const speechId = ++activeSpeechId;
   const { rate = 1.0, pitch = 1.0, interrupt = true, languageCode = 'en' } = options;
   const targetLang = LANG_CODE_MAP[languageCode] || 'en-US';
 
@@ -54,10 +73,18 @@ export const speakAnnouncement = async (
         }
 
       }
-      currentUtterance.onend = () => speechCompletionHandler?.('done');
-      currentUtterance.onerror = () => speechCompletionHandler?.('error');
+      currentUtterance.onend = () => notifySpeechCompletion(speechId, 'done');
+      currentUtterance.onerror = () => notifySpeechCompletion(speechId, 'error');
 
-      window.speechSynthesis.speak(currentUtterance);
+      try {
+        window.speechSynthesis.speak(currentUtterance);
+      } catch (error) {
+        notifySpeechCompletion(speechId, 'error');
+      }
+      return speechId;
+    } else {
+      notifySpeechCompletion(speechId, 'error');
+      return speechId;
     }
   } else {
     // Mobile Native (iOS & Android)
@@ -82,29 +109,39 @@ export const speakAnnouncement = async (
       const prefix = targetLang.split('-')[0].toLowerCase();
       const match = voices.find(v => v.language.toLowerCase().startsWith(prefix) || v.language.toLowerCase().includes(prefix));
 
+      if (speechId !== activeSpeechId) return;
       Speech.speak(text, {
         rate: effectiveRate,
         pitch,
         language: targetLang,
         voice: match ? match.identifier : undefined,
-        onDone: () => speechCompletionHandler?.('done'),
-        onError: () => speechCompletionHandler?.('error'),
-        onStopped: () => speechCompletionHandler?.('stopped'),
+        onDone: () => notifySpeechCompletion(speechId, 'done'),
+        onError: () => notifySpeechCompletion(speechId, 'error'),
+        onStopped: () => notifySpeechCompletion(speechId, 'stopped'),
       });
+      return speechId;
     } catch (e) {
-      Speech.speak(text, {
-        rate: effectiveRate,
-        pitch,
-        language: targetLang,
-        onDone: () => speechCompletionHandler?.('done'),
-        onError: () => speechCompletionHandler?.('error'),
-        onStopped: () => speechCompletionHandler?.('stopped'),
-      });
+      if (speechId !== activeSpeechId) return;
+      try {
+        Speech.speak(text, {
+          rate: effectiveRate,
+          pitch,
+          language: targetLang,
+          onDone: () => notifySpeechCompletion(speechId, 'done'),
+          onError: () => notifySpeechCompletion(speechId, 'error'),
+          onStopped: () => notifySpeechCompletion(speechId, 'stopped'),
+        });
+        return speechId;
+      } catch (error) {
+        notifySpeechCompletion(speechId, 'error');
+        return speechId;
+      }
     }
   }
 };
 
 export const stopSpeech = () => {
+	activeSpeechId = 0;
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();

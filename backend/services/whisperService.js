@@ -13,7 +13,7 @@ class WhisperService {
         ? (fs.existsSync(winBin) ? winBin : macBin)
         : (fs.existsSync(macBin) ? macBin : winBin)
     );
-    this.previousLanguageContext = 'mr';
+    this.previousLanguageContext = '';
   }
 
   getModelPath(preferSmall = false) {
@@ -136,13 +136,18 @@ class WhisperService {
   }
 
   executeWhisperPass(wavPath, modelPath, langArg, promptText) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const promptArg = promptText ? `--prompt "${promptText.replace(/"/g, '\\"')}"` : '';
       const cmd = `"${this.binPath}" -m "${modelPath}" -l ${langArg} -t 8 -nt ${promptArg} -f "${wavPath}"`;
       
       const startTime = Date.now();
       exec(cmd, { encoding: 'utf-8' }, (error, stdout, stderr) => {
         const durationMs = Date.now() - startTime;
+        if (error) {
+          console.error('[STT] Whisper process failed:', error, stderr || '');
+          reject(error);
+          return;
+        }
         const rawOutput = stdout || '';
         const cleanedText = rawOutput
           .split('\n')
@@ -165,12 +170,14 @@ class WhisperService {
   async transcribeAudio(audioFilePath, languageCode = 'en') {
     const pipelineStartTime = Date.now();
 
-    const langMeta = getLanguageMeta(languageCode);
-    const whisperLang = (langMeta && langMeta.whisperLang) ? langMeta.whisperLang : (languageCode || 'en');
+    const validLanguageCode = typeof languageCode === 'string' && /^[a-z]{2}$/i.test(languageCode)
+      ? languageCode.toLowerCase() : '';
+    const langMeta = validLanguageCode ? getLanguageMeta(validLanguageCode) : getLanguageMeta('en');
+    const whisperLang = (langMeta && langMeta.whisperLang) ? langMeta.whisperLang : 'en';
 
     if (!audioFilePath || !fs.existsSync(audioFilePath)) {
       console.warn('[STT PIPELINE] Input audio file missing or invalid');
-      return { text: '', language: languageCode, confidence: 0, engine: 'whisper.cpp' };
+      return { text: '', language: validLanguageCode || 'en', confidence: 0, engine: 'whisper.cpp' };
     }
 
     // Keep conversion artifacts isolated per request so simultaneous phone
@@ -185,7 +192,7 @@ class WhisperService {
 
     console.log(`[STT] Audio duration: ${wavMetrics?.duration || 'unknown'}`);
     console.log(`[STT] Detected language: ${whisperLang}`);
-    console.log(`[STT] Previous language context: ${this.previousLanguageContext}`);
+    console.log(`[STT] Previous language context: ${this.previousLanguageContext || '<empty>'}`);
 
     if (fs.existsSync(this.binPath) && fs.existsSync(activeModel)) {
       const codeSwitchPrompt = this.getCodeSwitchPrompt(whisperLang);
@@ -225,7 +232,7 @@ class WhisperService {
       const totalDuration = Date.now() - pipelineStartTime;
       return {
         text: cleanedText,
-        language: languageCode || 'en',
+        language: validLanguageCode || 'en',
         confidence: cleanedText ? 0.96 : 0,
         inferenceTimeMs: passResult.durationMs,
         totalPipelineDurationMs: totalDuration,
@@ -235,7 +242,8 @@ class WhisperService {
       };
     }
 
-    return { text: '', language: languageCode, confidence: 0, engine: 'whisper.cpp', real16kWavPath };
+    console.error(`[STT] Whisper executable/model unavailable: bin=${fs.existsSync(this.binPath)} model=${fs.existsSync(activeModel)}`);
+    return { text: '', language: validLanguageCode || 'en', confidence: 0, engine: 'whisper.cpp', real16kWavPath };
   }
 }
 

@@ -2,6 +2,9 @@ import { SupportedLanguageCode, VoiceBackendStatus, LanguageMeta } from '../type
 import Constants from 'expo-constants';
 import { Platform, NativeModules } from 'react-native';
 
+const VOICE_SESSION_ID = `navidoor_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+export const getVoiceSessionId = () => VOICE_SESSION_ID;
+
 /**
  * Dynamically resolves the host PC IP address in real-time from the active Metro bundler session.
  * Works seamlessly across Home Wi-Fi, Mobile Hotspot, Office LAN, and USB tethering
@@ -167,7 +170,7 @@ export async function queryAIAssistant(query: string, language: SupportedLanguag
     const res = await fetchWithTimeout(`${baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, language, context })
+      body: JSON.stringify({ query, language, context, sessionId: VOICE_SESSION_ID })
     }, 60000);
     
     if (!res.ok) {
@@ -207,7 +210,10 @@ const uploadFormDataXHR = (url: string, formData: FormData, timeoutMs = 20000): 
           resolve({ transcription: xhr.responseText });
         }
       } else {
-        reject(new Error(`Server returned HTTP ${xhr.status}: ${xhr.responseText}`));
+        const error: any = new Error(`Server returned HTTP ${xhr.status}: ${xhr.responseText}`);
+        error.status = xhr.status;
+        error.responseBody = xhr.responseText;
+        reject(error);
       }
     };
     xhr.onerror = () => reject(new Error('Network error uploading audio file'));
@@ -242,14 +248,18 @@ export async function requestWhisperSTT(audioBlob: Blob | null, languageCode: Su
       return null;
     }
 
-    console.log(`[VoiceAssistantBackend] Transmitting audio to ${baseUrl}/api/stt...`);
+    console.log(`[VOICE][STT] Request: POST ${baseUrl}/api/stt language=${languageCode} source=${sourceUri} bytes=${audioBlob?.size || 'native-uri'}`);
 
     // Whisper may take longer than 20s on a CPU, especially on its first run.
     const data = await uploadFormDataXHR(`${baseUrl}/api/stt`, formData, 90000);
-    console.log('[VoiceAssistantBackend] /api/stt transcription success:', data.transcription);
+    console.log(`[VOICE][STT] Response: success=${Boolean(data.success)} transcript="${data.transcription || ''}"`);
     return data.transcription || null;
   } catch (err) {
-    console.warn('[VoiceAssistantBackend] requestWhisperSTT error:', err);
+    if ((err as any)?.status === 422) {
+      console.warn(`[VOICE][STT] HTTP 422 response body: ${(err as any).responseBody}`);
+    } else {
+      console.error('[VOICE][STT] Request failed:', err, (err as any)?.responseBody || '');
+    }
     return null;
   }
 }

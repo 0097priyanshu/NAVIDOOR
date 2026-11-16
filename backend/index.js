@@ -19,6 +19,15 @@ const { setupSocketIO } = require('./services/socketService');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+const latestVisionBySession = new Map();
+const VISION_SNAPSHOT_MAX_AGE_MS = 3000;
+
+const snapshotAgeMs = (snapshot) => {
+  const capturedAt = Number(snapshot?.capturedAt);
+  if (!Number.isFinite(capturedAt)) return Infinity;
+  const age = Date.now() - capturedAt;
+  return age >= 0 ? age : Infinity;
+};
 
 // Setup temp directory for real microphone recording files
 const tempDir = path.join(__dirname, 'temp');
@@ -83,10 +92,29 @@ app.post(['/api/vision/detect', '/api/yolo/detect'], async (req, res) => {
       return res.status(400).json({ success: false, error: 'Image base64 payload is required.' });
     }
     const result = await yoloClientService.detectFrame(image, language);
+    if (result?.success && req.body.sessionId) {
+      latestVisionBySession.set(String(req.body.sessionId), { ...result, capturedAt: Date.now() });
+    }
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+app.post('/api/vision/snapshot', (req, res) => {
+  const { sessionId, snapshot } = req.body || {};
+  if (typeof sessionId !== 'string' || !sessionId || !snapshot || !Array.isArray(snapshot.objects)) {
+    console.warn('[VISION CACHE] Rejected invalid snapshot payload');
+    return res.status(400).json({ success: false, error: 'sessionId and snapshot.objects are required.' });
+  }
+  latestVisionBySession.set(sessionId, snapshot);
+  const now = Date.now();
+  for (const [id, cached] of latestVisionBySession.entries()) {
+    if (snapshotAgeMs(cached) > VISION_SNAPSHOT_MAX_AGE_MS) latestVisionBySession.delete(id);
+  }
+  if (latestVisionBySession.size > 100) latestVisionBySession.delete(latestVisionBySession.keys().next().value);
+  console.log(`[VISION CACHE] Updated session=${sessionId} objects=${snapshot.objects.length} ageMs=${now - Number(snapshot.capturedAt || now)}`);
+  res.json({ success: true });
 });
 
 app.post(['/api/vision/detect-bus', '/api/yolo/bus'], async (req, res) => {
@@ -225,10 +253,27 @@ app.post('/api/translate', async (req, res) => {
 // 4. AI Assistant Query Endpoint (Local Ollama LLM Reasoning Engine)
 app.post('/api/chat', async (req, res) => {
   try {
-    const { query, language = 'en', context = {}, sessionId = 'default' } = req.body;
+    const { query, language = 'en', context: requestContext = {}, sessionId: requestedSessionId = 'default' } = req.body;
+    const sessionId = String(requestedSessionId || 'default').slice(0, 128);
     if (!query) {
       return res.status(400).json({ success: false, error: 'Query parameter is required.' });
     }
+
+    const attachedSnapshot = requestContext?.visionSnapshot;
+    const cachedSnapshot = latestVisionBySession.get(sessionId);
+    const attachedAgeMs = snapshotAgeMs(attachedSnapshot);
+    const cachedAgeMs = snapshotAgeMs(cachedSnapshot);
+    const attachedFresh = attachedAgeMs <= VISION_SNAPSHOT_MAX_AGE_MS;
+    const cachedFresh = cachedAgeMs <= VISION_SNAPSHOT_MAX_AGE_MS;
+    const visionSnapshot = attachedFresh && (!cachedFresh || attachedAgeMs <= cachedAgeMs)
+      ? attachedSnapshot : (cachedFresh ? cachedSnapshot : null);
+    const usedObjects = visionSnapshot?.objects || visionSnapshot?.detections || [];
+    const attachedObjects = attachedSnapshot?.objects || attachedSnapshot?.detections || [];
+    const cachedObjects = cachedSnapshot?.objects || cachedSnapshot?.detections || [];
+    const labels = usedObjects.map((object) => object.label || object.class || 'object');
+    console.log(`[VISION CONTEXT] session=${sessionId} attachedCount=${attachedObjects.length} attachedLabels=${attachedObjects.map((o) => o.label || o.class).join(',') || '<none>'} attachedAgeMs=${Number.isFinite(attachedAgeMs) ? attachedAgeMs : 'unknown'} attachedFresh=${attachedFresh} cachedCount=${cachedObjects.length} cachedAgeMs=${Number.isFinite(cachedAgeMs) ? cachedAgeMs : 'unknown'} used=${visionSnapshot ? (visionSnapshot === attachedSnapshot ? 'attached' : 'cache') : 'none/stale'} labels=${labels.join(',') || '<none>'}`);
+    if (visionSnapshot) latestVisionBySession.set(sessionId, visionSnapshot);
+    const context = { ...requestContext, visionSnapshot };
 
     const result = await aiAssistantService.processQuery(query, language, context, sessionId);
     const answer = typeof result === 'string' ? result : (result.answer || '');
@@ -263,9 +308,13 @@ app.post('/api/stt', upload.single('audio'), async (req, res) => {
   let uploadedPath = req.file?.path;
   let convertedPath = null;
   try {
-    const languageCode = req.body.language || 'en';
+    const candidateLanguage = req.body.language;
+    const languageCode = typeof candidateLanguage === 'string' && /^[a-z]{2}$/i.test(candidateLanguage)
+      ? candidateLanguage.toLowerCase() : 'en';
     const sourceUri = req.body.sourceUri || 'mobile_mic';
+    console.log(`[API /api/stt] Request received: language=${languageCode} source=${sourceUri} bytes=${req.file?.size || 0}`);
     if (!req.file || !fs.existsSync(req.file.path) || req.file.size <= 0) {
+      console.warn('[API /api/stt] Early return: missing or empty audio upload');
       return res.status(400).json({ success: false, error: 'Audio upload missing or empty. Expected multipart field "audio".' });
     }
     const filePath = req.file.path;
@@ -288,6 +337,7 @@ app.post('/api/stt', upload.single('audio'), async (req, res) => {
     const result = await whisperService.transcribeAudio(filePath, languageCode);
     convertedPath = result.real16kWavPath;
     if (!result.text || !result.text.trim()) {
+      console.warn('[API /api/stt] Response: no transcript recognized');
       return res.status(422).json({
         success: false,
         error: 'No speech was recognized in the uploaded recording.',
@@ -296,6 +346,7 @@ app.post('/api/stt', upload.single('audio'), async (req, res) => {
       });
     }
 
+    console.log(`[API /api/stt] Response transcript (${result.text.trim().length} chars): "${result.text.trim()}" | language=${result.language}`);
     res.json({
       success: true,
       transcription: result.text,

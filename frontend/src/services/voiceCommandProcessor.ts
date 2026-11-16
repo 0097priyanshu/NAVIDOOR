@@ -543,15 +543,7 @@ export class VoiceCommandProcessor {
       q === 'scan' || clean === 'scan' || clean === 'yolo scan' ||
       /scan.*(surrounding|room|area|obstacle|scene|around|view|now|ahead|front|everything|path)/i.test(q) ||
       /yolo.*scan/i.test(q) ||
-      /(run|start|do).*scan/i.test(q) ||
-      /what.*(in front of|ahead of|ahead|in front).*me/i.test(q) ||
-      /what.*do you see/i.test(q) ||
-      /what.*is (in front|ahead)/i.test(q) ||
-      /detect.*obstacle/i.test(q) ||
-      /check.*obstacle/i.test(q) ||
-      /describe.*(scene|room|surrounding|view)/i.test(q) ||
-      /is.*(path|way|road).*clear/i.test(q) ||
-      q.includes('look ahead') || q.includes('look around') ||
+      /^(run|start|do)(?: a| the)? scan\b/i.test(q) ||
       q.includes('स्कॅन करा') || q.includes('स्कैन करो') || q.includes('समोर काय आहे') ||
       q.includes('सामने क्या है') || q.includes('रास्ता साफ है') || q.includes('अडथळा तपासा');
 
