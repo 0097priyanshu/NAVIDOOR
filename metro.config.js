@@ -7,6 +7,9 @@ const frontendNodeModules = path.resolve(projectRoot, 'frontend/node_modules');
 const config = getDefaultConfig(projectRoot);
 
 // Ensure all dependencies resolve to frontend/node_modules so no duplicate react-native exists
+// Metro's default hierarchical lookup can still walk up and find root/node_modules,
+// which contains a second React installation and causes invalid hook calls on web.
+config.resolver.disableHierarchicalLookup = true;
 config.resolver.nodeModulesPaths = [
   frontendNodeModules,
 ];

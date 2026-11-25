@@ -38,6 +38,7 @@ detector = YOLODetector(model_name="yolo11n.pt", confidence_threshold=0.28)
 
 # Single-flight concurrency lock to prevent overlapping inference on the same model
 inference_lock = threading.Lock()
+processed_frame_count = 0
 
 @app.route("/health", methods=["GET"])
 def health_check():
@@ -58,6 +59,7 @@ def _process_frame_request(filter_type=None):
     - Validates payload size and image dimensions
     - Explicitly cleans up image buffers to prevent Python memory bloat
     """
+    global processed_frame_count
     acquired = inference_lock.acquire(blocking=False)
     if not acquired:
         return jsonify({
@@ -129,6 +131,7 @@ def _process_frame_request(filter_type=None):
 
         # Validate decoded image dimensions (support any smartphone resolution up to 8K)
         width, height = pil_img.size
+        original_dimensions = (width, height)
         if width < 16 or height < 16 or width > 8192 or height > 8192:
             print(f"[YOLO 400] Invalid frame dimensions: {width}x{height}")
             return jsonify({"success": False, "error": f"Invalid frame dimensions: {width}x{height}"}), 400
@@ -136,6 +139,7 @@ def _process_frame_request(filter_type=None):
         # Downscale large mobile images to max 1280px in memory to save RAM and accelerate inference
         if width > 1280 or height > 1280:
             pil_img.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
+            print(f"[VISION FRAME] Downscaled for inference: {original_dimensions[0]}x{original_dimensions[1]} -> {pil_img.width}x{pil_img.height}; no brightness adjustment")
 
         # Execute single inference pass on model with native PIL RGB Image
         result = detector.detect_frame(pil_img, language=language)
@@ -160,6 +164,7 @@ def _process_frame_request(filter_type=None):
         return jsonify(result)
 
     except Exception as e:
+        print(f"[YOLO ERROR] Frame request failed: {e}", flush=True)
         return jsonify({"success": False, "error": str(e)}), 500
 
     finally:
@@ -177,6 +182,10 @@ def _process_frame_request(filter_type=None):
         except Exception:
             pass
         inference_lock.release()
+        processed_frame_count += 1
+        if processed_frame_count % 60 == 0:
+            collected = gc.collect()
+            print(f"[YOLO HEALTH] Processed {processed_frame_count} frames; garbage-collected {collected} objects", flush=True)
 
 @app.route("/detect", methods=["POST"])
 def detect_objects():

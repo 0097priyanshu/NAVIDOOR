@@ -9,6 +9,7 @@ class YoloClientService {
   constructor() {
     this.baseUrl = YOLO_SERVICE_URL;
     this.isOnline = false;
+    this.lastFailure = null;
   }
 
   async checkHealth() {
@@ -16,11 +17,14 @@ class YoloClientService {
       const response = await fetch(`${this.baseUrl}/health`, { signal: AbortSignal.timeout(2000) });
       if (response.ok) {
         const data = await response.json();
+        if (!this.isOnline && this.lastFailure) console.log(`[YOLOClientService] Service recovered at ${this.baseUrl}`);
         this.isOnline = true;
+        this.lastFailure = null;
         return { online: true, ...data };
       }
     } catch (e) {
       this.isOnline = false;
+      this.lastFailure = e.message;
     }
     return { online: false, error: 'YOLO service offline' };
   }
@@ -31,7 +35,7 @@ class YoloClientService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageBase64, language }),
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(10000),
       });
 
       if (response.status === 429) {
@@ -54,9 +58,15 @@ class YoloClientService {
         throw new Error(`YOLO service responded with HTTP ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      if (!this.isOnline && this.lastFailure) console.log(`[YOLOClientService] Service recovered at ${this.baseUrl}`);
+      this.isOnline = true;
+      this.lastFailure = null;
+      return result;
     } catch (error) {
-      console.warn('[YOLOClientService] Detection failed:', error.message);
+      this.isOnline = false;
+      if (this.lastFailure !== error.message) console.error(`[YOLOClientService] Detection failed at ${this.baseUrl}:`, error);
+      this.lastFailure = error.message;
       return {
         success: false,
         error: error.message,

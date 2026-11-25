@@ -1,5 +1,4 @@
 const translationService = require('./translationService');
-const { getLanguageMeta } = require('../config/languages');
 
 const CLARIFICATION_MAP = {
   mr: 'मला नीट समजलं नाही. कृपया पुन्हा सांगा.',
@@ -16,8 +15,8 @@ const CLARIFICATION_MAP = {
 
 class AIAssistantService {
   constructor() {
-    this.baseUrl = process.env.LLM_BASE_URL || 'http://127.0.0.1:11434';
-    this.modelName = process.env.LLM_MODEL || null;
+    this.baseUrl = process.env.OLLAMA_URL || process.env.LLM_BASE_URL || 'http://localhost:11434';
+    this.modelName = process.env.OLLAMA_MODEL || process.env.LLM_MODEL || 'qwen3.5:4b';
     this.sessionHistory = new Map();
   }
 
@@ -139,10 +138,10 @@ class AIAssistantService {
       };
     }
 
-    const { detectedObjects = [], activeMode = 'assist' } = context;
-
-    // Check natural language UI control intents
-    const intent = this.extractNaturalIntent(rawQuery, language);
+    const isSurroundingsQuery = /\b(ahead|in front|around(?: me| us)?|what do you see|what is there|what's there|path clear|clear path|obstacle|surroundings)\b/i.test(rawQuery);
+    // Surroundings questions need the current camera snapshot; only explicit
+    // scan commands should short-circuit to the UI scan action.
+    const intent = isSurroundingsQuery ? null : this.extractNaturalIntent(rawQuery, language);
 
     if (intent && intent.suggestedAnswer && intent.action !== 'generalQA') {
       let finalAnswer = intent.suggestedAnswer;
@@ -167,30 +166,33 @@ class AIAssistantService {
     // Resolve local Ollama model
     const model = await this.getAvailableModel();
 
-    const langMeta = getLanguageMeta(language);
-    const targetLangName = langMeta ? langMeta.name : language;
+    const snapshot = context?.visionSnapshot;
+    const snapshotAgeMs = Number.isFinite(Number(snapshot?.capturedAt))
+      ? Date.now() - Number(snapshot.capturedAt) : Infinity;
+    const snapshotFresh = snapshotAgeMs >= 0 && snapshotAgeMs <= 3000;
+    const rawObjects = snapshotFresh
+      ? (Array.isArray(snapshot.objects) ? snapshot.objects : (Array.isArray(snapshot.detections) ? snapshot.detections : []))
+      : [];
+    const cameraObjects = rawObjects.map((object) => {
+      const bbox = object.bbox || object.normalized_bbox || [];
+      const centerX = bbox.length >= 4 ? (Number(bbox[0]) + Number(bbox[2])) / 2 : 0.5;
+      const position = object.position || object.zone?.toLowerCase() || (centerX < 0.4 ? 'left' : centerX > 0.6 ? 'right' : 'center');
+      const meters = Number(object.distanceMeters ?? object.distance_meters);
+      const distance = object.distance || (Number.isFinite(meters) ? (meters <= 2 ? 'near' : meters <= 5 ? 'mid-range' : 'far') : 'distance unknown');
+      return { label: object.label || object.class || 'object', position, distance, meters: Number.isFinite(meters) ? meters : Infinity };
+    }).sort((a, b) => {
+      const centerPriority = (value) => value === 'center' ? 0 : 1;
+      return centerPriority(a.position) - centerPriority(b.position) || a.meters - b.meters;
+    }).slice(0, 6);
+    const pathState = snapshotFresh ? (snapshot.pathState || snapshot.safe_path?.path_state || 'UNKNOWN') : 'UNKNOWN';
+    const lowVisibility = pathState === 'VISIBILITY_REDUCED' || Boolean(snapshotFresh && snapshot.visibilityIssue);
+    const cameraContextBlock = snapshotFresh
+      ? `Camera (as of ${Math.max(0, Math.round(snapshotAgeMs / 1000))}s ago): ${cameraObjects.length ? cameraObjects.map((object) => `${object.label} - ${object.position} - ${object.distance}`).join('; ') : 'nothing is detected right now'}. Visibility: ${lowVisibility ? 'low' : 'normal'}.${lowVisibility && snapshot.visibilityIssue ? ` Issue: ${snapshot.visibilityIssue}.` : ''}`
+      : 'Camera: no fresh detections are available. Nothing is detected right now. Visibility: unknown.';
+    console.log(`[VISION CONTEXT] Snapshot ${snapshotFresh ? 'used' : 'stale/missing'}: count=${cameraObjects.length} labels=${cameraObjects.map((object) => object.label).join(',') || '<none>'} ageMs=${Number.isFinite(snapshotAgeMs) ? snapshotAgeMs : 'unknown'} surroundingsQuery=${isSurroundingsQuery}`);
+    console.log(`[VISION CONTEXT] LLM context block: ${cameraContextBlock}`);
 
-    let visionContextText = '';
-    if (Array.isArray(detectedObjects) && detectedObjects.length > 0) {
-      visionContextText = detectedObjects
-        .map(o => `${o.label || o.class || 'object'} (${o.distance || '1.2m'}, ${o.direction || 'front'})`)
-        .join(', ');
-    }
-
-    // Dedicated Accessibility System Prompt (Rule 1 & Rule 8)
-    const systemPrompt = `You are NAVIDOOR, a hands-free accessibility voice assistant for blind and visually impaired users.
-The user's spoken input comes from speech recognition and may contain minor phonetic spelling errors.
-
-ACCESSIBILITY & LANGUAGE RULES:
-1. Understand the user's INTENDED MEANING from the complete sentence context.
-2. Respond STRICTLY in the user's native language (${targetLangName}).
-3. If user speaks Marathi, respond in Marathi. If Hindi, respond in Hindi. If English, respond in English.
-4. Give a direct, factual answer in 1 SHORT sentence (maximum 15 words). No markdown, no filler, no greetings.
-5. Never introduce an unrelated topic, invent information, or hallucinate.
-6. Do NOT randomly translate words. Do NOT generate answers based on isolated word resemblance (no cake, no Kuwait).
-7. If the user input is garbled, unintelligible, or nonsense, reply ONLY with:
-   "${fallbackClarify}"
-${visionContextText ? `CAMERA VISION DATA: ${visionContextText}` : ''}`;
+    const systemPrompt = `You are a voice assistant for a navigation app for visually impaired users. Reply in 1-2 short sentences, plain text, no markdown, no emojis, no lists.\nFor questions about surroundings, what is ahead or in front, what is around the user, or whether the path is clear, use ONLY the current camera data below. Never invent objects. Mention the nearest center-path obstacles first. If there are no fresh detections, say that nothing is detected right now. Mention low visibility when the camera data says visibility is low. Answer other questions normally.\n${cameraContextBlock}`;
 
     if (!this.sessionHistory.has(sessionId)) {
       this.sessionHistory.set(sessionId, []);
@@ -209,7 +211,12 @@ ${visionContextText ? `CAMERA VISION DATA: ${visionContextText}` : ''}`;
     let decision = 'ANSWER';
     let confidence = 0.90;
 
+    const aiStartedAt = Date.now();
+    console.log(`[AI] Transcript sent: "${rawQuery}" | model=${model}`);
+    let timeout;
     try {
+      const controller = new AbortController();
+      timeout = setTimeout(() => controller.abort(), 30000);
       const response = await fetch(`${this.baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -217,12 +224,15 @@ ${visionContextText ? `CAMERA VISION DATA: ${visionContextText}` : ''}`;
           model,
           messages,
           stream: false,
+          think: false,
           options: {
             num_predict: 45,
             temperature: 0.1
           }
-        })
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeout);
 
       if (!response.ok) {
         throw new Error(`Ollama HTTP ${response.status}`);
@@ -232,7 +242,7 @@ ${visionContextText ? `CAMERA VISION DATA: ${visionContextText}` : ''}`;
       rawAnswer = data.message?.content ? data.message.content.trim() : '';
 
       if (!rawAnswer || rawAnswer.includes('केक') || rawAnswer.includes('कुवैती') || rawAnswer.toLowerCase().includes('kuwait') || rawAnswer.toLowerCase().includes('cake')) {
-        rawAnswer = fallbackClarify;
+        rawAnswer = 'Sorry, I could not answer that.';
         decision = 'CLARIFY';
         confidence = 0.30;
       } else {
@@ -244,8 +254,9 @@ ${visionContextText ? `CAMERA VISION DATA: ${visionContextText}` : ''}`;
       rawAnswer = this.cleanSpeechText(rawAnswer);
 
     } catch (err) {
-      console.warn('[AIAssistantService] LLM fallback:', err.message);
-      rawAnswer = fallbackClarify;
+      if (timeout) clearTimeout(timeout);
+      console.error('[AI] Ollama request failed:', err);
+      rawAnswer = 'Sorry, I could not answer that.';
       decision = 'CLARIFY';
       confidence = 0.0;
     }
@@ -254,6 +265,7 @@ ${visionContextText ? `CAMERA VISION DATA: ${visionContextText}` : ''}`;
     console.log(`[VOICE] Intent confidence: ${confidence}`);
     console.log(`[VOICE] Response decision: ${decision}`);
     console.log(`[VOICE] Final response: "${rawAnswer}"`);
+    console.log(`[AI] Reply: "${rawAnswer}" | model=${model} | responseMs=${Date.now() - aiStartedAt}`);
 
     return {
       answer: rawAnswer,
@@ -266,12 +278,14 @@ ${visionContextText ? `CAMERA VISION DATA: ${visionContextText}` : ''}`;
   cleanSpeechText(text) {
     if (!text) return '';
     return text
+      .replace(/<think>[\s\S]*?<\/think>/gi, '')
       .replace(/```[\s\S]*?```/g, '')
       .replace(/`([^`]+)`/g, '$1')
       .replace(/\*\*([^*]+)\*\*/g, '$1')
       .replace(/\*([^*]+)\*/g, '$1')
       .replace(/^#+\s*/gm, '')
       .replace(/[-*]\s+/g, '')
+      .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
       .replace(/\s+/g, ' ')
       .trim();
   }

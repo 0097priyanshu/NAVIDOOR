@@ -30,6 +30,8 @@ interface NavidoorState {
   // Voice System First
   voiceState: VoiceState;
   setVoiceState: (state: VoiceState) => void;
+  continuousVoiceEnabled: boolean;
+  setContinuousVoiceEnabled: (enabled: boolean) => void;
   lastAnnouncement: string;
   speak: (text: string, interrupt?: boolean) => Promise<void> | void;
   stopVoice: () => void;
@@ -86,6 +88,7 @@ interface NavidoorState {
   isDetectionActive: boolean;
   toggleDetection: () => void;
   detectedObjects: DetectedObject[];
+  visionSnapshot: any | null;
   generateSceneDescription: () => void;
 
   themeMode: ThemeMode;
@@ -175,6 +178,8 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   // Voice System
   voiceState: 'idle',
   setVoiceState: (state) => set({ voiceState: state }),
+  continuousVoiceEnabled: true,
+  setContinuousVoiceEnabled: (enabled) => set({ continuousVoiceEnabled: enabled }),
   lastAnnouncement: 'NAVIDOOR AI Vision Assist Ready. Tap mic or rotate wheel.',
   speechRate: 1.0,
   setSpeechRate: (rate) => set({ speechRate: rate }),
@@ -194,8 +199,13 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     }
 
     set({ lastAnnouncement: finalSpeechText, voiceState: 'speaking' });
-    console.log(`[VOICE] Audio playback started: ${new Date().toISOString()}`);
-    speakAnnouncement(finalSpeechText, { rate: get().speechRate, interrupt, languageCode: activeLang });
+    console.log(`[VOICE][TTS] Start: ${new Date().toISOString()} text="${finalSpeechText}"`);
+    try {
+      await speakAnnouncement(finalSpeechText, { rate: get().speechRate, interrupt, languageCode: activeLang });
+    } catch (error) {
+      console.error('[VOICE] TTS start failed:', error);
+      set({ voiceState: 'idle' });
+    }
   },
   stopVoice: () => {
     set({ voiceState: 'idle' });
@@ -211,11 +221,17 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     } catch (e) {}
 
     const started = await voiceRecordingService.startRecording(get().activeLanguageCode, async (recordingResult) => {
+      console.log(`[VOICE] Recording stopped: duration=${recordingResult.durationMs}ms bytes=${recordingResult.blob?.size || 0} speechDetected=${recordingResult.speechDetected}`);
       console.log('[VOICE] Recording finalized; preparing transcription', {
         hasUri: Boolean(recordingResult.uri),
         hasBlob: Boolean(recordingResult.blob),
         liveTranscriptLength: recordingResult.liveTranscript.length,
       });
+      if (!recordingResult.speechDetected || recordingResult.durationMs < 500) {
+        console.log(`[VOICE] Ignoring short/no-speech recording (${recordingResult.durationMs}ms)`);
+        set({ voiceState: 'idle' });
+        return;
+      }
       set({ voiceState: 'thinking', lastAnnouncement: 'Processing your voice...' });
       try {
         let autoText = recordingResult.liveTranscript ? recordingResult.liveTranscript.trim() : '';
@@ -227,9 +243,12 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
           );
           if (text) autoText = text.trim();
         }
-        if (autoText) set({ lastAnnouncement: `You: ${autoText}` });
-        if (autoText) set({ lastAnnouncement: `You: ${autoText}` });
-        console.log(`[VOICE] Transcript received (${autoText.length} chars)`);
+        console.log(`[VOICE] STT result (${autoText.length} chars): ${autoText || '<empty>'}`);
+        if (!autoText || autoText.length < 2) {
+          set({ voiceState: 'idle' });
+          return;
+        }
+        set({ lastAnnouncement: `You: ${autoText}` });
         await get().processVoiceInput(autoText);
       } catch (e) {
         console.error('[VOICE] Failed to process recorded speech:', e);
@@ -238,7 +257,8 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
       }
     });
     if (!started) {
-      set({ voiceState: 'idle', lastAnnouncement: 'Microphone unavailable. Check permission and try again.' });
+      console.error('[VOICE] Microphone start failed; returning to idle');
+      set({ voiceState: 'idle', continuousVoiceEnabled: false, lastAnnouncement: 'Microphone unavailable. Check permission and try again.' });
       return;
     }
   },
@@ -247,6 +267,11 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     if (get().voiceState !== 'listening') return;
     set({ voiceState: 'thinking', lastAnnouncement: '⚙️ Processing speech...' });
     const result = await voiceRecordingService.stopRecording();
+    if (!result.speechDetected || result.durationMs < 500) {
+      console.log(`[VOICE] Ignoring manual stop recording (${result.durationMs}ms, speech=${result.speechDetected})`);
+      set({ voiceState: 'idle' });
+      return;
+    }
     let textToProcess = result.liveTranscript ? result.liveTranscript.trim() : '';
 
     if (!textToProcess && (result.blob || result.uri)) {
@@ -257,6 +282,8 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
       );
       if (text) textToProcess = text.trim();
     }
+
+    console.log(`[VOICE] STT result (${textToProcess.length} chars): ${textToProcess || '<empty>'}`);
 
     try {
       await get().processVoiceInput(textToProcess);
@@ -271,11 +298,23 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
 
     if (cleanInput) set({ lastAnnouncement: `You: ${cleanInput}` });
 
-    if (isVoiceExitCommand(cleanInput)) {
-      get().stopVoiceListening().catch((error) => {
-        console.warn('[NavidoorStore] Voice exit cleanup failed:', error);
-      });
+    const exitCommand = isVoiceExitCommand(cleanInput);
+    console.log(`[VOICE][EXIT CHECK] transcript="${cleanInput}" words=${cleanInput.split(/\s+/).filter(Boolean).length} exit=${exitCommand}`);
+    if (exitCommand) {
+      console.log('[VOICE] Exit command detected before AI request');
+      set({ continuousVoiceEnabled: false });
       get().stopVoice();
+      return;
+    }
+
+    const transcriptWithoutTags = cleanInput.replace(/[\[\(](?:clapping|applause|music|noise|silence|blank audio|blank_audio|laughter|laughing|cough|coughing|breathing|traffic|horn|crowd|chatter)[\]\)]/gi, '').replace(/[.,!?;:'"\s]/g, '').toLowerCase();
+    const onlySoundTags = cleanInput.length > 0 && transcriptWithoutTags.length === 0;
+    const punctuationOnly = cleanInput.length > 0 && !/[\p{L}\p{N}]/u.test(cleanInput);
+    const fillerOnly = transcriptWithoutTags === 'you';
+    const droppedReason = !cleanInput ? 'empty' : onlySoundTags ? 'sound-tag-only' : fillerOnly ? 'filler-only' : punctuationOnly ? 'punctuation-only' : null;
+    if (droppedReason) {
+      console.log(`[VOICE][STT] Dropped transcript: "${cleanInput}" reason=${droppedReason}; returning to listening without AI/TTS`);
+      set({ voiceState: 'idle' });
       return;
     }
 
@@ -302,6 +341,7 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     const parsed = voiceCommandProcessor.parseCommand(cleanInput);
 
     if (parsed.isCommand) {
+      console.log(`[VOICE] Handling UI command action=${parsed.action}; skipping LLM`);
       const activeLang = get().activeLanguageCode;
       const t = getTranslation(activeLang);
 
@@ -442,13 +482,18 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
           get().speak(msg);
         }
       }
+      if (get().voiceState === 'thinking') set({ voiceState: 'idle' });
       return;
     }
 
     // Interactive Real-Time Voice Conversation Q&A & NLP Intent Engine
     try {
+      const visionSnapshot = get().visionSnapshot;
+      const snapshotAgeMs = visionSnapshot?.capturedAt ? Date.now() - visionSnapshot.capturedAt : Infinity;
+      console.log(`[VOICE] Attaching vision snapshot: count=${visionSnapshot?.objects?.length || 0} labels=${(visionSnapshot?.objects || []).map((o: any) => o.label).join(',') || '<none>'} ageMs=${Number.isFinite(snapshotAgeMs) ? snapshotAgeMs : 'unknown'} status=${snapshotAgeMs <= 3000 ? 'fresh' : 'stale/missing'}`);
       const liveContext = {
         detectedObjects: get().detectedObjects,
+        visionSnapshot: get().visionSnapshot,
         activeMode: get().activeMode,
         torchOn: get().torchOn
       };
@@ -553,11 +598,9 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
       }
 
       if (answer) {
-        if (isVoiceExitCommand(answer)) {
-          get().stopVoice();
-          return;
-        }
         get().speak(answer);
+      } else {
+        set({ voiceState: 'idle' });
       }
     } catch (err: any) {
       console.error('[NavidoorStore] Voice AI Assistant Error:', err.message || err);
@@ -673,6 +716,7 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     get().speak(next ? t.actions.visionActive : t.actions.visionPaused);
   },
   detectedObjects: INITIAL_OBJECTS,
+  visionSnapshot: null,
   generateSceneDescription: () => {
     const mode = get().activeMode;
     const t = getTranslation(get().activeLanguageCode);

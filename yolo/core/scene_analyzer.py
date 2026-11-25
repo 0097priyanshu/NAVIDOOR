@@ -82,6 +82,7 @@ class SceneAnalyzer:
                 if gray is not None and gray.size > 0:
                     mean_brightness = float(np.mean(gray))
                     contrast_std = float(np.std(gray))
+                    print(f"[VISION LIGHTING] brightness={mean_brightness:.1f} threshold_dark={self.min_brightness:.1f} threshold_bright={self.max_brightness:.1f} contrast={contrast_std:.1f} frame={gray.shape[1]}x{gray.shape[0]}")
 
                     # Analyze central walking corridor texture (middle 50% vertical, middle 40% horizontal)
                     h, w = gray.shape[:2]

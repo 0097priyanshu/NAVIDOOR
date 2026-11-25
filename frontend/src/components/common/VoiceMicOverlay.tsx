@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useNavidoorStore } from '../../store/useNavidoorStore';
 import { useContinuousVoiceLoop } from '../../hooks/useContinuousVoiceLoop';
@@ -6,15 +6,15 @@ import { UnifiedMicButton } from './UnifiedMicButton';
 
 /** Top-level mic hit target, rendered above camera, panels, and navigation UI. */
 export const VoiceMicOverlay: React.FC = () => {
-  const [enabled, setEnabled] = useState(false);
-  const { voiceState, isFirstTimeUser, isProfileModalOpen } = useNavidoorStore();
-  useContinuousVoiceLoop(enabled);
+  const { voiceState, isFirstTimeUser, isProfileModalOpen, userRole, continuousVoiceEnabled, setContinuousVoiceEnabled } = useNavidoorStore();
+  const loopEnabled = continuousVoiceEnabled && !isFirstTimeUser && !isProfileModalOpen && userRole === 'navidoor_user';
+  useContinuousVoiceLoop(loopEnabled);
 
   if (isFirstTimeUser || isProfileModalOpen) return null;
 
   const toggleVoice = () => {
     console.log('[VoiceMicOverlay] TALK button pressed');
-    setEnabled((current) => !current);
+    setContinuousVoiceEnabled(!continuousVoiceEnabled);
   };
 
   return (
@@ -25,8 +25,8 @@ export const VoiceMicOverlay: React.FC = () => {
           onPress={toggleVoice}
           showLabel
           size={68}
-          labelOverride={enabled ? 'STOP' : undefined}
-          accessibilityLabel={enabled ? 'Stop voice conversation' : 'Start hands-free voice conversation'}
+          labelOverride={continuousVoiceEnabled ? 'STOP' : undefined}
+          accessibilityLabel={continuousVoiceEnabled ? 'Stop voice conversation' : 'Start hands-free voice conversation'}
           accessibilityHint="Tap to start or stop the hands-free voice conversation"
         />
       </View>

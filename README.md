@@ -1,222 +1,100 @@
-# NAVIDOOR – AI Accessibility & Vision Assist Ecosystem
+# NAVIDOOR
 
-**NAVIDOOR** is an offline-first, voice-first, camera-first AI accessibility platform built specifically for blind, visually impaired, and elderly users, alongside a dedicated **Family Companion Portal** for caregivers.
+NAVIDOOR is an accessibility focused mobile and web prototype with a camera based vision assistant and hands free voice interaction. The app is built with Expo and React Native, with a Node.js backend and a Python YOLO vision service.
 
-The system features a cross-platform mobile client (React Native / Expo & Flutter) operating alongside a local Node.js Express server, real-time **YOLOv11** computer vision inference, offline **Whisper.cpp** Speech-to-Text with natural code-switching, local **Ollama** LLM reasoning, and **AI4Bharat IndicF5** neural Text-to-Speech microservices.
+This branch updates the continuous voice and vision experience: the app can keep listening for the NAVIDOOR user, automatically stop recordings after speech and silence (or a maximum recording duration), use recent camera detections as context for voice questions, and coordinate spoken vision guidance with assistant speech. These features are prototype functionality and have not been safety validated for mobility decisions.
 
----
+## Branch updates
 
-## 🌟 Core Design & Technical Philosophy
+- **Continuous voice loop:** The NAVIDOOR user screen restarts microphone listening when the assistant is idle. It waits for assistant speech and queued vision announcements to finish before listening again. Listening is not started for family accounts or during first time onboarding.
+- **Recording and voice activity detection:** Mobile and web recording use a short ambient-noise calibration followed by an adaptive speech threshold. Speech recordings finalize after about 1.7 seconds of silence or after a 9 second maximum; users can also stop a recording manually. The backend transcribes uploaded audio with the configured Whisper.cpp pipeline.
+- **Vision guidance coordination:** Continuous vision announcements are queued around user listening, processing, and speech. Perception requests have bounded timeouts, session cancellation, and backend-proxy fallback; repeated failures are rate limited in logs.
+- **Recent camera context for questions:** Successful detections can publish a compact snapshot for the active voice session. The backend keeps snapshots briefly (up to 3 seconds) and uses the freshest attached or cached snapshot when answering a surroundings question, avoiding stale scene context.
+- **YOLO process recovery:** `npm run yolo` now starts a supervisor that restarts the Python vision service if it exits. Stop it with Ctrl+C.
 
-1. **Camera as the Continuous Canvas**:
-   - The camera remains active throughout the application. Changing navigation modes does **NOT** unmount or replace the camera stream.
-   - Feature-specific floating overlays (Assist, Navigate, Read, Medicines, Location, Emergency, Medical ID, Settings) render directly over the live stream.
-2. **YOLOv11 5-Model Ensemble Vision & Hazard/Landmark Detection**:
-   - Powered by a concurrent **5-Model YOLOv11 Ensemble** running on local Python microservice (`http://0.0.0.0:5003`):
-     - **Base Model (`yolo11n.pt`)**: 80 standard COCO classes (pedestrians, vehicles, obstacles, furniture, doors).
-     - **Directional Staircases (`models/yolo11n_staircase.pt`)**: Detects ascending (`upstair`, 1.2m) and descending (`downstair`, 1.0m — critical fall risk) stairs.
-     - **Road Hazards (`models/yolo11n_pothole.pt`)**: Detects ground cavities and road potholes (`pothole`, 0.15m ground hazard ratio).
-     - **Pedestrian Crosswalks (`models/yolo11n_crosswalk.pt`)**: Detects zebra pedestrian crossings (`crosswalk`, 0.4m) for safe outdoor street navigation.
-     - **Indoor Elevators (`models/yolo11n_elevator.pt`)**: Detects elevator doors and lift lobbies (`elevator`, 2.2m) for indoor multi-floor accessibility.
-   - **Invisible Background Processing**: Hazard detection, 3D distance estimation, and obstacle proximity beeps operate completely in the background without visual bounding box clutter on screen.
-   - **Unified Left `SCAN` Button**: A single tactile button triggers high-resolution scene capture, concurrent 5-model inference, distance estimation, and spoken hazard guidance.
-   - Real-time 3D pinhole distance estimation with categorized risk levels (`CRITICAL` < 1.2m, `WARNING` 1.2m–2.5m, `INFO` 2.5m–5.0m) and dynamic audio beeps.
-   - 3-corridor path clearance analysis (LEFT, CENTER, RIGHT) with directional spoken guidance across 10 Indian languages.
-3. **Family Companion Portal & Secure QR Pairing**:
-   - Single-use 5-minute encrypted QR code pairing (`react-native-qrcode-svg` + `firebase` Firestore / Socket.IO dual-sync).
-   - Allows remote caregivers to monitor real-time location, receive emergency SOS notifications, and check active journeys.
-4. **Universal Screen Triple-Tap Emergency SOS Trigger**:
-   - Designed specifically for blind and visually impaired users who cannot pinpoint a small on-screen button during an emergency.
-   - **Triple-tap anywhere on the screen** within an **850ms** window to immediately activate the Emergency SOS modal, play warning alert beeps, trigger tactile haptic feedback, and broadcast live GPS coordinates to family caregivers.
-5. **100% Privacy-First & Local AI (Zero Cloud API Keys Required)**:
-   - **Speech-to-Text (STT)**: Offline `Whisper.cpp` native binary (`ggml-base.bin` & `ggml-small.bin`) with clean 16kHz PCM resampling, natural bilingual code-switching, and suspicious script/gibberish rejection.
-   - **General & Vision AI Engine**: Local **Ollama** open-source LLM (`llama3.2` / `qwen2.5-coder:7b`) for real-time scene perception reasoning and concise spoken Q&A on `http://127.0.0.1:11434`.
-   - **Text-to-Speech (TTS)**: **AI4Bharat IndicF5** neural speech synthesis microservice supporting 10 regional Indian languages on port `5002`.
-6. **Mobile-Native Voice Activity Detection (VAD) & Hands-Free Audio**:
-   - Mobile-native audio metering (`isMeteringEnabled: true`) with calibrated 2.2s silence threshold, -42 dB sensitivity, and 2.0s minimum recording window.
-   - Prevents cutting off mid-sentence speech or natural pauses.
-   - Accessible floating mic button with animated expanding aura, tactile haptic feedback, and spatial chimes.
-7. **Dynamic LAN Auto-Discovery (Zero Hardcoded IPs)**:
-   - Automatically resolves PC server IP across physical Android/iOS devices, emulators, and browsers via Expo `hostUri`.
-
----
-
-## 📊 Research Benchmarks & Empirical Performance
-
-| Vision Model | Target Class(es) | Dataset Source | Total Dataset Images | Epochs | Precision (P) | Recall (R) | Test mAP@50 | Test mAP@50-95 | Weights Size |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`yolo11n_crosswalk.pt`** | `crosswalk` | Roboflow (`crossing-264hc`) | 173 (121 tr / 34 val / 18 te) | 20 | **94.1%** | **88.6%** | **91.6%** (0.9156) | **69.0%** (0.6896) | 5.50 MB |
-| **`yolo11n_elevator.pt`** | `elevator` | Roboflow (`elevator-awvus`) | 1,783 (1,468 tr / 157 val / 158 te) | 12 | **85.2%** | **80.6%** | **88.1%** (0.8809) | **53.5%** (0.5353) | 5.50 MB |
-| **`yolo11n_pothole.pt`** | `pothole` | Roboflow (`pothole-detection-using-yolov11-ipvd9`) | 665 (465 tr / 133 val / 67 te) | 20 | **82.9%** | **68.0%** | **78.0%** (0.7796) | **46.8%** (0.4681) | 5.50 MB |
-| **`yolo11n_staircase.pt`** | `upstair`, `downstair` | Custom Pascal VOC Staircase Dataset | 502 (402 tr / 100 val) | 25 | **75.2%** | **68.4%** | **70.5%** (0.7050) | **41.2%** (0.4120) | 5.46 MB |
-| **`yolo11n.pt`** (Base) | 80 COCO Classes | MS COCO 2017 Dataset | 118,287 images | Pretrained | **64.5%** | **53.8%** | **53.1%** (0.5310) | **39.5%** (0.3950) | 5.61 MB |
-
----
-
-## 🌐 Supported Regional Indian Languages (10 Languages)
-
-NAVIDOOR supports full Speech-to-Text (STT), bilingual code-switching, LLM reasoning, translation, and neural Text-to-Speech (TTS) across 10 languages:
-- **English** (`en`)
-- **Hindi** (`hi` - हिंदी)
-- **Marathi** (`mr` - मराठी)
-- **Gujarati** (`gu` - ગુજરાતી)
-- **Punjabi** (`pa` - ਪੰਜਾਬੀ)
-- **Bengali** (`bn` - বাংলা)
-- **Tamil** (`ta` - தமிழ்)
-- **Telugu** (`te` - తెలుగు)
-- **Kannada** (`kn` - ಕನ್ನಡ)
-- **Malayalam** (`ml` - മലയാളം)
-
----
-
-## 🛠 Tech Stack & Port Map
-
-### 📁 Architecture & Components
+## Project layout
 
 ```text
-NAVIDOOR/
-├── frontend/    # React Native 0.86 / Expo SDK 57 mobile client (Android, iOS, Web)
-├── backend/     # Node.js Express, Socket.IO, STT, and TTS orchestrator
-└── yolo/        # Python YOLOv11 AI Vision, Distance Estimation & Hazard Engine
+frontend/   Expo / React Native app and voice, camera, and vision client logic
+backend/    Express API, Socket.IO, Whisper integration, and assistant orchestration
+yolo/       Flask vision API and YOLO detection / scene analysis code
+ocr/        OCR service
 ```
 
-| Component | Technology | Default Port | Description |
-| :--- | :--- | :--- | :--- |
-| **Mobile Frontend** | React Native 0.86.3 / Expo SDK 57 (TypeScript, React 19) | `8081` (Metro) | Continuous camera canvas & Caregiver Portal |
-| **Backend Server** | Node.js v22+ Express + Socket.IO | `5001` | REST APIs, Socket.IO gateway, Whisper STT wrapper |
-| **YOLOv11 Vision Server** | Python 3.10+ Flask + Ultralytics YOLOv11 | `5003` | Concurrent 5-model object detection & 3D distance estimation |
-| **Neural TTS Server** | AI4Bharat IndicF5 PyTorch microservice | `5002` | Neural speech synthesis across 10 Indian languages |
-| **Local LLM Engine** | Ollama (`llama3.2` / `qwen2.5-coder:7b`) | `11434` | Local conversational Q&A & scene interpretation |
+## Requirements
 
----
+- Node.js and npm
+- Python 3.10 for the YOLO service, with packages from `yolo/requirements.txt`
+- The YOLO model weights expected by the detector
+- Whisper.cpp executable and model for server side speech transcription
+- Optional local services: Ollama for LLM answers, OCR service for text reading, and IndicF5 service for neural speech synthesis
 
-## 📦 Dependency Installation Guide
-
-Run these steps to set up the complete environment:
+Install JavaScript dependencies from the repository root:
 
 ```bash
-# 1. Install Node.js dependencies
 npm install
+```
 
-# 2. Install Python microservice packages (YOLOv11, PyTorch, Transformers, F5-TTS)
+Install YOLO dependencies in the Python environment you intend to use:
+
+```bash
 python -m pip install -r yolo/requirements.txt
-python -m pip install -r backend/indicf5/requirements.txt
+```
 
-# 3. Download Whisper.cpp Windows CLI binaries and multilingual speech models
+The speech setup helper downloads the Whisper tiny model and, on Windows, a Whisper.cpp executable. Run it only when you want to set up that optional speech-to-text path; it requires network access:
+
+```bash
 node backend/scripts/setup_speech_pipeline.js
 ```
 
----
+## Run locally
 
-## 🚀 How to Run the Ecosystem
+Start each service in a separate terminal from the repository root.
 
-### Step 1: Start the Local LLM (Ollama)
-Ensure [Ollama](https://ollama.com) is running locally:
-```bash
-ollama run llama3.2
-```
+1. Start YOLO (the supervisor restarts the service after an unexpected exit):
 
-### Step 2: Start the YOLO AI Vision Server (Port 5003)
-```bash
-npm run yolo
-# Or directly:
-py -3.10 yolo/yolo_server.py
-```
-*(Loads all 5 models concurrently on CPU: `yolo11n.pt`, `yolo11n_staircase.pt`, `yolo11n_pothole.pt`, `yolo11n_crosswalk.pt`, and `yolo11n_elevator.pt`).*
+   ```bash
+   npm run yolo
+   ```
 
-### Step 3: Start the Backend Server (Port 5001)
-```bash
-npm run server
-# Or directly:
-node backend/index.js
-```
-*(Runs on `http://0.0.0.0:5001` - LAN accessible).*
+2. Start the Node.js backend on port `5001`:
 
-### Step 4: Start the Mobile Application (Frontend)
-```bash
-npm run tunnel
-# Or for local web preview:
-npm run web
-```
-1. Scan the displayed QR code with your phone (**Expo Go** on Android or default **Camera** app on iPhone).
-2. The app will bundle and run live with real-time YOLO vision overlays and voice assistance.
+   ```bash
+   npm run server
+   ```
 
----
+3. Start the app in a browser on port `8081`:
 
-## 📱 Primary Navigation Modes (12 Modes)
+   ```bash
+   npm run web
+   ```
 
-| Mode | Functionality & Overlays |
-| :--- | :--- |
-| **🏠 ASSIST** | Invisible background YOLOv11 hazard detection, obstacle distance estimation with proximity beeps, safe walking vectors. |
-| **🧭 NAVIGATE** | Turn-by-turn AR walking step overlay, destination cards, street name announcements. |
-| **📖 READ** | Live OCR text highlighting, IndicF5 TTS read-aloud controls with speech rate adjustment. |
-| **💊 MEDICINE** | Prescription label scanner, pill bottle tracker, dosage countdown, voice log confirmation. |
-| **🚌 TRANSIT** | Nearby public transit and bus arrival countdowns, bus door detection. |
-| **📍 LIVE LOC** | High-precision GPS coordinates, speed, heading, and address sharing. |
-| **📞 CALL SOS** | Fast-access emergency contact dialer and emergency dispatch. |
-| **🩺 MEDICAL** | Medical ID card (blood group, allergies, chronic conditions, primary physician). |
-| **👥 FAMILY** | One-tap connection to Caregiver stream and remote companion portal. |
-| **🕒 HISTORY** | Activity log and saved text reading history. |
-| **🌐 LANG** | Interactive switcher for all 10 regional Indian languages. |
-| **⚙ SETTINGS** | Contrast themes (Standard Slate, High-Contrast Dark, High-Contrast Amber) and speech rate. |
+   Or start Expo with a tunnel for a phone running Expo Go:
 
----
+   ```bash
+   npm run tunnel
+   ```
 
-## 🎙️ Speech Pipeline & Code-Switching Architecture
+The backend exposes `GET http://localhost:5001/api/health`. Vision service health is available through the backend at `GET /api/yolo/health`. Ollama, OCR, and IndicF5 are separate services and are only needed for their respective features.
 
-### A. Audio Capture & Mobile VAD
-- **Expo Audio Metering**: Monitors audio levels in real time (`isMeteringEnabled: true`).
-- **2.2s Silence Window**: Tolerates natural pauses without cutting off speech mid-sentence.
-- **2.0s Minimum Window**: Prevents premature cutoff before the user completes their thought.
-- **-42 dB Sensitivity**: Reliably detects softer speech while filtering background room rumble.
+Press Ctrl+C in each terminal to stop its process.
 
-### B. Clean 16kHz Resampling
-- Highpass/lowpass filters that previously clipped audio or stripped high-frequency consonants have been replaced with **clean 16kHz 16-bit Mono PCM WAV resampling** (`ffmpeg -ar 16000 -ac 1 -c:a pcm_s16le`).
-- Full speech bandwidth (0–8000 Hz) is preserved for crisp Devanagari fricatives and sibilants.
+## Voice and vision behavior
 
-### C. Bilingual Code-Switching & Gibberish Rejection
-- Primed with context prompts (`--prompt "Marathi and English code-switching. माझा phone कुठे आहे? Camera चालू करून सांगा."`), preserving English technical words (`phone`, `meeting`, `camera`, `app`, `login`) alongside native Devanagari text.
-- Real-time `isSuspiciousScript` validator catches and retries accidental Cyrillic (Russian) or Arabic script hallucinations.
+Voice capture is coordinated through the app's voice state (`idle`, `listening`, `thinking`, and `speaking`). The continuous loop is enabled by the NAVIDOOR user screen and yields to onboarding, family accounts, assistant responses, and queued vision guidance. The recording service applies adaptive metering-based speech detection on supported inputs and sends recorded audio to the backend `/api/stt` endpoint.
 
-### D. Direct Native LLM Prompting & Clarification Layer
-- User queries are fed directly to Llama 3.2 in their native script without lossy round-trip English translation.
-- Pre-LLM validation filters garbled input and immediately responds with concise clarification:
-  - **Marathi**: `"मला नीट समजलं नाही. कृपया पुन्हा सांगा."`
-  - **Hindi**: `"मुझे ठीक से समझ नहीं आया। कृपया फिर से कहें।"`
-  - **English**: `"I didn't quite catch that. Please repeat."`
+Vision analysis is requested from the YOLO service through the client and backend. Recent scene snapshots are associated with a voice session and expire after 3 seconds. The `/api/chat` endpoint uses a fresh supplied or cached snapshot as context; if neither is fresh, surroundings answers are instructed to say that no current detections are available rather than inventing objects.
 
----
+Treat distance estimates, hazard labels, and path guidance as experimental. They may be wrong and are not a replacement for a cane, guide dog, or other established mobility aid.
 
-## 🚨 Emergency SOS & Family Companion Portal
+## Main backend endpoints
 
-- **Universal Screen Triple-Tap Gesture**:
-  - Tapping **3 times anywhere on the screen** within an 850ms window immediately activates the Emergency SOS modal.
-  - Automatically sounds alert beeps, triggers tactile warning haptics, and streams live GPS coordinates and device battery to caregivers via Socket.IO.
-- **Floating Emergency SOS Button**:
-  - Top-right safety-coral alert button with a 5-second hold countdown and loud audible chime.
-- **Platform-Aware Header Spacing**:
-  - CameraHeader and CameraControlsOverlay feature responsive, platform-aware top offsets to ensure zero overlap between header buttons and camera control pills on iOS, Android, and Web.
-- **Remote Family Companion Portal**:
-  - Caregiver dashboard (`userRole = 'family_member'`) featuring 5 tabs:
-    1. **HOME**: Live GPS map card, monitored user telemetry (battery, steps, medication schedule).
-    2. **LOCATION**: Breadcrumb journey route map, speed, accuracy, and safe zones.
-    3. **ACTIVITY**: User timeline of actions and obstacle encounters.
-    4. **ALERTS**: SOS alert log and critical notifications.
-    5. **PROFILE**: Caregiver profile and user pairing manager.
-
----
-
-## 🧪 Verification & Diagnostic Scripts
-
-Execute the automated test suites inside `backend/`:
-
-```bash
-# 1. Verify 10 code-switching and multilingual speech test cases
-node backend/test_codeswitching_10cases.js
-
-# 2. Verify 5-pass Marathi speech capture & turnaround latency
-node backend/test_5pass_marathi_verification.js
-
-# 3. Verify LLM response generation & clarification safety check
-node backend/test_response_generation_verification.js
-```
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/health` | Backend and dependent service status |
+| `GET /api/yolo/health` | YOLO service status |
+| `POST /api/vision/detect` | Submit an image for vision analysis |
+| `POST /api/vision/snapshot` | Cache recent vision context for a session |
+| `POST /api/chat` | Ask the assistant, optionally with a vision snapshot |
+| `POST /api/stt` | Transcribe uploaded microphone audio |
+| `POST /api/tts` | Synthesize speech through the configured TTS service |

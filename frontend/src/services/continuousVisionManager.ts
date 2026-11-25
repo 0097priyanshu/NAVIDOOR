@@ -18,7 +18,7 @@ import { Platform, AppState, AppStateStatus } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { yoloVisionService, YoloAnalysisResult, YoloDetection, NavigationPathState } from './yoloVisionService';
 import { useNavidoorStore } from '../store/useNavidoorStore';
-import { playObstacleBeep, speakAnnouncement, stopSpeech } from '../utils/speechUtils';
+import { addSpeechCompletionListener, getActiveSpeechId, playObstacleBeep, speakAnnouncement, stopSpeech } from '../utils/speechUtils';
 
 export type SpatialZone = 'LEFT' | 'CENTER' | 'RIGHT';
 export type RiskLevel = 'CRITICAL' | 'WARNING' | 'INFO' | 'FAR';
@@ -63,6 +63,7 @@ interface QueuedSpeechItem {
   timestamp: number;
   trackId?: string;
   interrupt: boolean;
+  speechId?: number;
 }
 
 // Multilingual labels for common everyday navigation objects
@@ -364,7 +365,7 @@ class AnnouncementManager {
       // VISIBILITY_REDUCED: Inform user of dark or obscured view
       if (
         pathState === 'VISIBILITY_REDUCED' &&
-        now - this.lastVisibilitySpokenTime > 14000 &&
+        now - this.lastVisibilitySpokenTime >= 15000 &&
         now - this.lastGlobalSpokenTime > 4000
       ) {
         this.lastVisibilitySpokenTime = now;
@@ -610,24 +611,40 @@ class SpeechQueueManager {
   private activeItem: QueuedSpeechItem | null = null;
   private pendingQueue: Map<HazardPriority, QueuedSpeechItem> = new Map();
   private isProcessing: boolean = false;
-  private playbackTimer: any = null;
   private nextItemId: number = 1;
+
+  isSpeaking() {
+    return Boolean(this.activeItem);
+  }
+
+  flush() {
+    this.processNext();
+  }
+
+  constructor() {
+    addSpeechCompletionListener((_event, speechId) => {
+      if (this.activeItem && this.activeItem.speechId !== undefined && this.activeItem.speechId !== speechId) return;
+      if (this.activeItem) {
+        this.activeItem = null;
+        this.isProcessing = false;
+      }
+      this.processNext();
+      if (!this.activeItem && useNavidoorStore.getState().voiceState === 'speaking') {
+        useNavidoorStore.setState({ voiceState: 'idle' });
+      }
+    });
+  }
 
   enqueue(text: string, priority: HazardPriority, options: { trackId?: string; interrupt?: boolean } = {}) {
     const clean = (text || '').trim();
     if (!clean) return;
 
     const store = useNavidoorStore.getState();
-    if (store.voiceState === 'listening' || store.voiceState === 'thinking') {
-      return;
-    }
+    const userIsSpeaking = store.voiceState === 'listening' || store.voiceState === 'thinking';
 
     if (this.activeItem && this.activeItem.text === clean) return;
-    const existing = this.pendingQueue.get(priority);
-    if (existing && existing.text === clean) return;
-
     // Do NOT cut off currently playing speech! Let the sentence finish speaking naturally.
-    if (this.activeItem || this.isProcessing || store.voiceState === 'speaking') {
+    if (userIsSpeaking || this.activeItem || this.isProcessing || store.voiceState === 'speaking') {
       this.pendingQueue.set(priority, {
         id: `spch_${this.nextItemId++}`,
         text: clean,
@@ -652,16 +669,6 @@ class SpeechQueueManager {
     this.processNext();
   }
 
-  private interruptAndPlay(item: QueuedSpeechItem) {
-    if (this.playbackTimer) {
-      clearTimeout(this.playbackTimer);
-      this.playbackTimer = null;
-    }
-    stopSpeech();
-    this.activeItem = null;
-    this.executeSpeech(item);
-  }
-
   private processNext() {
     if (this.activeItem || this.isProcessing) return;
     let next: QueuedSpeechItem | null = null;
@@ -673,6 +680,11 @@ class SpeechQueueManager {
       }
     }
     if (!next) return;
+    if (Date.now() - next.timestamp > 12000) {
+      console.log('[VISION] Skipping stale queued guidance');
+      this.processNext();
+      return;
+    }
     this.executeSpeech(next);
   }
 
@@ -688,30 +700,19 @@ class SpeechQueueManager {
       voiceState: 'speaking',
     });
 
-    speakAnnouncement(item.text, {
+    const speechRequest = speakAnnouncement(item.text, {
       rate: store.speechRate || 1.0,
       pitch: 1.0,
       interrupt: item.interrupt,
       languageCode: activeLang as any,
     });
-
-    const estDurationMs = Math.max(1800, item.text.length * 55 + 600);
-    this.playbackTimer = setTimeout(() => {
-      this.playbackTimer = null;
-      this.activeItem = null;
-      this.isProcessing = false;
-      if (useNavidoorStore.getState().voiceState === 'speaking') {
-        useNavidoorStore.setState({ voiceState: 'idle' });
-      }
-      this.processNext();
-    }, estDurationMs);
+    item.speechId = getActiveSpeechId();
+    void speechRequest.then((speechId) => {
+      if (this.activeItem === item && speechId !== undefined) item.speechId = speechId;
+    });
   }
 
   reset(stopActiveAudio: boolean = false) {
-    if (this.playbackTimer) {
-      clearTimeout(this.playbackTimer);
-      this.playbackTimer = null;
-    }
     if (stopActiveAudio) {
       stopSpeech();
     }
@@ -749,6 +750,14 @@ class ContinuousVisionManager {
   private tracker = new TemporalTracker();
   private announcementManager = new AnnouncementManager();
   private speechQueue = new SpeechQueueManager();
+
+  isSpeakingQueuedGuidance() {
+    return this.speechQueue.isSpeaking();
+  }
+
+  flushQueuedGuidance() {
+    this.speechQueue.flush();
+  }
 
   // AppState subscription
   private appStateSubscription: any = null;
@@ -945,12 +954,16 @@ class ContinuousVisionManager {
         }
 
         if (yoloResult && yoloResult.success) {
+          if (this.consecutiveErrors > 0) console.log(`[VISION LOOP] Detection recovered after ${this.consecutiveErrors} failed frame(s)`);
           this.consecutiveErrors = 0;
           this.handleDetectionsResult(yoloResult, false);
         } else if (yoloResult && yoloResult.busy) {
           this.consecutiveErrors = Math.min(this.consecutiveErrors + 1, 5);
         } else {
           this.consecutiveErrors = Math.min(this.consecutiveErrors + 1, 10);
+          if (this.consecutiveErrors === 1 || this.consecutiveErrors % 5 === 0) {
+            console.error(`[VISION LOOP] Frame request failed (${this.consecutiveErrors} consecutive): ${yoloResult?.error || 'unknown YOLO error'}`);
+          }
         }
       }
     } catch (err) {
@@ -1006,9 +1019,25 @@ class ContinuousVisionManager {
     }));
 
     // 3. Always update store visual indicators
-    useNavidoorStore.setState({
-      detectedObjects: mappedObjects,
-    });
+    const visionSnapshot = {
+      capturedAt: now,
+      objects: rawDetections.map((detection: any) => {
+        const bbox = detection.normalized_bbox || detection.bbox || [0, 0, 1, 1];
+        const centerX = (Number(bbox[0]) + Number(bbox[2])) / 2;
+        return {
+          label: detection.class || detection.label || 'object',
+          confidence: Number(detection.confidence) || 0,
+          bbox,
+          position: centerX < 0.4 ? 'left' : centerX > 0.6 ? 'right' : 'center',
+          distanceMeters: Number(detection.distance_meters ?? detection.distanceMeters) || null,
+        };
+      }),
+      guidance: result.voice_guidance || '',
+      pathState: result.safe_path?.path_state || 'UNKNOWN',
+      visibilityIssue: result.safe_path?.scene_metrics?.visibility_issue || null,
+    };
+    console.log(`[VISION] Latest snapshot updated: objects=${visionSnapshot.objects.length} labels=${visionSnapshot.objects.map((o: any) => o.label).join(',') || '<none>'} path=${visionSnapshot.pathState}`);
+    useNavidoorStore.setState({ detectedObjects: mappedObjects, visionSnapshot });
 
     // 4. Centralized Announcement & Prioritized Speech Coordination
     this.coordinateVisionSpeech(confirmedTracks, result, isForcedScan, now);
@@ -1024,11 +1053,6 @@ class ContinuousVisionManager {
     now: number
   ) {
     const store = useNavidoorStore.getState();
-
-    // Suppress vision speech while user interacts with mic
-    if (store.voiceState === 'listening' || store.voiceState === 'thinking') {
-      return;
-    }
 
     const pathState = rawResult.safe_path?.path_state || 'UNKNOWN';
 
