@@ -123,3 +123,29 @@ export interface OCRResult {
   audioUrl?: string | null;
   error?: string;
 }
+
+export interface MedicalProfileInfo {
+  bloodGroup: string;
+  allergies: string[];
+  chronicConditions: string[];
+  primaryPhysician?: string;
+  notes?: string;
+}
+
+export interface OcrHistoryEntry {
+  id: string;
+  category: OCRCategory | string;
+  rawText: string;
+  spokenSummary: string;
+  structuredData?: any;
+  language: SupportedLanguageCode | string;
+  createdAt: string;
+}
+
+export interface PendingSyncItem {
+  id: string;
+  method: 'POST' | 'PUT' | 'DELETE';
+  endpoint: string;
+  body?: any;
+  createdAt: number;
+}

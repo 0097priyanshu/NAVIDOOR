@@ -18,7 +18,8 @@
     "lint": "npm --prefix frontend run lint",
     "ocr": "python ocr/ocr_server.py",
     "test:ocr": "python ocr/tests/test_ocr.py",
-    "test:ocr-backend": "node backend/test_ocr_backend_verification.js"
+    "test:ocr-backend": "node backend/test_ocr_backend_verification.js",
+    "test:db": "node backend/test_neon_e2e.js"
   },
   "dependencies": {
     "@expo/html-elements": "~58.0.3",

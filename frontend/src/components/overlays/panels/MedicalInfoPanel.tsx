@@ -14,7 +14,7 @@ const DUMMY_CONTACTS = [
 type FlowStep = 'idle' | 'choose_type' | 'choose_contact' | 'success';
 
 export const MedicalInfoPanel = () => {
-  const { speak, emergencyContacts, medicines, confirmMedicineTaken, deleteMedicine } = useNavidoorStore();
+  const { speak, emergencyContacts, medicines, medicalProfile, addMedicine, confirmMedicineTaken, deleteMedicine } = useNavidoorStore();
   const [step, setStep] = React.useState<FlowStep>('idle');
   const [selectedContactName, setSelectedContactName] = React.useState<string | null>(null);
   
@@ -77,20 +77,7 @@ export const MedicalInfoPanel = () => {
     const name = newMedNameInput.trim();
     if (!name) return;
 
-    const newMed = {
-      id: `med-${Date.now()}`,
-      name,
-      dosage: '1 Pill',
-      instructions: 'Take daily as prescribed',
-      remainingPills: 20,
-      nextScheduledTime: '8:00 AM Today',
-      prescribedFor: 'General Health'
-    };
-
-    useNavidoorStore.setState((state) => ({
-      medicines: [newMed, ...(state.medicines || [])]
-    }));
-
+    addMedicine(name);
     speak(`Added medication ${name}.`);
     setNewMedNameInput('');
     setShowAddForm(false);
@@ -115,7 +102,7 @@ export const MedicalInfoPanel = () => {
           </View>
           <View style={styles.textContainer}>
             <Text style={styles.infoLabel}>Blood Type</Text>
-            <Text style={styles.infoValue}>O Positive (O+)</Text>
+            <Text style={styles.infoValue}>{medicalProfile?.bloodGroup || 'O Positive (O+)'}</Text>
           </View>
         </View>
 
@@ -127,7 +114,9 @@ export const MedicalInfoPanel = () => {
           </View>
           <View style={styles.textContainer}>
             <Text style={styles.infoLabel}>Allergies & Sensitivities</Text>
-            <Text style={styles.infoValue}>Penicillin, Peanuts</Text>
+            <Text style={styles.infoValue}>
+              {medicalProfile?.allergies?.length ? medicalProfile.allergies.join(', ') : 'None listed'}
+            </Text>
           </View>
         </View>
       </View>

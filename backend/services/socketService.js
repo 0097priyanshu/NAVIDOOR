@@ -1,5 +1,6 @@
 const aiAssistantService = require('./aiAssistantService');
 const translationService = require('./translationService');
+const databaseService = require('./databaseService');
 
 function setupSocketIO(io) {
   io.phoneSockets = {};
@@ -16,12 +17,19 @@ function setupSocketIO(io) {
 
     // Register socket with phone number and role
     socket.on('register', (data) => {
-      const { phone, role } = data || {};
+      const { phone, role, name, uid } = data || {};
       if (phone) {
         const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
         io.phoneSockets[cleanPhone] = socket.id;
         io.socketPhones[socket.id] = cleanPhone;
         console.log(`[Socket.IO] Registered client ${role} (${cleanPhone}) on socket ${socket.id}`);
+
+        databaseService.ensureUser({
+          phone: cleanPhone,
+          uid,
+          name,
+          role: role === 'family_member' ? 'FAMILY_MEMBER' : 'NAVIDOOR_USER',
+        }).catch(() => {});
       }
     });
 
@@ -66,7 +74,7 @@ function setupSocketIO(io) {
     socket.on('emergency:sos', (data) => {
       console.log(`[Socket.IO] EMERGENCY SOS ALERT from ${socket.id}:`, data);
       
-      const phone = io.socketPhones[socket.id] || 'Unknown User';
+      const phone = io.socketPhones[socket.id] || data?.phone || 'Unknown User';
       io.emit('emergency:broadcast', {
         alertType: 'SOS_TRIGGERED',
         socketId: socket.id,
@@ -74,6 +82,14 @@ function setupSocketIO(io) {
         location: data ? data.location : 'Oak Lane',
         timestamp: new Date().toISOString()
       });
+
+      // Async persistence to Neon Postgres (never blocks SOS broadcast)
+      databaseService.logSosAlert({
+        phone,
+        latitude: typeof data?.latitude === 'number' ? data.latitude : undefined,
+        longitude: typeof data?.longitude === 'number' ? data.longitude : undefined,
+        address: typeof data?.location === 'string' ? data.location : data?.address,
+      }).catch(() => {});
     });
 
     // 4. Live Spatial Vision Alert Channel
@@ -90,6 +106,14 @@ function setupSocketIO(io) {
       const { userPhone, location } = data || {};
       if (userPhone && location) {
         io.emit(`family:location:${userPhone}`, { location, timestamp: Date.now() });
+        databaseService.logLocationSnapshot({
+          phone: userPhone,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          address: location.address,
+          speed: location.speed,
+          batteryPct: location.battery ? String(location.battery) : undefined,
+        }).catch(() => {});
       }
     });
 
@@ -124,16 +148,40 @@ function setupSocketIO(io) {
     socket.on('family:connectionApproved', (data) => {
       console.log('[Socket.IO] Real-time family:connectionApproved received:', data);
       io.emit('family:connectionResponse', { approved: true, ...data });
+      if (data?.connectionId || (data?.userPhone && data?.familyPhone)) {
+        databaseService.updateConnectionStatus({
+          connectionId: data.connectionId,
+          userPhone: data.userPhone,
+          familyPhone: data.familyPhone,
+          status: 'connected',
+        }).catch(() => {});
+      }
     });
 
     socket.on('family:connectionRejected', (data) => {
       console.log('[Socket.IO] Real-time family:connectionRejected received:', data);
       io.emit('family:connectionResponse', { approved: false, ...data });
+      if (data?.connectionId || (data?.userPhone && data?.familyPhone)) {
+        databaseService.updateConnectionStatus({
+          connectionId: data.connectionId,
+          userPhone: data.userPhone,
+          familyPhone: data.familyPhone,
+          status: 'rejected',
+        }).catch(() => {});
+      }
     });
 
     socket.on('family:disconnected', (data) => {
       console.log('[Socket.IO] Real-time family:disconnected received:', data);
       io.emit('family:connectionRevoked', data);
+      if (data?.connectionId || (data?.userPhone && data?.familyPhone)) {
+        databaseService.updateConnectionStatus({
+          connectionId: data.connectionId,
+          userPhone: data.userPhone,
+          familyPhone: data.familyPhone,
+          status: 'rejected',
+        }).catch(() => {});
+      }
     });
 
     socket.on('disconnect', () => {

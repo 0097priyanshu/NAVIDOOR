@@ -15,7 +15,8 @@ class OCRVisionService {
     language: SupportedLanguageCode = 'en',
     mode: 'glance' | 'deep' = 'glance',
     categoryHint?: string,
-    generateAudio: boolean = false
+    generateAudio: boolean = false,
+    userPhone?: string
   ): Promise<OCRResult> {
     if (this.isProcessing) {
       return {
@@ -39,7 +40,8 @@ class OCRVisionService {
           language,
           mode,
           categoryHint: categoryHint || null,
-          generateAudio
+          generateAudio,
+          userPhone: userPhone || null
         }),
         signal: AbortSignal.timeout(30000)
       });

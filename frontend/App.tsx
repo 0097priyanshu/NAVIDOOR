@@ -23,6 +23,11 @@ import * as Haptics from 'expo-haptics';
 export default function App() {
   const { cycleNextMode, cyclePrevMode, userRole, familyUser } = useNavidoorStore();
 
+  // Hydrate offline cache immediately and sync with Neon Postgres in background
+  useEffect(() => {
+    useNavidoorStore.getState().hydrateFromStorageAndBackend();
+  }, []);
+
   // 1. Triple-Tap Anywhere on Screen Detection for Emergency SOS
   const tapHistoryRef = useRef<number[]>([]);
   const lastTapTimestampRef = useRef<number>(0);

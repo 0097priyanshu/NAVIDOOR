@@ -1,0 +1,194 @@
+// NAVIDOOR Database Schema — Neon Serverless Postgres + Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  NAVIDOOR_USER
+  FAMILY_MEMBER
+}
+
+enum ConnectionStatus {
+  PENDING
+  CONNECTED
+  REJECTED
+}
+
+enum MedicationLogStatus {
+  TAKEN
+  SKIPPED
+}
+
+enum SosStatus {
+  ACTIVE
+  RESOLVED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  uid          String?  @unique
+  phone        String   @unique
+  name         String
+  email        String?
+  passwordHash String?
+  role         UserRole @default(NAVIDOOR_USER)
+
+  // Accessibility Preferences
+  languageCode String @default("en")
+  themeMode    String @default("standard")
+  fontScale    String @default("normal")
+  speechRate   Float  @default(1.0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  medicalProfile     MedicalProfile?
+  emergencyContacts  EmergencyContact[]
+  medications        Medication[]
+  ocrScans           OcrScan[]
+  sosAlerts          SosAlert[]
+  locationSnapshots  LocationSnapshot[]
+  caregiverLinks     CaregiverConnection[] @relation("CaregiverUser")
+  assistedLinks      CaregiverConnection[] @relation("AssistedUser")
+}
+
+model MedicalProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  bloodGroup        String?
+  allergies         String[] @default([])
+  chronicConditions String[] @default([])
+  primaryPhysician  String?
+  notes             String?
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmergencyContact {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  relation  String
+  phone     String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model CaregiverConnection {
+  id             String           @id @default(cuid())
+  caregiverId    String
+  assistedUserId String
+  relationship   String           @default("Family")
+  status         ConnectionStatus @default(PENDING)
+  pairingToken   String?
+  permissions    Json?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  caregiver    User @relation("CaregiverUser", fields: [caregiverId], references: [id], onDelete: Cascade)
+  assistedUser User @relation("AssistedUser", fields: [assistedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([caregiverId, assistedUserId])
+  @@index([assistedUserId, status])
+}
+
+model PairingToken {
+  id            String    @id @default(cuid())
+  token         String    @unique
+  navidoorUid   String
+  navidoorName  String    @default("NAVIDOOR User")
+  navidoorPhone String    @default("")
+  status        String    @default("active")
+  claimedBy     String?
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  claimedAt     DateTime?
+}
+
+model Medication {
+  id                String   @id @default(cuid())
+  userId            String
+  name              String
+  dosage            String   @default("1 Pill")
+  instructions      String   @default("Take as prescribed")
+  remainingPills    Int      @default(14)
+  nextScheduledTime String   @default("8:00 AM")
+  prescribedFor     String   @default("General Health")
+  expiryDate        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs MedicationLog[]
+
+  @@index([userId])
+}
+
+model MedicationLog {
+  id           String              @id @default(cuid())
+  medicationId String
+  status       MedicationLogStatus @default(TAKEN)
+  takenAt      DateTime            @default(now())
+
+  medication Medication @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+
+  @@index([medicationId, takenAt])
+}
+
+model OcrScan {
+  id             String   @id @default(cuid())
+  userId         String
+  category       String   @default("unknown")
+  rawText        String
+  structuredData Json?
+  spokenSummary  String
+  language       String   @default("en")
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model SosAlert {
+  id          String    @id @default(cuid())
+  userId      String
+  latitude    Float?
+  longitude   Float?
+  address     String?
+  status      SosStatus @default(ACTIVE)
+  triggeredAt DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, triggeredAt])
+}
+
+model LocationSnapshot {
+  id         String   @id @default(cuid())
+  userId     String
+  latitude   Float
+  longitude  Float
+  address    String?
+  speed      Float?
+  batteryPct String?
+  recordedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, recordedAt])
+}

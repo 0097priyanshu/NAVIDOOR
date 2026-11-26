@@ -15,6 +15,8 @@ const aiAssistantService = require('./services/aiAssistantService');
 const yoloClientService = require('./services/yoloClientService');
 const ocrClientService = require('./services/ocrClientService');
 const ocrSemanticService = require('./services/ocrSemanticService');
+const databaseService = require('./services/databaseService');
+const { checkDatabaseHealth } = require('./lib/prisma');
 const { setupSocketIO } = require('./services/socketService');
 
 const app = express();
@@ -53,9 +55,12 @@ setupSocketIO(io);
 
 // 1. Health check endpoint
 app.get('/api/health', async (req, res) => {
-  const indicf5Status = await indicf5Service.checkStatus();
-  const yoloStatus = await yoloClientService.checkHealth();
-  const ocrStatus = await ocrClientService.checkHealth();
+  const [indicf5Status, yoloStatus, ocrStatus, dbStatus] = await Promise.all([
+    indicf5Service.checkStatus(),
+    yoloClientService.checkHealth(),
+    ocrClientService.checkHealth(),
+    checkDatabaseHealth(),
+  ]);
   res.json({
     status: 'online',
     system: 'NAVIDOOR Backend Engine',
@@ -66,7 +71,10 @@ app.get('/api/health', async (req, res) => {
     yoloOnline: yoloStatus.online,
     yoloEngine: yoloStatus.engine || 'offline',
     ocrOnline: ocrStatus.online,
-    ocrEngine: ocrStatus.engine || 'offline'
+    ocrEngine: ocrStatus.engine || 'offline',
+    databaseOnline: dbStatus.online,
+    databaseConfigured: dbStatus.configured,
+    databaseProvider: dbStatus.provider,
   });
 });
 
@@ -123,7 +131,7 @@ app.get('/api/ocr/health', async (req, res) => {
 
 app.post('/api/ocr/analyze', async (req, res) => {
   try {
-    const { image, language = 'en', mode = 'glance', categoryHint = null, generateAudio = false } = req.body;
+    const { image, language = 'en', mode = 'glance', categoryHint = null, generateAudio = false, userPhone = null, uid = null } = req.body;
     if (!image) {
       return res.status(400).json({ success: false, error: 'Image base64 payload is required.' });
     }
@@ -156,6 +164,19 @@ app.post('/api/ocr/analyze', async (req, res) => {
       text: semanticResult.rawText,
       timestamp: Date.now()
     });
+
+    // Non-blocking async persistence to Neon Postgres
+    if (semanticResult.rawText) {
+      databaseService.logOcrScan({
+        phone: userPhone,
+        uid,
+        category: semanticResult.category,
+        rawText: semanticResult.rawText,
+        structuredData: semanticResult.structuredData,
+        spokenSummary: semanticResult.spokenSummary,
+        language,
+      }).catch(() => {});
+    }
 
     res.json({
       success: true,
@@ -351,219 +372,320 @@ app.post('/api/tts', async (req, res) => {
   }
 });
 
-// 7. Family Companion & User Management Endpoints (Mock / In-Memory Store & Real-time Synchronization)
-const familyConnectionsMemory = [];
-const registeredFamilyUsers = [];
-const pairingTokensMemory = new Map();
-
-// Register a new 5-minute single-use pairing token
-app.post('/api/family/register-token', (req, res) => {
-  const { token, navidoorUid, navidoorName, navidoorPhone, expiresAt } = req.body;
-  if (!token) {
-    return res.status(400).json({ success: false, error: 'Token is required' });
+// 7. Family Companion & User Management Endpoints (Neon Postgres via Prisma + Offline Fallback)
+app.post('/api/family/register-token', async (req, res) => {
+  try {
+    const { token, navidoorUid, navidoorName, navidoorPhone, expiresAt } = req.body;
+    if (!token) {
+      return res.status(400).json({ success: false, error: 'Token is required' });
+    }
+    await databaseService.registerPairingToken({ token, navidoorUid, navidoorName, navidoorPhone, expiresAt });
+    console.log(`[Backend /api/family/register-token] Registered token ${token} (expires in 5 min)`);
+    res.json({ success: true, token });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
-  pairingTokensMemory.set(token, {
-    token,
-    navidoorUid: navidoorUid || 'navidoor_default_user',
-    navidoorName: navidoorName || 'NAVIDOOR User',
-    navidoorPhone: navidoorPhone || '',
-    status: 'active',
-    createdAt: Date.now(),
-    expiresAt: expiresAt || (Date.now() + 5 * 60 * 1000),
-    singleUse: true,
-  });
-  console.log(`[Backend /api/family/register-token] Registered token ${token} (expires in 5 min)`);
-  res.json({ success: true, token });
 });
 
 // Securely validate and claim pairing token
-app.post('/api/family/claim-token', (req, res) => {
-  const { token, companionUid, companionName, companionPhone, companionRelationship } = req.body;
-  if (!token) {
-    return res.status(400).json({ success: false, error: 'Token is required' });
+app.post('/api/family/claim-token', async (req, res) => {
+  try {
+    const { token, companionUid, companionName, companionPhone, companionRelationship } = req.body;
+    if (!token) {
+      return res.status(400).json({ success: false, error: 'Token is required' });
+    }
+    const result = await databaseService.claimPairingToken({
+      token,
+      companionUid,
+      companionName,
+      companionPhone,
+      companionRelationship,
+    });
+    if (!result.success) {
+      return res.status(result.statusCode || 400).json({ success: false, error: result.error });
+    }
+    res.json({ success: true, connection: result.connection });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
-
-  const tokenData = pairingTokensMemory.get(token);
-  if (!tokenData) {
-    // If not in local memory, check if valid token pattern
-    if (!token.startsWith('pair_')) {
-      return res.status(404).json({ success: false, error: 'Invalid pairing token' });
-    }
-  } else {
-    if (tokenData.status !== 'active') {
-      return res.status(400).json({ success: false, error: 'This pairing token has already been claimed or used.' });
-    }
-    if (tokenData.expiresAt < Date.now()) {
-      tokenData.status = 'expired';
-      return res.status(400).json({ success: false, error: 'This pairing token has expired. Please ask the user to generate a new QR code.' });
-    }
-    if (tokenData.navidoorUid === companionUid) {
-      return res.status(400).json({ success: false, error: 'Cannot pair with your own device.' });
-    }
-    tokenData.status = 'claimed';
-    tokenData.claimedBy = companionUid;
-    tokenData.claimedAt = Date.now();
-  }
-
-  const navidoorUid = tokenData?.navidoorUid || 'navidoor_default_user';
-  const navidoorName = tokenData?.navidoorName || 'NAVIDOOR User';
-  const navidoorPhone = tokenData?.navidoorPhone || '';
-
-  const connId = `conn_${navidoorUid}_${companionUid || Date.now()}`;
-  const connection = {
-    id: connId,
-    pairingToken: token,
-    navidoorUid,
-    companionUid: companionUid || `fam_${Date.now()}`,
-    navidoorName,
-    navidoorPhone,
-    companionName: companionName || 'Caregiver',
-    companionPhone: companionPhone || '',
-    companionRelationship: companionRelationship || 'Family Companion',
-    status: 'pending',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    permissions: {
-      canViewLocation: true,
-      canViewActivity: true,
-      canReceiveSOSAlerts: true,
-      canControlRemoteMic: false,
-    },
-  };
-
-  const existingIdx = familyConnectionsMemory.findIndex(c => c.id === connId || (c.companionUid === companionUid && c.navidoorUid === navidoorUid));
-  if (existingIdx >= 0) {
-    familyConnectionsMemory[existingIdx] = connection;
-  } else {
-    familyConnectionsMemory.push(connection);
-  }
-
-  console.log(`[Backend /api/family/claim-token] Claimed token ${token}, created connection ${connId} (pending)`);
-  res.json({ success: true, connection });
 });
 
 // Update connection status (approve / reject / disconnect)
-app.post('/api/family/update-connection', (req, res) => {
-  const { connectionId, status } = req.body;
-  const conn = familyConnectionsMemory.find(c => c.id === connectionId);
-  if (conn) {
-    conn.status = status;
-    conn.updatedAt = Date.now();
+app.post('/api/family/update-connection', async (req, res) => {
+  try {
+    const { connectionId, status } = req.body;
+    const updatedStatus = await databaseService.updateConnectionStatus({ connectionId, status });
+    res.json({ success: true, status: updatedStatus });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
-  res.json({ success: true, status });
 });
 
 // Notify request
-app.post('/api/family/notify-request', (req, res) => {
-  const connection = req.body;
-  if (connection && connection.id) {
-    const existingIdx = familyConnectionsMemory.findIndex(c => c.id === connection.id);
-    if (existingIdx >= 0) {
-      familyConnectionsMemory[existingIdx] = connection;
-    } else {
-      familyConnectionsMemory.push(connection);
+app.post('/api/family/notify-request', async (req, res) => {
+  try {
+    const connection = req.body;
+    if (connection && connection.navidoorPhone && connection.companionPhone) {
+      await databaseService.connectFamilyDirect({
+        userPhone: connection.navidoorPhone,
+        familyPhone: connection.companionPhone,
+        familyName: connection.companionName,
+        relationship: connection.companionRelationship,
+        status: connection.status || 'pending',
+      });
     }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
-  res.json({ success: true });
 });
 
-app.get('/api/user/pending-requests', (req, res) => {
-  const { phone, uid } = req.query;
-  const requests = familyConnectionsMemory.filter(c => 
-    c.status === 'pending' && (!phone || c.toUserPhone === phone || c.navidoorPhone === phone || c.navidoorUid === uid)
-  );
-  res.json({ success: true, requests });
+app.get('/api/user/pending-requests', async (req, res) => {
+  try {
+    const { phone, uid } = req.query;
+    const requests = await databaseService.getPendingRequests({ phone, uid });
+    res.json({ success: true, requests });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.post('/api/user/approve-connection', (req, res) => {
-  const { userPhone, familyPhone, action, approved, connectionId } = req.body;
-  const isApproved = approved !== undefined ? approved : action === 'accept';
-  const newStatus = isApproved ? 'connected' : 'rejected';
-
-  let conn = null;
-  if (connectionId) {
-    conn = familyConnectionsMemory.find(c => c.id === connectionId);
-  }
-  if (!conn && userPhone && familyPhone) {
-    conn = familyConnectionsMemory.find(c => (c.toUserPhone === userPhone || c.navidoorPhone === userPhone) && (c.fromFamilyPhone === familyPhone || c.companionPhone === familyPhone));
-  }
-  if (conn) {
-    conn.status = newStatus;
-    conn.updatedAt = Date.now();
-  }
-  res.json({ success: true, status: conn ? conn.status : newStatus });
-});
-
-app.all(['/api/family/connection-status', '/api/family/connection-status/get'], (req, res) => {
-  const phone = req.query.phone || (req.body && req.body.familyPhone);
-  const requests = familyConnectionsMemory.filter(c => c.fromFamilyPhone === phone || c.toUserPhone === phone || c.companionPhone === phone || c.navidoorPhone === phone);
-  const connectedUsers = requests.filter(c => c.status === 'connected').map(c => (c.toUserPhone === phone || c.navidoorPhone === phone) ? (c.fromFamilyPhone || c.companionPhone) : (c.toUserPhone || c.navidoorPhone));
-  
-  // Return connected users and requests
-  res.json({ success: true, requests, connectedUsers });
-});
-
-app.post('/api/family/connect', (req, res) => {
-  const { familyPhone, familyName, relationship, userPhone } = req.body;
-  const targetPhone = userPhone || '+91 98123 45678';
-  const existing = familyConnectionsMemory.find(c => c.fromFamilyPhone === familyPhone && c.toUserPhone === targetPhone);
-  if (existing) {
-    existing.status = 'connected';
-  } else {
-    familyConnectionsMemory.push({
-      fromFamilyPhone: familyPhone,
-      familyName: familyName || 'Caregiver',
-      relationship: relationship || 'Family',
-      toUserPhone: targetPhone,
-      status: 'connected',
-      timestamp: Date.now()
+app.post('/api/user/approve-connection', async (req, res) => {
+  try {
+    const { userPhone, familyPhone, action, approved, connectionId } = req.body;
+    const isApproved = approved !== undefined ? approved : action === 'accept';
+    const newStatus = isApproved ? 'connected' : 'rejected';
+    const status = await databaseService.updateConnectionStatus({
+      connectionId,
+      userPhone,
+      familyPhone,
+      status: newStatus,
     });
+    res.json({ success: true, status });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
-  res.json({ success: true, status: 'connected', connectedUserPhone: targetPhone });
 });
 
-app.post('/api/family/login', (req, res) => {
-  const { phone, password } = req.body;
-  const familyMember = {
-    id: `fam_${Date.now()}`,
-    name: 'Priya Sharma',
-    phone: phone || '+91 98765 43210',
-    relationship: 'Caregiver'
-  };
-  res.json({
-    success: true,
-    user: familyMember,
-    member: familyMember
-  });
+app.all(['/api/family/connection-status', '/api/family/connection-status/get'], async (req, res) => {
+  try {
+    const phone = req.query.phone || (req.body && req.body.familyPhone);
+    const { requests, connectedUsers } = await databaseService.getConnectionStatus({ phone });
+    res.json({ success: true, requests, connectedUsers });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.post(['/api/family/register', '/api/family/signup'], (req, res) => {
-  const { name, phone, relationship, email } = req.body;
-  const familyMember = {
-    id: `fam_${Date.now()}`,
-    name: name || 'Priya Sharma',
-    phone: phone || '+91 98765 43210',
-    relationship: relationship || 'Family Companion',
-    email
-  };
-  res.json({
-    success: true,
-    user: familyMember,
-    member: familyMember
-  });
+app.post('/api/family/connect', async (req, res) => {
+  try {
+    const { familyPhone, familyName, relationship, userPhone } = req.body;
+    const result = await databaseService.connectFamilyDirect({
+      familyPhone,
+      familyName,
+      relationship,
+      userPhone,
+    });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.get(['/api/family/dashboard', '/api/family/dashboard-data'], (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      userName: 'Aarav Sharma',
-      userPhone: '+91 98123 45678',
-      location: { latitude: 28.6315, longitude: 77.2167, address: 'Connaught Place, Inner Circle, New Delhi' },
-      activity: { status: 'Walking safely with AI voice assist', battery: '85%' },
-      alerts: []
+app.post('/api/family/login', async (req, res) => {
+  try {
+    const { phone, password } = req.body;
+    const result = await databaseService.loginFamilyUser({ phone, password });
+    if (!result.success) {
+      return res.status(401).json({ success: false, error: result.error });
     }
-  });
+    res.json({
+      success: true,
+      user: result.user,
+      member: result.user,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post(['/api/family/register', '/api/family/signup'], async (req, res) => {
+  try {
+    const { name, phone, relationship, email, password, uid } = req.body;
+    const familyMember = await databaseService.registerFamilyUser({
+      name,
+      phone,
+      relationship,
+      email,
+      password,
+      uid,
+    });
+    res.json({
+      success: true,
+      user: familyMember,
+      member: familyMember,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get(['/api/family/dashboard', '/api/family/dashboard-data'], async (req, res) => {
+  try {
+    const { phone, userPhone } = req.query;
+    const data = await databaseService.getFamilyDashboard({ phone, userPhone });
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 8. Hybrid Mobile Sync, Medical ID, Medications, History & SOS Persistence Endpoints
+app.get('/api/user/bootstrap', async (req, res) => {
+  try {
+    const { phone, uid } = req.query;
+    const data = await databaseService.getBootstrapData({ phone, uid });
+    res.json({ success: true, ...data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/user/profile', async (req, res) => {
+  try {
+    const user = await databaseService.ensureUser(req.body || {});
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/medical-profile', async (req, res) => {
+  try {
+    const profile = await databaseService.getMedicalProfile(req.query.phone);
+    res.json({ success: true, profile });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/medical-profile', async (req, res) => {
+  try {
+    const profile = await databaseService.upsertMedicalProfile(req.body || {});
+    res.json({ success: true, profile });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/emergency-contacts', async (req, res) => {
+  try {
+    const contacts = await databaseService.listEmergencyContacts(req.query.phone);
+    res.json({ success: true, contacts });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/emergency-contacts', async (req, res) => {
+  try {
+    const contact = await databaseService.addEmergencyContact(req.body || {});
+    res.json({ success: true, contact });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/emergency-contacts/:id', async (req, res) => {
+  try {
+    const result = await databaseService.deleteEmergencyContact(req.params.id);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/medicines', async (req, res) => {
+  try {
+    const medicines = await databaseService.listMedications(req.query.phone);
+    res.json({ success: true, medicines });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/medicines', async (req, res) => {
+  try {
+    const medicine = await databaseService.addMedication(req.body || {});
+    res.json({ success: true, medicine });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/medicines/:id/confirm', async (req, res) => {
+  try {
+    const result = await databaseService.confirmMedicationTaken({
+      medicationId: req.params.id,
+      status: req.body?.status || 'TAKEN',
+    });
+    if (!result) return res.status(404).json({ success: false, error: 'Medication not found' });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/medicines/:id', async (req, res) => {
+  try {
+    const result = await databaseService.deleteMedication(req.params.id);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/history', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 25;
+    const scans = await databaseService.getOcrHistory({ phone: req.query.phone, limit });
+    res.json({ success: true, scans });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/sos', async (req, res) => {
+  try {
+    const alert = await databaseService.logSosAlert(req.body || {});
+    io.emit('emergency:broadcast', {
+      alertType: 'SOS_TRIGGERED',
+      phone: req.body?.phone || 'Unknown User',
+      location: req.body?.address || 'Live GPS',
+      timestamp: new Date().toISOString(),
+    });
+    res.json({ success: true, alert });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/sos/:id/resolve', async (req, res) => {
+  try {
+    const alert = await databaseService.resolveSosAlert(req.params.id);
+    res.json({ success: true, alert });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/location', async (req, res) => {
+  try {
+    const snapshot = await databaseService.logLocationSnapshot(req.body || {});
+    res.json({ success: true, snapshot });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 server.listen(PORT, '0.0.0.0', () => {

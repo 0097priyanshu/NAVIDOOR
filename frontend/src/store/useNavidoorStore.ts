@@ -10,9 +10,12 @@ import {
   ContextInsight,
   SupportedLanguageCode,
   OCRCategory,
-  OCRLine
+  OCRLine,
+  MedicalProfileInfo,
+  OcrHistoryEntry
 } from '../types';
 import { ocrVisionService } from '../services/ocrVisionService';
+import { offlineSyncService } from '../services/offlineSyncService';
 import { speakAnnouncement, stopSpeech, playObstacleBeep } from '../utils/speechUtils';
 import { getTranslation } from '../utils/translations';
 import { voiceCommandProcessor } from '../services/voiceCommandProcessor';
@@ -112,8 +115,18 @@ interface NavidoorState {
 
   medicines: MedicineInfo[];
   detectedMedicine: MedicineInfo | null;
+  addMedicine: (name: string, details?: Partial<MedicineInfo>) => void;
   confirmMedicineTaken: (medicineId: string) => void;
   deleteMedicine: (medicineId: string) => void;
+
+  // Hybrid Offline Cache & Neon Sync State (Phase 4)
+  medicalProfile: MedicalProfileInfo;
+  updateMedicalProfile: (profile: Partial<MedicalProfileInfo>) => void;
+  ocrHistory: OcrHistoryEntry[];
+  isSyncingData: boolean;
+  lastSyncedAt: number | null;
+  hydrateFromStorageAndBackend: () => Promise<void>;
+  refreshOcrHistory: () => Promise<void>;
 
   isProfileModalOpen: boolean;
   setIsProfileModalOpen: (open: boolean) => void;
@@ -121,6 +134,8 @@ interface NavidoorState {
   isSosModalOpen: boolean;
   setSosModalOpen: (open: boolean) => void;
   emergencyContacts: EmergencyContact[];
+  addEmergencyContact: (contact: Omit<EmergencyContact, 'id'>) => void;
+  deleteEmergencyContact: (id: string) => void;
   triggerSosAlert: () => void;
 
   isFamilyCompanionOpen: boolean;
@@ -170,6 +185,26 @@ const INITIAL_MEDICINES: MedicineInfo[] = [
 const INITIAL_EMERGENCY_CONTACTS: EmergencyContact[] = [
   { id: 'ec-1', name: 'Sunita Sharma', relation: 'Daughter', phone: '+91 98765 43210', isPrimary: true },
 ];
+
+const INITIAL_MEDICAL_PROFILE: MedicalProfileInfo = {
+  bloodGroup: 'O Positive (O+)',
+  allergies: ['Penicillin', 'Peanuts'],
+  chronicConditions: [],
+  primaryPhysician: 'Dr. Smith',
+};
+
+const snapshotFromState = (s: any) => ({
+  userName: s.userName,
+  userPhone: s.userPhone,
+  activeLanguageCode: s.activeLanguageCode,
+  themeMode: s.themeMode,
+  fontScale: s.fontScale,
+  speechRate: s.speechRate,
+  medicalProfile: s.medicalProfile,
+  emergencyContacts: s.emergencyContacts,
+  medicines: s.medicines,
+  ocrHistory: s.ocrHistory,
+});
 
 export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   // Voice System
@@ -345,17 +380,7 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
       } else if (parsed.action === 'cycleNextMode') {
         get().cycleNextMode();
       } else if (parsed.action === 'addMedicine' && parsed.valueString) {
-        const newMed = {
-          id: `med-${Date.now()}`,
-          name: parsed.valueString,
-          dosage: '1 Pill',
-          instructions: 'Take daily as prescribed',
-          remainingPills: 20,
-          nextScheduledTime: '8:00 AM Today',
-          prescribedFor: 'General Health'
-        };
-        const currentMeds = get().medicines || [];
-        set({ medicines: [newMed, ...currentMeds] });
+        get().addMedicine(parsed.valueString);
         get().setActiveMode('medical');
         const msg = activeLang === 'mr' ? `नवीन औषध ${parsed.valueString} जोडले.` : (activeLang === 'hi' ? `नई दवा ${parsed.valueString} जोड़ी गई।` : `Added new medicine: ${parsed.valueString}.`);
         get().speak(msg);
@@ -486,16 +511,7 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
           if ((intent.updateField === 'userPhone' || intent.field === 'userPhone') && intent.updateValue) get().setUserPhone(intent.updateValue);
         } else if (intent.action === 'manageMedication') {
           if (intent.subAction === 'add' && intent.medicationName) {
-            const newMed = {
-              id: `med-${Date.now()}`,
-              name: intent.medicationName,
-              dosage: '1 Pill',
-              instructions: 'Take daily as prescribed',
-              remainingPills: 20,
-              nextScheduledTime: '8:00 AM Today',
-              prescribedFor: 'General Health'
-            };
-            set({ medicines: [newMed, ...(get().medicines || [])] });
+            get().addMedicine(intent.medicationName);
             get().setActiveMode('medical');
           } else if (intent.subAction === 'delete') {
             const meds = get().medicines || [];
@@ -568,9 +584,23 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
 
   // User Profile
   userName: 'Aadya',
-  setUserName: (name) => set({ userName: name }),
+  setUserName: (name) => {
+    set({ userName: name });
+    offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
+    offlineSyncService.sendOrQueue('PUT', '/api/user/profile', {
+      phone: get().userPhone,
+      name,
+    }).catch(() => {});
+  },
   userPhone: '+91 98123 45678',
-  setUserPhone: (phone) => set({ userPhone: phone }),
+  setUserPhone: (phone) => {
+    set({ userPhone: phone });
+    offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
+    offlineSyncService.sendOrQueue('PUT', '/api/user/profile', {
+      phone,
+      name: get().userName,
+    }).catch(() => {});
+  },
   userLanguage: 'English (US)',
   activeLanguageCode: 'en',
   setUserLanguage: (lang) => set({ userLanguage: lang }),
@@ -589,6 +619,11 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     };
     const displayName = langNames[code] || 'English (US)';
     set({ activeLanguageCode: code, userLanguage: displayName });
+    offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
+    offlineSyncService.sendOrQueue('PUT', '/api/user/profile', {
+      phone: get().userPhone,
+      languageCode: code,
+    }).catch(() => {});
     const t = getTranslation(code);
     get().speak(t.languageChanged);
   },
@@ -855,11 +890,21 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   themeMode: 'standard',
   setThemeMode: (theme) => {
     set({ themeMode: theme });
+    offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
+    offlineSyncService.sendOrQueue('PUT', '/api/user/profile', {
+      phone: get().userPhone,
+      themeMode: theme,
+    }).catch(() => {});
     speakAnnouncement(`${theme} theme enabled.`);
   },
   fontScale: 'normal',
   setFontScale: (scale) => {
     set({ fontScale: scale });
+    offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
+    offlineSyncService.sendOrQueue('PUT', '/api/user/profile', {
+      phone: get().userPhone,
+      fontScale: scale,
+    }).catch(() => {});
     speakAnnouncement(`Font scale set to ${scale}.`);
   },
 
@@ -930,23 +975,36 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
           photo.base64,
           get().activeLanguageCode,
           mode,
-          categoryHint
+          categoryHint,
+          false,
+          get().userPhone
         );
 
         if (ocrResult && ocrResult.success) {
           const announcement = ocrResult.spokenSummary || 'No clear text detected.';
-          set({
+          const newHistoryItem: OcrHistoryEntry = {
+            id: `ocr-${Date.now()}`,
+            category: ocrResult.category || 'unknown',
+            rawText: ocrResult.text || '',
+            spokenSummary: announcement,
+            structuredData: ocrResult.structuredData,
+            language: get().activeLanguageCode,
+            createdAt: new Date().toISOString(),
+          };
+          set((state) => ({
             ocrLines: ocrResult.lines || [],
             detectedOcrCategory: ocrResult.category,
             ocrStructuredData: ocrResult.structuredData,
             activeReadText: ocrResult.text || '',
             lastAnnouncement: announcement,
+            ocrHistory: ocrResult.text ? [newHistoryItem, ...state.ocrHistory].slice(0, 25) : state.ocrHistory,
             currentInsight: {
               id: `ocr-${Date.now()}`,
               text: announcement,
               type: ocrResult.quality?.is_blurry ? 'warning' : 'info'
             }
-          });
+          }));
+          offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
           get().speak(announcement, true);
         } else if (ocrResult?.quality?.is_blurry) {
           const guidance = ocrResult.spokenSummary || 'Image blurry, please hold phone steady.';
@@ -966,12 +1024,44 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
 
   medicines: INITIAL_MEDICINES,
   detectedMedicine: INITIAL_MEDICINES[0],
+  addMedicine: (name, details = {}) => {
+    const newMed: MedicineInfo = {
+      id: `med-${Date.now()}`,
+      name,
+      dosage: details.dosage || '1 Pill',
+      instructions: details.instructions || 'Take daily as prescribed',
+      remainingPills: typeof details.remainingPills === 'number' ? details.remainingPills : 20,
+      nextScheduledTime: details.nextScheduledTime || '8:00 AM Today',
+      prescribedFor: details.prescribedFor || 'General Health',
+    };
+    set((state) => ({
+      medicines: [newMed, ...(state.medicines || [])],
+    }));
+    offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
+    offlineSyncService.sendOrQueue('POST', '/api/medicines', {
+      phone: get().userPhone,
+      ...newMed,
+    }).then((res) => {
+      if (res.synced && res.data?.medicine?.id) {
+        set((state) => ({
+          medicines: state.medicines.map((m) =>
+            m.id === newMed.id ? { ...m, id: res.data.medicine.id } : m
+          ),
+        }));
+        offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
+      }
+    }).catch(() => {});
+  },
   confirmMedicineTaken: (medicineId) => {
     set((state) => ({
       medicines: state.medicines.map((m) =>
-        m.id === medicineId ? { ...m, remainingPills: m.remainingPills - 1 } : m
+        m.id === medicineId ? { ...m, remainingPills: Math.max(0, m.remainingPills - 1) } : m
       ),
     }));
+    offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
+    offlineSyncService.sendOrQueue('POST', `/api/medicines/${encodeURIComponent(medicineId)}/confirm`, {
+      status: 'TAKEN',
+    }).catch(() => {});
     speakAnnouncement('Dose confirmed and logged into your schedule.');
   },
   deleteMedicine: (medicineId) => {
@@ -979,8 +1069,92 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     set((state) => ({
       medicines: state.medicines.filter((m) => m.id !== medicineId),
     }));
+    offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
+    offlineSyncService.sendOrQueue('DELETE', `/api/medicines/${encodeURIComponent(medicineId)}`).catch(() => {});
     if (medToDelete) {
       speakAnnouncement(`Deleted ${medToDelete.name} from your medications list.`);
+    }
+  },
+
+  // Hybrid Offline Cache & Neon Sync Implementation (Phase 4)
+  medicalProfile: INITIAL_MEDICAL_PROFILE,
+  updateMedicalProfile: (profile) => {
+    const updated = { ...get().medicalProfile, ...profile };
+    set({ medicalProfile: updated });
+    offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
+    offlineSyncService.sendOrQueue('PUT', '/api/medical-profile', {
+      phone: get().userPhone,
+      ...updated,
+    }).catch(() => {});
+  },
+  ocrHistory: [] as OcrHistoryEntry[],
+  isSyncingData: false,
+  lastSyncedAt: null as number | null,
+
+  hydrateFromStorageAndBackend: async () => {
+    // 1. Instant local cache load (0ms offline startup)
+    const cached = await offlineSyncService.loadLocalSnapshot();
+    if (cached) {
+      set((state) => ({
+        userName: cached.userName || state.userName,
+        userPhone: cached.userPhone || state.userPhone,
+        activeLanguageCode: cached.activeLanguageCode || state.activeLanguageCode,
+        themeMode: cached.themeMode || state.themeMode,
+        fontScale: cached.fontScale || state.fontScale,
+        speechRate: typeof cached.speechRate === 'number' ? cached.speechRate : state.speechRate,
+        medicalProfile: cached.medicalProfile || state.medicalProfile,
+        emergencyContacts: cached.emergencyContacts?.length ? cached.emergencyContacts : state.emergencyContacts,
+        medicines: cached.medicines?.length ? cached.medicines : state.medicines,
+        ocrHistory: Array.isArray(cached.ocrHistory) ? cached.ocrHistory : state.ocrHistory,
+      }));
+    }
+
+    // 2. Background sync queue flush + Neon bootstrap pull
+    set({ isSyncingData: true });
+    try {
+      await offlineSyncService.flushSyncQueue();
+      const phone = get().userPhone;
+      const bootstrap = await offlineSyncService.fetchBootstrap(phone);
+      if (bootstrap && bootstrap.success && bootstrap.user) {
+        set((state) => ({
+          userName: bootstrap.user.name || state.userName,
+          activeLanguageCode: bootstrap.user.languageCode || state.activeLanguageCode,
+          themeMode: bootstrap.user.themeMode || state.themeMode,
+          fontScale: bootstrap.user.fontScale || state.fontScale,
+          speechRate: typeof bootstrap.user.speechRate === 'number' ? bootstrap.user.speechRate : state.speechRate,
+          medicalProfile: bootstrap.medicalProfile
+            ? {
+                bloodGroup: bootstrap.medicalProfile.bloodGroup || state.medicalProfile.bloodGroup,
+                allergies: Array.isArray(bootstrap.medicalProfile.allergies) ? bootstrap.medicalProfile.allergies : state.medicalProfile.allergies,
+                chronicConditions: Array.isArray(bootstrap.medicalProfile.chronicConditions) ? bootstrap.medicalProfile.chronicConditions : state.medicalProfile.chronicConditions,
+                primaryPhysician: bootstrap.medicalProfile.primaryPhysician || state.medicalProfile.primaryPhysician,
+                notes: bootstrap.medicalProfile.notes || undefined,
+              }
+            : state.medicalProfile,
+          emergencyContacts: bootstrap.emergencyContacts?.length ? bootstrap.emergencyContacts : state.emergencyContacts,
+          medicines: bootstrap.medications?.length ? bootstrap.medications : state.medicines,
+          ocrHistory: Array.isArray(bootstrap.ocrScans) && bootstrap.ocrScans.length ? bootstrap.ocrScans : state.ocrHistory,
+          lastSyncedAt: Date.now(),
+        }));
+        await offlineSyncService.saveLocalSnapshot(snapshotFromState(get()));
+      }
+    } catch (err) {
+      console.warn('[Store] Background Neon hydration skipped (offline):', err);
+    } finally {
+      set({ isSyncingData: false });
+    }
+  },
+
+  refreshOcrHistory: async () => {
+    set({ isSyncingData: true });
+    try {
+      const scans = await offlineSyncService.fetchOcrHistory(get().userPhone, 25);
+      if (scans) {
+        set({ ocrHistory: scans, lastSyncedAt: Date.now() });
+        await offlineSyncService.saveLocalSnapshot(snapshotFromState(get()));
+      }
+    } finally {
+      set({ isSyncingData: false });
     }
   },
 
@@ -990,6 +1164,30 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
   isSosModalOpen: false,
   setSosModalOpen: (open) => set({ isSosModalOpen: open }),
   emergencyContacts: INITIAL_EMERGENCY_CONTACTS,
+  addEmergencyContact: (contact) => {
+    const newContact: EmergencyContact = {
+      id: `ec-${Date.now()}`,
+      ...contact,
+    };
+    set((state) => ({
+      emergencyContacts: [...state.emergencyContacts, newContact],
+    }));
+    offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
+    offlineSyncService.sendOrQueue('POST', '/api/emergency-contacts', {
+      phone: get().userPhone,
+      name: contact.name,
+      relation: contact.relation,
+      contactPhone: contact.phone,
+      isPrimary: contact.isPrimary,
+    }).catch(() => {});
+  },
+  deleteEmergencyContact: (id) => {
+    set((state) => ({
+      emergencyContacts: state.emergencyContacts.filter((c) => c.id !== id),
+    }));
+    offlineSyncService.saveLocalSnapshot(snapshotFromState(get())).catch(() => {});
+    offlineSyncService.sendOrQueue('DELETE', `/api/emergency-contacts/${encodeURIComponent(id)}`).catch(() => {});
+  },
   triggerSosAlert: () => {
     if (get().userRole === 'undecided') {
       set({ userRole: 'navidoor_user' });
@@ -1000,6 +1198,10 @@ export const useNavidoorStore = create<NavidoorState>((set, get) => ({
     try {
       socketClient.emitEmergencySOS('Live GPS Location broadcasted via Emergency SOS');
     } catch (e) {}
+    offlineSyncService.sendOrQueue('POST', '/api/sos', {
+      phone: get().userPhone,
+      address: 'Live GPS Location broadcasted via Emergency SOS',
+    }).catch(() => {});
   },
 
   isFamilyCompanionOpen: false,
