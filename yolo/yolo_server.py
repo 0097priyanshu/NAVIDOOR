@@ -136,9 +136,9 @@ def _process_frame_request(filter_type=None):
             print(f"[YOLO 400] Invalid frame dimensions: {width}x{height}")
             return jsonify({"success": False, "error": f"Invalid frame dimensions: {width}x{height}"}), 400
 
-        # Downscale large mobile images to max 1280px in memory to save RAM and accelerate inference
-        if width > 1280 or height > 1280:
-            pil_img.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
+        # Downscale large mobile images to max 640px in memory to save RAM and accelerate inference
+        if width > 640 or height > 640:
+            pil_img.thumbnail((640, 640), Image.Resampling.BILINEAR)
             print(f"[VISION FRAME] Downscaled for inference: {original_dimensions[0]}x{original_dimensions[1]} -> {pil_img.width}x{pil_img.height}; no brightness adjustment")
 
         # Execute single inference pass on model with native PIL RGB Image

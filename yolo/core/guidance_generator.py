@@ -39,12 +39,20 @@ class GuidanceGenerator:
                 else:
                     return "Visibility reduced. Lighting is too low to verify path."
             elif path_state == "PATH_OBSTRUCTED":
+                is_flat_surface = bool(safe_path.get("scene_metrics", {}).get("is_flat_surface", False))
+                if is_flat_surface:
+                    if lang == "hi":
+                        return "सावधान! सामने दीवार या दरवाजा है। कृपया रुकें।"
+                    elif lang == "mr":
+                        return "सावधान! समोर भिंत किंवा दार आहे. कृपया थांबा."
+                    else:
+                        return "Caution, wall or door ahead. Please stop."
                 if lang == "hi":
-                    return "सामने दीवार या रुकावट है। कृपया रुकें।"
+                    return "सामने बाधा है।"
                 elif lang == "mr":
-                    return "समोर भिंत किंवा अडथळा आहे. कृपया थांबा."
+                    return "समोर अडथळा आहे."
                 else:
-                    return "Surface directly ahead. Possible wall or closed door. Please stop."
+                    return "Obstacle directly ahead."
             else:
                 # UNKNOWN state: Never declare the path clear!
                 # For continuous background detection, stay silent to avoid repetitive noise.

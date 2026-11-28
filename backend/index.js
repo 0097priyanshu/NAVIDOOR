@@ -149,6 +149,38 @@ app.get('/api/ocr/health', async (req, res) => {
   res.json(status);
 });
 
+const desiredServices = { yolo: false, ocr: false };
+const serviceStopTimers = { yolo: null, ocr: null };
+
+app.post('/api/services/mode', async (req, res) => {
+  const { yolo = false, ocr = false, mode = 'unknown' } = req.body || {};
+  desiredServices.yolo = Boolean(yolo);
+  desiredServices.ocr = Boolean(ocr);
+
+  if (serviceStopTimers.yolo) { clearTimeout(serviceStopTimers.yolo); serviceStopTimers.yolo = null; }
+  if (serviceStopTimers.ocr) { clearTimeout(serviceStopTimers.ocr); serviceStopTimers.ocr = null; }
+
+  console.log(`[ServiceLifecycle] mode="${mode}" -> yolo=${desiredServices.yolo}, ocr=${desiredServices.ocr}`);
+
+  if (desiredServices.yolo) {
+    yoloClientService.ensureServerRunning(500);
+  } else {
+    serviceStopTimers.yolo = setTimeout(() => {
+      if (!desiredServices.yolo) yoloClientService.stopServer();
+    }, 1500);
+  }
+
+  if (desiredServices.ocr) {
+    ocrClientService.ensureServerRunning(500);
+  } else {
+    serviceStopTimers.ocr = setTimeout(() => {
+      if (!desiredServices.ocr) ocrClientService.stopServer();
+    }, 1500);
+  }
+
+  res.json({ success: true, desired: { ...desiredServices } });
+});
+
 app.post('/api/ocr/analyze', async (req, res) => {
   try {
     const { image, language = 'en', mode = 'glance', categoryHint = null, generateAudio = false } = req.body;
@@ -156,6 +188,7 @@ app.post('/api/ocr/analyze', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Image base64 payload is required.' });
     }
 
+    await ocrClientService.ensureServerRunning(25000);
     // Step 1: Run OCR through Python microservice (Port 5004)
     const rawOcr = await ocrClientService.readFrame(image, mode, categoryHint);
 
@@ -209,6 +242,7 @@ app.post('/api/ocr/glance', async (req, res) => {
     if (!image) {
       return res.status(400).json({ success: false, error: 'Image base64 payload is required.' });
     }
+    await ocrClientService.ensureServerRunning(25000);
     const rawOcr = await ocrClientService.glanceScan(image);
     const result = await ocrSemanticService.processSemanticResult(rawOcr, language);
     res.json(result);
@@ -620,3 +654,11 @@ app.get(['/api/family/dashboard', '/api/family/dashboard-data'], (req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[NAVIDOOR Node.js + Express.js + Socket.IO Backend] Server running on http://0.0.0.0:${PORT} (LAN accessible)`);
 });
+
+const shutdownVisionServices = () => {
+  yoloClientService.stopServer();
+  ocrClientService.stopServer();
+  process.exit(0);
+};
+process.on('SIGINT', shutdownVisionServices);
+process.on('SIGTERM', shutdownVisionServices);

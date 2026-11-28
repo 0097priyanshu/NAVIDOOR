@@ -78,9 +78,13 @@ export default function App() {
   // 3. Full-Screen Horizontal Swipe Gesture Handler & Triple-Tap Interceptor
   const panResponder = useRef(
     PanResponder.create({
-      // Never capture a control's initial touch. Triple-tap SOS remains
-      // available on web via pointerdown; native controls keep their taps.
-      onStartShouldSetPanResponderCapture: () => false,
+      // Track taps on native without stealing single taps; claim the 3rd tap for SOS.
+      onStartShouldSetPanResponderCapture: () => {
+        if (Platform.OS !== 'web') {
+          return handleGlobalScreenTap('panresponder-capture');
+        }
+        return false;
+      },
       onMoveShouldSetPanResponderCapture: (_, gestureState) => {
         // If user is swiping horizontally, cancel tap sequence so swipe isn't counted as taps
         if (Math.abs(gestureState.dx) > 15) {
