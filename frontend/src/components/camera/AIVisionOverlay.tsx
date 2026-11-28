@@ -117,10 +117,10 @@ export const AIVisionOverlay: React.FC = () => {
         </View>
       )}
 
-      {/* B. If in non-READ mode, display standard YOLO Obstacle Bounding Boxes */}
-      {!isReadMode && detectedObjects && detectedObjects.length > 0 && (
+      {/* B. If in YOLO mode, display only the single primary YOLO Obstacle Bounding Box */}
+      {!isReadMode && activeMode !== 'medicine' && detectedObjects && detectedObjects.length > 0 && (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          {detectedObjects.slice(0, 3).map((obj) => {
+          {detectedObjects.slice(0, 1).map((obj) => {
             const isHazard = obj.isHazard || obj.distanceMeters < 2.0;
             const borderColor = isHazard ? '#EF4444' : '#10B981';
             const bgColor = isHazard ? 'rgba(239, 68, 68, 0.18)' : 'rgba(16, 185, 129, 0.18)';

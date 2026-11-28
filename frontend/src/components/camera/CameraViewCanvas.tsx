@@ -8,6 +8,7 @@ import { CapturedPhotoPreviewModal } from './CapturedPhotoPreviewModal';
 import { Camera as CameraIcon, ShieldAlert, VideoOff } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { continuousVisionManager } from '../../services/continuousVisionManager';
+import { getBackendUrl } from '../../services/voiceAssistantBackend';
 
 export const CameraViewCanvas: React.FC = () => {
   const { 
@@ -35,7 +36,9 @@ export const CameraViewCanvas: React.FC = () => {
   // Hook for Native Camera permissions from expo-camera
   const [permission, requestPermission] = useCameraPermissions();
 
-  const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(activeMode);
+  const isYoloMode = ['assist', 'navigate', 'transport'].includes(activeMode);
+  const isOcrMode = ['read', 'medicine'].includes(activeMode);
+  const isVisionMode = isYoloMode || isOcrMode;
 
   // Camera & YOLO perception should NOT run during profile setup, modals, role selection, or non-vision modes
   const isProfileOrModalActive = 
@@ -48,7 +51,8 @@ export const CameraViewCanvas: React.FC = () => {
     userRole !== 'navidoor_user';
 
   const isCameraNeeded = isVisionMode && !isProfileOrModalActive;
-  const isYoloNeeded = isCameraNeeded && isDetectionActive;
+  const isYoloNeeded = isYoloMode && !isProfileOrModalActive && isDetectionActive;
+  const isOcrNeeded = isOcrMode && !isProfileOrModalActive;
 
   // Web Camera Stream setup - only open hardware stream when camera is actively needed
   useEffect(() => {
@@ -134,6 +138,15 @@ export const CameraViewCanvas: React.FC = () => {
       continuousVisionManager.stop();
     };
   }, [isYoloNeeded]);
+
+  // Keep heavy Python services (YOLO / OCR) off when not needed by the active mode
+  useEffect(() => {
+    fetch(`${getBackendUrl()}/api/services/mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ yolo: isYoloNeeded, ocr: isOcrNeeded, mode: activeMode }),
+    }).catch(() => {});
+  }, [isYoloNeeded, isOcrNeeded, activeMode]);
 
   // Register on-demand single scan trigger on Navidoor store
   useEffect(() => {

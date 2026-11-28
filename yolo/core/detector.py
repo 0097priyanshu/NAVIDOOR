@@ -87,9 +87,26 @@ class YOLODetector:
             else:
                 self.elevator_model = None
 
+            self._warmup_models()
+
         except Exception as e:
             print(f"[YOLO DIAG] Note: Ultralytics runtime error ({e}).")
             self.is_ultralytics_loaded = False
+
+    def _warmup_models(self):
+        """Runs a dummy inference pass at startup so first phone frame doesn't hit cold-start latency."""
+        if not self.is_ultralytics_loaded or self.model is None:
+            return
+        t0 = time.time()
+        dummy = np.zeros((240, 320, 3), dtype=np.uint8)
+        try:
+            self.model(dummy, imgsz=416, conf=self.confidence_threshold, verbose=False)
+            for m in (self.staircase_model, self.pothole_model, self.crosswalk_model, self.elevator_model):
+                if m is not None:
+                    m(dummy, imgsz=256, conf=0.25, verbose=False)
+            print(f"[YOLO DIAG] Model warmup completed in {round((time.time() - t0) * 1000, 1)} ms")
+        except Exception as e:
+            print(f"[YOLO DIAG] Warmup warning: {e}")
 
     def _extract_boxes(self, results, detections: List[Dict[str, Any]], width: int, height: int, source_tag: str = "primary"):
         for r in results:
@@ -149,7 +166,7 @@ class YOLODetector:
                 # 1. Primary COCO detector (persons, vehicles, furniture, etc.)
                 primary_results = self.model(
                     image_input,
-                    imgsz=640,
+                    imgsz=480,
                     conf=self.confidence_threshold,
                     iou=0.45,
                     verbose=False
@@ -161,7 +178,7 @@ class YOLODetector:
                     stair_results = self.staircase_model(
                         image_input,
                         imgsz=320,
-                        conf=0.25,
+                        conf=0.45,
                         iou=0.45,
                         verbose=False
                     )
@@ -178,7 +195,7 @@ class YOLODetector:
                     pothole_results = self.pothole_model(
                         image_input,
                         imgsz=320,
-                        conf=0.25,
+                        conf=0.45,
                         iou=0.45,
                         verbose=False
                     )
@@ -192,7 +209,7 @@ class YOLODetector:
                     crosswalk_results = self.crosswalk_model(
                         image_input,
                         imgsz=320,
-                        conf=0.25,
+                        conf=0.45,
                         iou=0.45,
                         verbose=False
                     )
@@ -201,12 +218,12 @@ class YOLODetector:
                     if crosswalk_dets:
                         detections.extend(crosswalk_dets)
 
-                # 5. Fine-tuned Elevator detector
+                # 5. Fine-tuned Elevator detector (strict threshold to avoid normal doors)
                 if self.elevator_model is not None:
                     elevator_results = self.elevator_model(
                         image_input,
                         imgsz=320,
-                        conf=0.25,
+                        conf=0.68,
                         iou=0.45,
                         verbose=False
                     )

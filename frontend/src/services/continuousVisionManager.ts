@@ -331,7 +331,8 @@ class AnnouncementManager {
     confirmedTracks: TrackedObject[],
     languageCode: string,
     now: number,
-    pathState: NavigationPathState = 'UNKNOWN'
+    pathState: NavigationPathState = 'UNKNOWN',
+    isFlatSurface: boolean = false
   ): { shouldAnnounce: boolean; text: string; priority: HazardPriority; trackId?: string; interrupt: boolean } {
     // 1. Prune ancient records (> 15 seconds), never prune on single missing frames
     for (const [id, rec] of this.trackRecords.entries()) {
@@ -378,7 +379,7 @@ class AnnouncementManager {
         };
       }
 
-      // PATH_OBSTRUCTED: Flat surface/wall or closed door detected directly in front
+      // PATH_OBSTRUCTED: Flat surface (wall/closed door) vs unrecognized obstacle
       if (
         pathState === 'PATH_OBSTRUCTED' &&
         now - this.lastSurfaceSpokenTime > 10000 &&
@@ -388,8 +389,8 @@ class AnnouncementManager {
         this.lastGlobalSpokenTime = now;
         return {
           shouldAnnounce: true,
-          text: this.getSurfaceMessage(languageCode),
-          priority: 'CRITICAL',
+          text: isFlatSurface ? this.getSurfaceMessage(languageCode) : this.getObstacleMessage(languageCode),
+          priority: isFlatSurface ? 'CRITICAL' : 'INFO',
           interrupt: false,
         };
       }
@@ -480,49 +481,53 @@ class AnnouncementManager {
 
   formatGuidance(track: TrackedObject, priority: HazardPriority, languageCode: string): string {
     const lang = languageCode.split('-')[0].toLowerCase();
-    const nameMap = LOCALIZED_OBJECT_NAMES[track.classLabel.toLowerCase().replace(/\s+/g, '_')];
-    const name = (nameMap && nameMap[lang]) || (track.classLabel.charAt(0).toUpperCase() + track.classLabel.slice(1));
+    const labelLower = track.classLabel.toLowerCase().trim();
+    const isWallOrDoor = labelLower === 'door' || labelLower === 'wall';
+    const useCaution = priority === 'CRITICAL' && isWallOrDoor;
+    const normalizedLabel = (labelLower === 'object' || labelLower === 'unknown') ? 'obstacle' : labelLower;
+    const nameMap = LOCALIZED_OBJECT_NAMES[normalizedLabel.replace(/\s+/g, '_')];
+    const name = (nameMap && nameMap[lang]) || (normalizedLabel.charAt(0).toUpperCase() + normalizedLabel.slice(1));
     const dist = track.distanceMeters.toFixed(1);
 
     if (lang === 'hi') {
       const z = track.zone === 'LEFT' ? 'बाईं ओर' : (track.zone === 'RIGHT' ? 'दाईं ओर' : 'सीधे सामने');
-      return priority === 'CRITICAL' ? `सावधान! ${z} लगभग ${dist} मीटर पर ${name} है।` : `${z} ${dist} मीटर पर ${name} है।`;
+      return useCaution ? `सावधान! ${z} लगभग ${dist} मीटर पर ${name} है।` : `${z} ${dist} मीटर पर ${name} है।`;
     }
     if (lang === 'mr') {
       const z = track.zone === 'LEFT' ? 'डाव्या बाजूला' : (track.zone === 'RIGHT' ? 'उजव्या बाजूला' : 'समोर');
-      return priority === 'CRITICAL' ? `सावधान! ${z} सुमारे ${dist} मीटरवर ${name} आहे.` : `${z} ${dist} मीटरवर ${name} आहे.`;
+      return useCaution ? `सावधान! ${z} सुमारे ${dist} मीटरवर ${name} आहे.` : `${z} ${dist} मीटरवर ${name} आहे.`;
     }
     if (lang === 'gu') {
       const z = track.zone === 'LEFT' ? 'ડાબી બાજુ' : (track.zone === 'RIGHT' ? 'જમણી બાજુ' : 'સામે');
-      return priority === 'CRITICAL' ? `સાવધાન! ${z} આશરે ${dist} મીટર પર ${name} છે.` : `${z} ${dist} મીટર પર ${name} છે.`;
+      return useCaution ? `સાવધાન! ${z} આશરે ${dist} મીટર પર ${name} છે.` : `${z} ${dist} મીટર પર ${name} છે.`;
     }
     if (lang === 'pa') {
       const z = track.zone === 'LEFT' ? 'ਖੱਬੇ ਪਾਸੇ' : (track.zone === 'RIGHT' ? 'ਸੱਜੇ ਪਾਸੇ' : 'ਸਾਹਮਣੇ');
-      return priority === 'CRITICAL' ? `ਧਿਆਨ ਦਿਓ! ${z} ਲਗਭਗ ${dist} ਮੀਟਰ 'ਤੇ ${name} ਹੈ।` : `${z} ${dist} ਮੀਟਰ 'ਤੇ ${name} ਹੈ।`;
+      return useCaution ? `ਧਿਆਨ ਦਿਓ! ${z} ਲਗਭਗ ${dist} ਮੀਟਰ 'ਤੇ ${name} ਹੈ।` : `${z} ${dist} ਮੀਟਰ 'ਤੇ ${name} ਹੈ।`;
     }
     if (lang === 'bn') {
       const z = track.zone === 'LEFT' ? 'বামে' : (track.zone === 'RIGHT' ? 'ডানে' : 'সামনে');
-      return priority === 'CRITICAL' ? `সাবধান! ${z} প্রায় ${dist} মিটারে ${name} আছে।` : `${z} ${dist} মিটারে ${name} আছে।`;
+      return useCaution ? `সাবধান! ${z} প্রায় ${dist} মিটারে ${name} আছে।` : `${z} ${dist} মিটারে ${name} আছে।`;
     }
     if (lang === 'ta') {
       const z = track.zone === 'LEFT' ? 'இடதுபுறம்' : (track.zone === 'RIGHT' ? 'வலதுபுறம்' : 'நேரெதிரே');
-      return priority === 'CRITICAL' ? `எச்சரிக்கை! ${z} சுமார் ${dist} மீட்டரில் ${name} உள்ளது.` : `${z} ${dist} மீட்டரில் ${name} உள்ளது.`;
+      return useCaution ? `எச்சரிக்கை! ${z} சுமார் ${dist} மீட்டரில் ${name} உள்ளது.` : `${z} ${dist} மீட்டரில் ${name} உள்ளது.`;
     }
     if (lang === 'te') {
       const z = track.zone === 'LEFT' ? 'ఎడమవైపు' : (track.zone === 'RIGHT' ? 'కుడివైపు' : 'ఎదురుగా');
-      return priority === 'CRITICAL' ? `హెచ్చరిక! ${z} దాదాపు ${dist} మీటర్లలో ${name} ఉంది.` : `${z} ${dist} మీటర్ల దూరంలో ${name} ఉంది.`;
+      return useCaution ? `హెచ్చరిక! ${z} దాదాపు ${dist} మీటర్లలో ${name} ఉంది.` : `${z} ${dist} మీటర్ల దూరంలో ${name} ఉంది.`;
     }
     if (lang === 'kn') {
       const z = track.zone === 'LEFT' ? 'ಎಡಭಾಗದಲ್ಲಿ' : (track.zone === 'RIGHT' ? 'ಬಲಭಾಗದಲ್ಲಿ' : 'ನೇರವಾಗಿ ಮುಂದೆ');
-      return priority === 'CRITICAL' ? `ಎಚ್ಚರಿಕೆ! ${z} ಸುಮಾರು ${dist} ಮೀಟರ್‌ನಲ್ಲಿ ${name} ಇದೆ.` : `${z} ${dist} ಮೀಟರ್‌ನಲ್ಲಿ ${name} ಇದೆ.`;
+      return useCaution ? `ಎಚ್ಚರಿಕೆ! ${z} ಸುಮಾರು ${dist} ಮೀಟರ್‌ನಲ್ಲಿ ${name} ಇದೆ.` : `${z} ${dist} ಮೀಟರ್‌ನಲ್ಲಿ ${name} ಇದೆ.`;
     }
     if (lang === 'ml') {
       const z = track.zone === 'LEFT' ? 'ഇടതുവശത്ത്' : (track.zone === 'RIGHT' ? 'വലതുവശത്ത്' : 'നേരെ മുന്നിൽ');
-      return priority === 'CRITICAL' ? `ശ്രദ്ധിക്കുക! ${z} ഏകദേശം ${dist} മീറ്ററിൽ ${name} ഉണ്ട്.` : `${z} ${dist} മീറ്ററിൽ ${name} ഉണ്ട്.`;
+      return useCaution ? `ശ്രദ്ധിക്കുക! ${z} ഏകദേശം ${dist} മീറ്ററിൽ ${name} ഉണ്ട്.` : `${z} ${dist} മീറ്ററിൽ ${name} ഉണ്ട്.`;
     }
 
     const z = track.zone === 'LEFT' ? 'on your left' : (track.zone === 'RIGHT' ? 'on your right' : 'directly ahead');
-    return priority === 'CRITICAL'
+    return useCaution
       ? `Caution, ${name} ${z}, approximately ${dist} meters.`
       : `${name} ${z}, approximately ${dist} meters.`;
   }
@@ -564,16 +569,33 @@ class AnnouncementManager {
   getSurfaceMessage(languageCode: string): string {
     const lang = languageCode.split('-')[0].toLowerCase();
     const map: Record<string, string> = {
-      en: 'Surface directly ahead. Possible wall or closed door. Please stop.',
-      hi: 'सामने दीवार या दरवाजा है। कृपया रुकें।',
-      mr: 'समोर भिंत किंवा दार आहे. कृपया थांबा.',
-      gu: 'સામે દીવાલ કે દરવાજો છે. કૃપા કરીને થોભો.',
-      pa: 'ਸਾਹਮਣੇ ਕੰਧ ਜਾਂ ਦਰਵਾਜ਼ਾ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਰੁਕੋ।',
-      bn: 'সামনে দেয়াল বা দরজা আছে। অনুগ্রহ করে থামুন।',
-      ta: 'முன்னால் சுவர் அல்லது கதவு உள்ளது. தயவுசெய்து நிற்கவும்.',
-      te: 'ముందు గోడ లేదా తలుపు ఉంది. దయచేసి ఆగండి.',
-      kn: 'ಮುಂದೆ ಗೋಡೆ ಅಥವಾ ಬಾಗಿಲು ಇದೆ. ದಯವಿಟ್ಟು ನಿಲ್ಲಿ.',
-      ml: 'മുന്നിൽ ഭിത്തിയോ വാതിലോ ഉണ്ട്. ദയവായി നിൽക്കൂ.',
+      en: 'Caution, wall or door ahead. Please stop.',
+      hi: 'सावधान! सामने दीवार या दरवाजा है। कृपया रुकें।',
+      mr: 'सावधान! समोर भिंत किंवा दार आहे. कृपया थांबा.',
+      gu: 'સાવધાન! સામે દીવાલ કે દરવાજો છે. કૃપા કરીને થોભો.',
+      pa: 'ਧਿਆਨ ਦਿਓ! ਸਾਹਮਣੇ ਕੰਧ ਜਾਂ ਦਰਵਾਜ਼ा ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਰੁਕੋ।',
+      bn: 'সাবধান! সামনে দেয়াল বা দরজা আছে। অনুগ্রহ করে থামুন।',
+      ta: 'எச்சரிக்கை! முன்னால் சுவர் அல்லது கதவு உள்ளது. தயவுசெய்து நிற்கவும்.',
+      te: 'హెచ్చరిక! ముందు గోడ లేదా తలుపు ఉంది. దయచేసి ఆగండి.',
+      kn: 'ಎಚ್ಚರಿಕೆ! ಮುಂದೆ ಗೋಡೆ ಅಥವಾ ಬಾಗಿಲು ಇದೆ. ದಯವಿಟ್ಟು ನಿಲ್ಲಿ.',
+      ml: 'ശ്രദ്ധിക്കുക! മുന്നിൽ ഭിത്തിയോ വാതിലോ ഉണ്ട്. ദയവായി നിൽക്കൂ.',
+    };
+    return map[lang] || map.en;
+  }
+
+  getObstacleMessage(languageCode: string): string {
+    const lang = languageCode.split('-')[0].toLowerCase();
+    const map: Record<string, string> = {
+      en: 'Obstacle directly ahead.',
+      hi: 'सामने बाधा है।',
+      mr: 'समोर अडथळा आहे.',
+      gu: 'સામે અવરોધ છે.',
+      pa: 'ਸਾਹਮਣੇ ਰੁਕਾਵਟ ਹੈ।',
+      bn: 'সামনে বাধা আছে।',
+      ta: 'முன்னால் தடை உள்ளது.',
+      te: 'ముందు అడ్డంకి ఉంది.',
+      kn: 'ಮುಂದೆ ಅಡೆತಡೆ ಇದೆ.',
+      ml: 'മുന്നിൽ തടസ്സമുണ്ട്.',
     };
     return map[lang] || map.en;
   }
@@ -779,13 +801,13 @@ class ContinuousVisionManager {
 
   public isPerceptionNeeded(): boolean {
     const store = useNavidoorStore.getState();
-    const isVisionMode = ['assist', 'navigate', 'read', 'medicine', 'transport'].includes(store.activeMode);
-    const isProfileOrModalActive = 
-      store.isFirstTimeUser || 
-      store.isProfileModalOpen || 
-      store.isSosModalOpen || 
-      store.isFamilyCompanionOpen || 
-      store.isDesignSystemOpen || 
+    const isVisionMode = ['assist', 'navigate', 'transport'].includes(store.activeMode);
+    const isProfileOrModalActive =
+      store.isFirstTimeUser ||
+      store.isProfileModalOpen ||
+      store.isSosModalOpen ||
+      store.isFamilyCompanionOpen ||
+      store.isDesignSystemOpen ||
       Boolean(store.isCapturedPhotoModalOpen) ||
       store.userRole !== 'navidoor_user';
 
@@ -932,7 +954,7 @@ class ContinuousVisionManager {
               base64Image = photo.base64;
               tempPhotoUri = photo.uri || null;
             }
-          } catch (camErr) {}
+          } catch (camErr) { }
         }
       }
 
@@ -970,7 +992,7 @@ class ContinuousVisionManager {
       this.consecutiveErrors = Math.min(this.consecutiveErrors + 1, 10);
     } finally {
       if (tempPhotoUri && Platform.OS !== 'web' && typeof FileSystem.deleteAsync === 'function') {
-        FileSystem.deleteAsync(tempPhotoUri, { idempotent: true }).catch(() => {});
+        FileSystem.deleteAsync(tempPhotoUri, { idempotent: true }).catch(() => { });
       }
       base64Image = null;
       tempPhotoUri = null;
@@ -1001,8 +1023,17 @@ class ContinuousVisionManager {
     const activeTracks = this.tracker.update(rawDetections, now);
     const confirmedTracks = this.tracker.getConfirmedTracks();
 
-    // 2. Map tracks to UI objects with stable IDs and smoothed coordinates
-    const mappedObjects = activeTracks.map((t: TrackedObject) => ({
+    // 2. Map only the single highest-priority/closest track to UI objects
+    const prioritizedTracks = [...activeTracks].sort((a, b) => {
+      const pScore = (r: RiskLevel) => (r === 'CRITICAL' ? 3 : (r === 'WARNING' ? 2 : 1));
+      const pDiff = pScore(b.riskLevel) - pScore(a.riskLevel);
+      if (pDiff !== 0) return pDiff;
+      const dDiff = a.distanceMeters - b.distanceMeters;
+      if (Math.abs(dDiff) > 0.3) return dDiff;
+      return (b.zone === 'CENTER' ? 1 : 0) - (a.zone === 'CENTER' ? 1 : 0);
+    });
+
+    const mappedObjects = prioritizedTracks.slice(0, 1).map((t: TrackedObject) => ({
       id: t.trackId,
       classId: t.classId,
       label: t.classLabel,
@@ -1055,6 +1086,7 @@ class ContinuousVisionManager {
     const store = useNavidoorStore.getState();
 
     const pathState = rawResult.safe_path?.path_state || 'UNKNOWN';
+    const isFlatSurface = Boolean(rawResult.safe_path?.scene_metrics?.is_flat_surface);
 
     // Forced scan on demand
     if (isForcedScan) {
@@ -1063,7 +1095,9 @@ class ContinuousVisionManager {
         const primary = confirmedTracks[0];
         scanText = this.announcementManager.formatGuidance(primary, 'INFO', store.activeLanguageCode || 'en');
       } else if (pathState === 'PATH_OBSTRUCTED') {
-        scanText = this.announcementManager.getSurfaceMessage(store.activeLanguageCode || 'en');
+        scanText = isFlatSurface
+          ? this.announcementManager.getSurfaceMessage(store.activeLanguageCode || 'en')
+          : this.announcementManager.getObstacleMessage(store.activeLanguageCode || 'en');
       } else if (pathState === 'VISIBILITY_REDUCED') {
         scanText = this.announcementManager.getVisibilityMessage(store.activeLanguageCode || 'en');
       } else if (pathState === 'PATH_CLEAR') {
@@ -1080,7 +1114,8 @@ class ContinuousVisionManager {
       confirmedTracks,
       store.activeLanguageCode || 'en',
       now,
-      pathState
+      pathState,
+      isFlatSurface
     );
 
     if (!decision.shouldAnnounce || !decision.text) {
@@ -1091,12 +1126,12 @@ class ContinuousVisionManager {
     if (decision.priority === 'CRITICAL') {
       if (now - this.lastBeepTime > 800) {
         this.lastBeepTime = now;
-        try { playObstacleBeep(880, 120); } catch (e) {}
+        try { playObstacleBeep(880, 120); } catch (e) { }
       }
     } else if (decision.priority === 'WARNING') {
       if (now - this.lastBeepTime > 1500) {
         this.lastBeepTime = now;
-        try { playObstacleBeep(600, 100); } catch (e) {}
+        try { playObstacleBeep(600, 100); } catch (e) { }
       }
     }
 
